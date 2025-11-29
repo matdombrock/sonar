@@ -19,7 +19,8 @@ use ratatui::style::{Color, Style};
 use ratatui::text::{Span, Text};
 use std::os::unix::fs::PermissionsExt;
 
-const NF_PREVIEW: &str = "󰍉";
+const NF_MAG: &str = "󰍉";
+const NF_LOOK: &str = "";
 const NF_SEL: &str = ""; //➤
 const NF_DIR: &str = "";
 const NF_DIRO: &str = "󰉒";
@@ -197,69 +198,50 @@ impl<'a> App<'a> {
     }
 
     fn update_preview(&mut self) {
-        // Update preview content
+        fn info_line<'a>(label: &str, value: &str) -> Line<'a> {
+            Line::styled(
+                format!("{} {}: {}", NF_INFO, label, value),
+                Style::default().fg(Color::Yellow),
+            )
+        }
+        fn path_line<'a>(path: &PathBuf) -> Line<'a> {
+            Line::styled(
+                format!("{} {}", NF_DIRO, path.to_str().unwrap()),
+                Style::default().fg(Color::Blue),
+            )
+        }
+        fn sc_line<'a>(description: &str) -> Line<'a> {
+            Line::styled(
+                format!("{} {}", NF_CMD, description),
+                Style::default().fg(Color::Green),
+            )
+        }
+
         self.preview_content = Default::default();
         match self.selection.as_str() {
             SC_EXIT => {
-                self.preview_content +=
-                    Line::styled("Exit the application", Style::default().fg(Color::Green));
+                self.preview_content += sc_line("Exit the application");
             }
             SC_HOME => {
-                self.preview_content += Line::styled(
-                    "Move to your home directory",
-                    Style::default().fg(Color::Green),
-                );
-                self.preview_content += Line::from("");
-                self.preview_content +=
-                    Line::styled("Home Directory:", Style::default().fg(Color::Yellow));
-                self.preview_content +=
-                    Line::from(format!("{}", dirs::home_dir().unwrap().to_str().unwrap()));
+                self.preview_content += path_line(&dirs::home_dir().unwrap());
+                self.preview_content += sc_line("Go to the home directory");
             }
             SC_UP => {
-                self.preview_content += Line::styled(
-                    "Move up to the parent directory",
-                    Style::default().fg(Color::Green),
-                );
-                self.preview_content += Line::from("");
-                self.preview_content +=
-                    Line::styled("Parent Directory:", Style::default().fg(Color::Yellow));
-                self.preview_content += Line::from(format!(
-                    "{}",
-                    self.cwd.parent().unwrap_or(&self.cwd).to_str().unwrap()
-                ));
+                self.preview_content += path_line(&self.cwd);
+                self.preview_content += sc_line("Go up to the parent directory");
             }
             SC_BACK => {
-                self.preview_content += Line::styled(
-                    "Return to the last working directory",
-                    Style::default().fg(Color::Green),
-                );
-                self.preview_content += Line::from("");
-                self.preview_content += Line::styled(
-                    "Last Working Directory:",
-                    Style::default().fg(Color::Yellow),
-                );
-                self.preview_content += Line::from(format!("{}", self.lwd.to_str().unwrap()));
+                self.preview_content += path_line(&self.lwd);
+                self.preview_content += sc_line("Go back to the last working directory");
             }
             _ => {
-                fn info_line<'a>(label: &str, value: &str) -> Line<'a> {
-                    Line::styled(
-                        format!("{} {}: {}\n", NF_INFO, label, value),
-                        Style::default().fg(Color::Yellow),
-                    )
-                }
                 self.preview_content = Default::default();
                 let mut selected_path = self.cwd.clone();
                 selected_path.push(&self.selection);
 
                 if selected_path.is_dir() {
-                    let path_line = Line::styled(
-                        format!("{} {}\n", NF_DIRO, selected_path.to_str().unwrap()),
-                        Style::default().fg(Color::Blue),
-                    );
+                    let path_line = path_line(&selected_path);
                     self.preview_content += path_line;
-                    let listing = self.get_directory_listing(&selected_path);
-                    let count_line = info_line("count", &listing.len().to_string());
-                    self.preview_content += count_line;
                     // Get the file metadata
                     let metadata = fs::metadata(&selected_path);
                     if let Ok(meta) = metadata {
@@ -269,16 +251,16 @@ impl<'a> App<'a> {
                             info_line("permissions", &format!("{:o}", permissions.mode()));
                         self.preview_content += perm_line;
                     }
+                    let listing = self.get_directory_listing(&selected_path);
+                    let count_line = info_line("count", &listing.len().to_string());
+                    self.preview_content += count_line;
                     self.preview_content += Line::from("-------");
                     let pretty_listing = App::dir_list_pretty(&listing);
                     for line in pretty_listing.lines.iter().take(20) {
                         self.preview_content += Line::from(line.clone());
                     }
                 } else if selected_path.is_file() {
-                    let path_line = Line::styled(
-                        format!("{} {}\n", NF_DIRO, selected_path.to_str().unwrap()),
-                        Style::default().fg(Color::Blue),
-                    );
+                    let path_line = path_line(&selected_path);
                     self.preview_content += path_line;
                     // Get the file metadata
                     let metadata = fs::metadata(&selected_path);
@@ -413,10 +395,27 @@ fn render(frame: &mut Frame, app: &App) {
         .split(horizontal_chunks[0]);
 
     // Input box
-    let input = Paragraph::new(format!("{}|", app.input.as_str())).block(
+    let mut input_color = Color::White;
+    let input_str: String;
+    if app.input.is_empty() {
+        input_str = "Type to search...".to_string();
+        input_color = Color::Gray;
+    } else {
+        input_str = app.input.clone();
+        input_color = Color::White;
+    };
+    if app.results.is_empty() {
+        input_color = Color::Red;
+    }
+    let input_span: Span = Span::styled(format!("{}", input_str), Style::default().fg(input_color));
+    let suffix: Span = Span::styled(format!("|{} ", NF_MAG), Style::default().fg(Color::Green));
+    let mut input_line = Line::from(input_span);
+    input_line.push_span(suffix);
+    let input = Paragraph::new(input_line).block(
         Block::default()
             .title(format!(" {}", app.cwd.to_str().unwrap()))
-            .borders(Borders::ALL),
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Green)),
     );
 
     // List of results
@@ -432,8 +431,12 @@ fn render(frame: &mut Frame, app: &App) {
             *line = new_line;
         }
     }
-    let list =
-        List::new(results_pretty).block(Block::default().title("(SONAR)))").borders(Borders::ALL));
+    let list = List::new(results_pretty).block(
+        Block::default()
+            .title("(SONAR)))")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Blue)),
+    );
 
     // Create ListState and set selected index
     let mut state = ListState::default();
@@ -445,8 +448,9 @@ fn render(frame: &mut Frame, app: &App) {
     let preview = Paragraph::new(app.preview_content.clone())
         .block(
             Block::default()
-                .title(format!("{} (0)_(0) {} ", NF_PREVIEW, app.selection))
-                .borders(Borders::ALL),
+                .title(format!("{} (0)_(0) {} ", NF_LOOK, app.selection))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow)),
         )
         .wrap(Wrap { trim: false });
 
