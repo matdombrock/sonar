@@ -5,7 +5,7 @@ use crossterm::{
 };
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
-use ratatui::{Frame, Terminal, layout::Constraint, prelude::Backend, widgets::Wrap};
+use ratatui::{Frame, Terminal, layout::Constraint, prelude::Backend, text::Line, widgets::Wrap};
 use ratatui::{backend::CrosstermBackend, layout::Layout};
 use ratatui::{
     layout::Direction,
@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 
 use ratatui::style::{Color, Style};
 use ratatui::text::{Span, Text};
+use std::os::unix::fs::PermissionsExt;
 
 const NF_PREVIEW: &str = "󰍉";
 const NF_SEL: &str = ""; //➤
@@ -30,26 +31,26 @@ const SC_EXIT: &str = " exit";
 const SC_HOME: &str = "~ home";
 const SC_BACK: &str = " back";
 
-struct App {
+struct App<'a> {
     input: String,
-    items: Vec<String>,
+    dir_listing: Vec<String>,
     results: Vec<String>,
     selection: String,
     selection_index: i32,
-    preview_content: String,
+    preview_content: Text<'a>,
     cwd: PathBuf,
     lwd: PathBuf,
 }
 
-impl App {
+impl<'a> App<'a> {
     fn new() -> Self {
         Self {
             input: String::new(),
-            items: Vec::new(),
+            dir_listing: Vec::new(),
             results: Vec::new(),
             selection: String::new(),
             selection_index: 0,
-            preview_content: "...".to_string(),
+            preview_content: Default::default(),
             cwd: env::current_dir().unwrap(),
             lwd: env::current_dir().unwrap(),
         }
@@ -78,11 +79,10 @@ impl App {
                         let file_name = entry.file_name();
                         let file_name_str = file_name.to_string_lossy();
                         let mut display_name = file_name_str.to_string();
-                        // Append '/' if it's a directory
-                        if let Ok(metadata) = entry.metadata() {
-                            if metadata.is_dir() {
+                        if let Ok(_metadata) = entry.metadata() {
+                            if _metadata.is_dir() {
                                 display_name = format!("{}| {}/", NF_DIR, display_name);
-                            } else if metadata.is_file() {
+                            } else if _metadata.is_file() {
                                 display_name = format!("{}| {}", NF_FILE, display_name);
                             }
                         }
@@ -99,17 +99,17 @@ impl App {
 
     fn update_directory_listing(&mut self) {
         let mut listing = self.get_directory_listing(&self.cwd.clone());
-        listing.insert(0, format!("{} {}", "|", SC_EXIT.to_string()));
         listing.insert(0, format!("{} {}", "|", SC_UP.to_string()));
         listing.insert(0, format!("{} {}", "|", SC_HOME.to_string()));
         listing.insert(0, format!("{} {}", "|", SC_BACK.to_string()));
-        self.items = listing;
+        listing.insert(0, format!("{} {}", "|", SC_EXIT.to_string()));
+        self.dir_listing = listing;
     }
 
     fn update_results(&mut self) {
         let matcher = SkimMatcherV2::default();
         let mut scored: Vec<_> = self
-            .items
+            .dir_listing
             .iter()
             .filter_map(|item| {
                 matcher
@@ -139,63 +139,90 @@ impl App {
 
     fn update_preview_content(&mut self) {
         // Update preview content
-        self.preview_content = String::new();
+        self.preview_content = Default::default();
         match self.selection.as_str() {
             SC_EXIT => {
-                self.preview_content = "Exit the application".to_string();
+                self.preview_content += Line::from("Exit the application");
             }
             SC_HOME => {
-                self.preview_content = "Go to home directory".to_string();
+                self.preview_content += Line::from(format!(
+                    "Home Directory:\n{}",
+                    dirs::home_dir().unwrap().to_str().unwrap()
+                ));
             }
             SC_UP => {
-                self.preview_content = "Go up one directory".to_string();
+                self.preview_content += Line::from(format!(
+                    "\n{}",
+                    self.cwd.parent().unwrap_or(&self.cwd).to_str().unwrap()
+                ));
             }
             SC_BACK => {
-                self.preview_content = format!(
-                    "Go back to last working directory:\n{}",
-                    self.lwd.to_str().unwrap()
-                );
+                self.preview_content += Line::from(format!("\n{}", self.lwd.to_str().unwrap()));
             }
             _ => {
-                self.preview_content = String::new();
+                self.preview_content = Default::default();
                 let mut selected_path = self.cwd.clone();
                 selected_path.push(&self.selection);
                 if selected_path.is_dir() {
-                    self.preview_content =
-                        format!("{} {}\n", NF_DIRO, selected_path.to_str().unwrap());
+                    let path_line = Line::styled(
+                        format!("{} {}\n", NF_DIRO, selected_path.to_str().unwrap()),
+                        Style::default().fg(Color::Blue),
+                    );
+                    self.preview_content += path_line;
                     let listing = self.get_directory_listing(&selected_path);
-                    self.preview_content
-                        .push_str(format!("Count: {}\n", listing.len()).as_str());
+                    let count_line = Line::styled(
+                        format!("Count: {}", listing.len()),
+                        Style::default().fg(Color::Yellow),
+                    );
+                    self.preview_content += count_line;
+                    // Get the file metadata
+                    let metadata = fs::metadata(&selected_path);
+                    if let Ok(meta) = metadata {
+                        // Get permissions
+                        let permissions = meta.permissions();
+                        let perm_line = Line::styled(
+                            format!("\nPermissions: {:o}", permissions.mode()),
+                            Style::default().fg(Color::Yellow),
+                        );
+                        self.preview_content += perm_line;
+                    }
                     for entry in listing.iter().take(20) {
-                        self.preview_content.push_str(&format!("{}\n", entry));
+                        self.preview_content += Line::from(entry.clone());
                     }
                 } else if selected_path.is_file() {
-                    self.preview_content =
-                        format!("{} {}\n", NF_DIRO, selected_path.to_str().unwrap());
-                    // use std::process::Command;
-                    // let output = Command::new("bat")
-                    //     // .arg("--color=always")
-                    //     .arg("--style=plain")
-                    //     .arg("--line-range=1:20")
-                    //     .arg(selected_path.to_str().unwrap())
-                    //     .output();
-                    //
-                    // match output {
-                    //     Ok(output) if output.status.success() => {
-                    //         self.preview_content =
-                    //             String::from_utf8_lossy(&output.stdout).to_string();
-                    //     }
-                    //     Ok(output) => {
-                    //         let err_msg = String::from_utf8_lossy(&output.stderr);
-                    //         self.preview_content = format!("bat failed: {}", err_msg);
-                    //     }
-                    //     Err(e) => {
-                    //         self.preview_content = format!("Failed to run bat: {}", e);
-                    //     }
-                    // }
+                    // Get the file metadata
+                    let metadata = fs::metadata(&selected_path);
+                    if let Ok(meta) = metadata {
+                        // Get permissions
+                        let permissions = meta.permissions();
+                        let perm_line = Line::styled(
+                            format!("\nPermissions: {:o}", permissions.mode()),
+                            Style::default().fg(Color::Yellow),
+                        );
+                        self.preview_content += perm_line;
+                        // Get mime type
+                        if meta.file_type().is_file() {
+                            // Get mimetype using mime_guess
+                            let mime =
+                                mime_guess::from_path(&selected_path).first_or_octet_stream();
+                            let mime_line = Line::styled(
+                                format!("Mime type: {}", mime),
+                                Style::default().fg(Color::Yellow),
+                            );
+                            self.preview_content += mime_line;
+                        }
+                    }
+                    // Read file content (first 100 lines)
+                    if let Ok(content) = fs::read_to_string(&selected_path) {
+                        for line in content.lines().take(100) {
+                            self.preview_content += Line::from(line.to_string());
+                        }
+                    } else {
+                        self.preview_content += Line::from("Unable to read file content.");
+                    }
                 } else {
-                    self.preview_content =
-                        "Selected item is neither a file nor a directory.".to_string();
+                    self.preview_content +=
+                        Line::from("Selected item is neither file nor directory.");
                 }
             }
         }
@@ -332,8 +359,7 @@ fn render(frame: &mut Frame, app: &App) {
     }
 
     // Preview box
-    let preview_content = app.preview_content.as_str();
-    let preview = Paragraph::new(preview_content)
+    let preview = Paragraph::new(app.preview_content.clone())
         .block(
             Block::default()
                 .title(format!("{} (0)_(0) {} ", NF_PREVIEW, app.selection))
