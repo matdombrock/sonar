@@ -14,9 +14,14 @@ use ratatui::{
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+use ratatui::style::{Color, Style};
+use ratatui::text::{Span, Text};
+
 const NF_PREVIEW: &str = "󰍉";
 const NF_SEL: &str = ""; //➤
 const NF_DIR: &str = "";
+const NF_DIRO: &str = "󰉒";
 const NF_FILE: &str = "";
 
 // Shortcut strings
@@ -62,13 +67,9 @@ impl App {
         self.cwd = new_path;
     }
 
-    fn get_directory_listing(&mut self, path: &PathBuf) {
+    fn get_directory_listing(&self, path: &PathBuf) -> Vec<String> {
         let cwd = path;
         let mut entries = Vec::new();
-        entries.push(format!("{} {}", "|", SC_EXIT.to_string()));
-        entries.push(format!("{} {}", "|", SC_UP.to_string()));
-        entries.push(format!("{} {}", "|", SC_HOME.to_string()));
-        entries.push(format!("{} {}", "|", SC_BACK.to_string()));
 
         match fs::read_dir(cwd) {
             Ok(read_dir) => {
@@ -93,7 +94,16 @@ impl App {
                 // Handle or ignore directory read errors
             }
         }
-        self.items = entries;
+        entries
+    }
+
+    fn update_directory_listing(&mut self) {
+        let mut listing = self.get_directory_listing(&self.cwd.clone());
+        listing.insert(0, format!("{} {}", "|", SC_EXIT.to_string()));
+        listing.insert(0, format!("{} {}", "|", SC_UP.to_string()));
+        listing.insert(0, format!("{} {}", "|", SC_HOME.to_string()));
+        listing.insert(0, format!("{} {}", "|", SC_BACK.to_string()));
+        self.items = listing;
     }
 
     fn update_results(&mut self) {
@@ -151,36 +161,18 @@ impl App {
                 let mut selected_path = self.cwd.clone();
                 selected_path.push(&self.selection);
                 if selected_path.is_dir() {
-                    self.preview_content = format!(
-                        "Directory: {}\n\nContents:\n",
-                        selected_path.to_str().unwrap()
-                    );
-                    match fs::read_dir(&selected_path) {
-                        Ok(read_dir) => {
-                            for entry_result in read_dir {
-                                if let Ok(entry) = entry_result {
-                                    let file_name = entry.file_name();
-                                    let file_name_str = file_name.to_string_lossy();
-                                    let mut display_name = file_name_str.to_string();
-                                    // Append '/' if it's a directory
-                                    if let Ok(metadata) = entry.metadata() {
-                                        if metadata.is_dir() {
-                                            display_name.push('/');
-                                        }
-                                    }
-                                    self.preview_content
-                                        .push_str(&format!("{}\n", display_name));
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            self.preview_content
-                                .push_str(&format!("Error reading directory: {}", e));
-                        }
+                    self.preview_content =
+                        format!("{} {}\n", NF_DIRO, selected_path.to_str().unwrap());
+                    let listing = self.get_directory_listing(&selected_path);
+                    self.preview_content
+                        .push_str(format!("Count: {}\n", listing.len()).as_str());
+                    for entry in listing.iter().take(20) {
+                        self.preview_content.push_str(&format!("{}\n", entry));
                     }
                 } else if selected_path.is_file() {
-                    use std::process::Command;
-
+                    self.preview_content =
+                        format!("{} {}\n", NF_DIRO, selected_path.to_str().unwrap());
+                    // use std::process::Command;
                     // let output = Command::new("bat")
                     //     // .arg("--color=always")
                     //     .arg("--style=plain")
@@ -213,7 +205,7 @@ impl App {
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
     // Get directory listing
     app.set_cwd(&app.cwd.clone());
-    app.get_directory_listing(&app.cwd.clone());
+    app.update_directory_listing();
     app.update_results(); // Initial results
     app.update_selection();
     app.update_preview_content();
@@ -240,7 +232,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                             SC_EXIT => break,
                             SC_HOME => {
                                 app.set_cwd(&dirs::home_dir().unwrap());
-                                app.get_directory_listing(&app.cwd.clone());
+                                app.update_directory_listing();
                                 app.update_results();
                                 app.selection_index = 0;
                                 continue;
@@ -309,7 +301,7 @@ fn render(frame: &mut Frame, app: &App) {
         .split(horizontal_chunks[0]);
 
     // Input box
-    let input = Paragraph::new(app.input.as_str()).block(
+    let input = Paragraph::new(format!("{}|", app.input.as_str())).block(
         Block::default()
             .title(format!(" {}", app.cwd.to_str().unwrap()))
             .borders(Borders::ALL),
