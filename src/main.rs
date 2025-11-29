@@ -25,6 +25,7 @@ const NF_DIR: &str = "";
 const NF_DIRO: &str = "󰉒";
 const NF_FILE: &str = "";
 const NF_CMD: &str = "";
+const NF_INFO: &str = "";
 
 // Shortcut strings
 const SC_UP: &str = " .. up";
@@ -195,32 +196,61 @@ impl<'a> App<'a> {
         }
     }
 
-    fn update_preview_content(&mut self) {
+    fn update_preview(&mut self) {
         // Update preview content
         self.preview_content = Default::default();
         match self.selection.as_str() {
             SC_EXIT => {
-                self.preview_content += Line::from("Exit the application");
+                self.preview_content +=
+                    Line::styled("Exit the application", Style::default().fg(Color::Green));
             }
             SC_HOME => {
-                self.preview_content += Line::from(format!(
-                    "Home Directory:\n{}",
-                    dirs::home_dir().unwrap().to_str().unwrap()
-                ));
+                self.preview_content += Line::styled(
+                    "Move to your home directory",
+                    Style::default().fg(Color::Green),
+                );
+                self.preview_content += Line::from("");
+                self.preview_content +=
+                    Line::styled("Home Directory:", Style::default().fg(Color::Yellow));
+                self.preview_content +=
+                    Line::from(format!("{}", dirs::home_dir().unwrap().to_str().unwrap()));
             }
             SC_UP => {
+                self.preview_content += Line::styled(
+                    "Move up to the parent directory",
+                    Style::default().fg(Color::Green),
+                );
+                self.preview_content += Line::from("");
+                self.preview_content +=
+                    Line::styled("Parent Directory:", Style::default().fg(Color::Yellow));
                 self.preview_content += Line::from(format!(
-                    "\n{}",
+                    "{}",
                     self.cwd.parent().unwrap_or(&self.cwd).to_str().unwrap()
                 ));
             }
             SC_BACK => {
-                self.preview_content += Line::from(format!("\n{}", self.lwd.to_str().unwrap()));
+                self.preview_content += Line::styled(
+                    "Return to the last working directory",
+                    Style::default().fg(Color::Green),
+                );
+                self.preview_content += Line::from("");
+                self.preview_content += Line::styled(
+                    "Last Working Directory:",
+                    Style::default().fg(Color::Yellow),
+                );
+                self.preview_content += Line::from(format!("{}", self.lwd.to_str().unwrap()));
             }
             _ => {
+                fn info_line<'a>(label: &str, value: &str) -> Line<'a> {
+                    Line::styled(
+                        format!("{} {}: {}\n", NF_INFO, label, value),
+                        Style::default().fg(Color::Yellow),
+                    )
+                }
                 self.preview_content = Default::default();
                 let mut selected_path = self.cwd.clone();
                 selected_path.push(&self.selection);
+
                 if selected_path.is_dir() {
                     let path_line = Line::styled(
                         format!("{} {}\n", NF_DIRO, selected_path.to_str().unwrap()),
@@ -228,45 +258,40 @@ impl<'a> App<'a> {
                     );
                     self.preview_content += path_line;
                     let listing = self.get_directory_listing(&selected_path);
-                    let count_line = Line::styled(
-                        format!("Count: {}", listing.len()),
-                        Style::default().fg(Color::Yellow),
-                    );
+                    let count_line = info_line("count", &listing.len().to_string());
                     self.preview_content += count_line;
                     // Get the file metadata
                     let metadata = fs::metadata(&selected_path);
                     if let Ok(meta) = metadata {
                         // Get permissions
                         let permissions = meta.permissions();
-                        let perm_line = Line::styled(
-                            format!("\nPermissions: {:o}", permissions.mode()),
-                            Style::default().fg(Color::Yellow),
-                        );
+                        let perm_line =
+                            info_line("permissions", &format!("{:o}", permissions.mode()));
                         self.preview_content += perm_line;
                     }
                     for entry in listing.iter().take(20) {
                         self.preview_content += Line::from(entry.name.clone());
                     }
                 } else if selected_path.is_file() {
+                    let path_line = Line::styled(
+                        format!("{} {}\n", NF_DIRO, selected_path.to_str().unwrap()),
+                        Style::default().fg(Color::Blue),
+                    );
+                    self.preview_content += path_line;
                     // Get the file metadata
                     let metadata = fs::metadata(&selected_path);
                     if let Ok(meta) = metadata {
                         // Get permissions
                         let permissions = meta.permissions();
-                        let perm_line = Line::styled(
-                            format!("\nPermissions: {:o}", permissions.mode()),
-                            Style::default().fg(Color::Yellow),
-                        );
+                        let perm_line =
+                            info_line("permissions", &format!("{:o}", permissions.mode()));
                         self.preview_content += perm_line;
                         // Get mime type
                         if meta.file_type().is_file() {
                             // Get mimetype using mime_guess
                             let mime =
                                 mime_guess::from_path(&selected_path).first_or_octet_stream();
-                            let mime_line = Line::styled(
-                                format!("Mime type: {}", mime),
-                                Style::default().fg(Color::Yellow),
-                            );
+                            let mime_line = info_line("mime", &mime.to_string());
                             self.preview_content += mime_line;
                         }
                     }
@@ -293,7 +318,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
     app.update_directory_listing();
     app.update_results(); // Initial results
     app.update_selection();
-    app.update_preview_content();
+    app.update_preview();
     loop {
         terminal.draw(|f| render(f, &app))?;
         if event::poll(std::time::Duration::from_millis(100))? {
@@ -331,7 +356,6 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                             _ => {}
                         }
                         app.set_cwd(&selection.into());
-                        // app.get_directory_listing(&app.cwd.clone());
                         app.update_directory_listing();
                         app.update_results();
                         app.selection_index = 0;
@@ -361,7 +385,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                 }
 
                 app.update_selection();
-                app.update_preview_content();
+                app.update_preview();
             }
         }
     }
