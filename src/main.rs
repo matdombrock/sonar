@@ -396,7 +396,6 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
     Ok(())
 }
 
-// filepath: src/main.rs
 fn render(frame: &mut Frame, app: &App) {
     let area = frame.area();
 
