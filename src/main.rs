@@ -33,6 +33,7 @@ const SC_UP: &str = " .. up";
 const SC_EXIT: &str = " exit";
 const SC_HOME: &str = "~ home";
 const SC_BACK: &str = " back";
+const SC_EXP: &str = " explode";
 
 #[derive(Clone)]
 struct ItemInfo {
@@ -64,7 +65,7 @@ impl<'a> App<'a> {
             preview_content: Default::default(),
             cwd: env::current_dir().unwrap(),
             lwd: env::current_dir().unwrap(),
-            mode_explode: true,
+            mode_explode: false,
         }
     }
 
@@ -150,6 +151,14 @@ impl<'a> App<'a> {
             0,
             ItemInfo {
                 name: SC_UP.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            },
+        );
+        listing.insert(
+            0,
+            ItemInfo {
+                name: SC_EXP.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             },
@@ -376,6 +385,13 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                             }
                             SC_BACK => {
                                 selection = app.lwd.to_str().unwrap().to_string();
+                            }
+                            SC_EXP => {
+                                app.mode_explode = !app.mode_explode;
+                                app.update_directory_listing();
+                                app.update_results();
+                                app.selection_index = 0;
+                                continue;
                             }
                             _ => {}
                         }
