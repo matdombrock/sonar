@@ -24,6 +24,7 @@ const NF_SEL: &str = ""; //➤
 const NF_DIR: &str = "";
 const NF_DIRO: &str = "󰉒";
 const NF_FILE: &str = "";
+const NF_CMD: &str = "";
 
 // Shortcut strings
 const SC_UP: &str = " .. up";
@@ -34,6 +35,7 @@ const SC_BACK: &str = " back";
 #[derive(Clone)]
 struct ItemInfo {
     name: String,
+    is_sc: bool,
     metadata: fs::Metadata,
 }
 
@@ -84,18 +86,13 @@ impl<'a> App<'a> {
                     if let Ok(entry) = entry_result {
                         let file_name = entry.file_name();
                         let file_name_str = file_name.to_string_lossy();
-                        let mut display_name = file_name_str.to_string();
                         if let Ok(_metadata) = entry.metadata() {
-                            if _metadata.is_dir() {
-                                display_name = format!("{}| {}/", NF_DIR, display_name);
-                            } else if _metadata.is_file() {
-                                display_name = format!("{}| {}", NF_FILE, display_name);
-                            }
+                            entries.push(ItemInfo {
+                                name: file_name_str.to_string(),
+                                is_sc: false,
+                                metadata: _metadata,
+                            });
                         }
-                        entries.push(ItemInfo {
-                            name: display_name,
-                            metadata: entry.metadata().unwrap(),
-                        });
                     }
                 }
             }
@@ -106,33 +103,52 @@ impl<'a> App<'a> {
         entries
     }
 
+    fn dir_list_pretty(list: &Vec<ItemInfo>) -> Text<'a> {
+        let mut text = Text::default();
+        for item in list {
+            let display = if item.is_sc {
+                format!("{} {}", NF_CMD, item.name)
+            } else if item.metadata.is_dir() {
+                format!("{} {}", NF_DIR, item.name)
+            } else {
+                format!("{} {}", NF_FILE, item.name)
+            };
+            text.lines.push(Line::from(display));
+        }
+        text
+    }
+
     fn update_directory_listing(&mut self) {
         let mut listing = self.get_directory_listing(&self.cwd.clone());
         listing.insert(
             0,
             ItemInfo {
-                name: format!("{} {}", "|", SC_EXIT.to_string()),
+                name: SC_HOME.to_string(),
+                is_sc: true,
                 metadata: fs::metadata(&self.cwd).unwrap(),
             },
         );
         listing.insert(
             0,
             ItemInfo {
-                name: format!("{} {}", "|", SC_HOME.to_string()),
+                name: SC_BACK.to_string(),
+                is_sc: true,
                 metadata: fs::metadata(&self.cwd).unwrap(),
             },
         );
         listing.insert(
             0,
             ItemInfo {
-                name: format!("{} {}", "|", SC_BACK.to_string()),
+                name: SC_UP.to_string(),
+                is_sc: true,
                 metadata: fs::metadata(&self.cwd).unwrap(),
             },
         );
         listing.insert(
             0,
             ItemInfo {
-                name: format!("{} {}", "|", SC_UP.to_string()),
+                name: SC_EXIT.to_string(),
+                is_sc: true,
                 metadata: fs::metadata(&self.cwd).unwrap(),
             },
         );
@@ -368,22 +384,33 @@ fn render(frame: &mut Frame, app: &App) {
     );
 
     // List of results
-    let list_items: Vec<ListItem> = app
-        .results
-        .iter()
-        .enumerate()
-        .map(|(idx, item)| {
-            let display = if idx as i32 == app.selection_index {
-                format!("{} {}", NF_SEL, item.name)
-            } else {
-                item.name.to_string()
-            };
-            ListItem::new(display)
-        })
-        .collect();
+    let mut results_pretty = App::dir_list_pretty(&app.results);
+    for (idx, line) in results_pretty.lines.iter_mut().enumerate() {
+        if idx as i32 == app.selection_index {
+            let span = Span::styled(
+                format!("{}", NF_SEL),
+                Style::default().fg(Color::Blue).bg(Color::Black),
+            );
+            let mut new_line = Line::from(span);
+            new_line.push_span(Span::raw(format!(" {}", line)));
+            *line = new_line;
+        }
+    }
+    // let list_items: Vec<ListItem> = results_pretty
+    //     .iter()
+    //     .enumerate()
+    //     .map(|(idx, item)| {
+    //         let display = if idx as i32 == app.selection_index {
+    //             format!("{} {}", NF_SEL, item.name)
+    //         } else {
+    //             item.name.to_string()
+    //         };
+    //         ListItem::new(display)
+    //     })
+    //     .collect();
 
     let list =
-        List::new(list_items).block(Block::default().title("(SONAR)))").borders(Borders::ALL));
+        List::new(results_pretty).block(Block::default().title("(SONAR)))").borders(Borders::ALL));
 
     // Create ListState and set selected index
     let mut state = ListState::default();
