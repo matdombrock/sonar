@@ -50,6 +50,7 @@ struct App<'a> {
     preview_content: Text<'a>,
     cwd: PathBuf,
     lwd: PathBuf,
+    mode_explode: bool,
 }
 
 impl<'a> App<'a> {
@@ -63,6 +64,7 @@ impl<'a> App<'a> {
             preview_content: Default::default(),
             cwd: env::current_dir().unwrap(),
             lwd: env::current_dir().unwrap(),
+            mode_explode: true,
         }
     }
 
@@ -79,27 +81,47 @@ impl<'a> App<'a> {
     }
 
     fn get_directory_listing(&self, path: &PathBuf) -> Vec<ItemInfo> {
-        let cwd = path;
         let mut entries = Vec::new();
 
-        match fs::read_dir(cwd) {
+        match fs::read_dir(path) {
             Ok(read_dir) => {
                 for entry_result in read_dir {
                     if let Ok(entry) = entry_result {
                         let file_name = entry.file_name();
                         let file_name_str = file_name.to_string_lossy();
-                        if let Ok(_metadata) = entry.metadata() {
-                            entries.push(ItemInfo {
-                                name: file_name_str.to_string(),
-                                is_sc: false,
-                                metadata: _metadata,
-                            });
+                        match entry.metadata() {
+                            Ok(metadata) => {
+                                if !self.mode_explode {
+                                    entries.push(ItemInfo {
+                                        name: file_name_str.to_string(),
+                                        is_sc: false,
+                                        metadata,
+                                    });
+                                } else {
+                                    let sub_path = entry.path();
+                                    if metadata.is_dir() {
+                                        // Recursively collect files from subdirectory
+                                        let sub_entries = self.get_directory_listing(&sub_path);
+                                        entries.extend(sub_entries);
+                                    } else {
+                                        entries.push(ItemInfo {
+                                            name: sub_path.to_str().unwrap().to_string(),
+                                            is_sc: false,
+                                            metadata,
+                                        });
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                // Optionally log or handle metadata errors
+                                continue;
+                            }
                         }
                     }
                 }
             }
             Err(_) => {
-                // Handle or ignore directory read errors
+                // Optionally log or handle directory read errors
             }
         }
         entries
@@ -193,7 +215,7 @@ impl<'a> App<'a> {
         )
     }
 
-    fn dir_list_pretty(list: &Vec<ItemInfo>) -> Text<'a> {
+    fn dir_list_pretty(&self, list: &Vec<ItemInfo>) -> Text<'a> {
         let mut text = Text::default();
         for item in list {
             let line = if item.is_sc {
@@ -207,8 +229,15 @@ impl<'a> App<'a> {
                     Style::default().fg(Color::Green),
                 )
             } else {
+                // When exploded the item name is the full path
+                // Remove the cwd prefix for better readability
+                let name = if item.name.starts_with(self.cwd.to_str().unwrap()) {
+                    item.name[self.cwd.to_str().unwrap().len()..].to_string()
+                } else {
+                    item.name.clone()
+                };
                 Line::styled(
-                    format!("{} {}", NF_FILE, item.name),
+                    format!("{} {}", NF_FILE, name),
                     Style::default().fg(Color::Cyan),
                 )
             };
@@ -232,7 +261,7 @@ impl<'a> App<'a> {
         let count_line = App::fmtln_info("count", &listing.len().to_string());
         self.preview_content += count_line;
         self.preview_content += Line::from("-------");
-        let pretty_listing = App::dir_list_pretty(&listing);
+        let pretty_listing = self.dir_list_pretty(&listing);
         for line in pretty_listing.lines.iter().take(20) {
             self.preview_content += Line::from(line.clone());
         }
@@ -299,6 +328,8 @@ impl<'a> App<'a> {
                 } else {
                     self.preview_content +=
                         Line::from("Selected item is neither file nor directory.");
+                    let metadata = fs::metadata(&selected_path);
+                    self.preview_content += Line::from(format!("{:?}", metadata))
                 }
             }
         }
@@ -427,7 +458,7 @@ fn render(frame: &mut Frame, app: &App) {
     );
 
     // List of results
-    let mut results_pretty = App::dir_list_pretty(&app.results);
+    let mut results_pretty = app.dir_list_pretty(&app.results);
     for (idx, line) in results_pretty.lines.iter_mut().enumerate() {
         if idx as i32 == app.selection_index {
             let span = Span::styled(
