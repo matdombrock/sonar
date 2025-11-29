@@ -1,0 +1,21 @@
+[package]
+name = "fuz"
+version = "0.1.0"
+description = "An example generated using the hello-world template"
+authors = ["matdombrock <dombrock.mathieu@gmail.com>"]
+license = "MIT"
+edition = "2024"
+
+[dependencies]
+color-eyre = "0.6.3"
+crossterm = "0.29.0"
+ratatui = "0.29.0"
+fuzzy-matcher = "0.3"
+dirs = "6.0.0"
+
+# Read the optimization guideline for more details: https://ratatui.rs/recipes/apps/release-your-app/#optimizations
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
