@@ -433,19 +433,6 @@ fn render(frame: &mut Frame, app: &App) {
             *line = new_line;
         }
     }
-    // let list_items: Vec<ListItem> = results_pretty
-    //     .iter()
-    //     .enumerate()
-    //     .map(|(idx, item)| {
-    //         let display = if idx as i32 == app.selection_index {
-    //             format!("{} {}", NF_SEL, item.name)
-    //         } else {
-    //             item.name.to_string()
-    //         };
-    //         ListItem::new(display)
-    //     })
-    //     .collect();
-
     let list =
         List::new(results_pretty).block(Block::default().title("(SONAR)))").borders(Borders::ALL));
 
