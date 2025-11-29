@@ -16,12 +16,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 const NF_PREVIEW: &str = "󰍉";
 const NF_SEL: &str = ""; //➤
+const NF_DIR: &str = "";
+const NF_FILE: &str = "";
 
 // Shortcut strings
-const SC_UP: &str = "|  .. up";
-const SC_EXIT: &str = "|  exit";
-const SC_HOME: &str = "| ~ home";
-const SC_BACK: &str = "|  back";
+const SC_UP: &str = " .. up";
+const SC_EXIT: &str = " exit";
+const SC_HOME: &str = "~ home";
+const SC_BACK: &str = " back";
 
 struct App {
     input: String,
@@ -63,7 +65,7 @@ impl App {
     fn get_directory_listing(&mut self, path: &PathBuf) {
         let cwd = path;
         let mut entries = Vec::new();
-        entries.push(SC_EXIT.to_string());
+        entries.push(format!("{} {}", "|", SC_EXIT.to_string()));
         entries.push(SC_UP.to_string());
         entries.push(SC_HOME.to_string());
         entries.push(SC_BACK.to_string());
@@ -78,7 +80,9 @@ impl App {
                         // Append '/' if it's a directory
                         if let Ok(metadata) = entry.metadata() {
                             if metadata.is_dir() {
-                                display_name.push('/');
+                                display_name = format!("{}| {}/", NF_DIR, display_name);
+                            } else if metadata.is_file() {
+                                display_name = format!("{}| {}", NF_FILE, display_name);
                             }
                         }
                         entries.push(display_name);
@@ -116,6 +120,10 @@ impl App {
         } else {
             self.selection_index = 0;
             self.selection = String::new();
+        }
+        // Remove icon prefix from selection
+        if let Some(pos) = self.selection.find("| ") {
+            self.selection = self.selection[(pos + 2)..].to_string();
         }
     }
 
@@ -174,7 +182,7 @@ impl App {
                     use std::process::Command;
 
                     let output = Command::new("bat")
-                        .arg("--color=always")
+                        // .arg("--color=always")
                         .arg("--style=plain")
                         .arg("--line-range=1:20")
                         .arg(selected_path.to_str().unwrap())
