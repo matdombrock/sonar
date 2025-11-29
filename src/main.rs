@@ -131,12 +131,13 @@ impl<'a> App<'a> {
 
     fn update_directory_listing(&mut self) {
         let mut listing = self.get_directory_listing(&self.cwd.clone());
+        let empty_metadata = fs::metadata(&self.cwd).unwrap();
         listing.insert(
             0,
             ItemInfo {
                 name: SC_HOME.to_string(),
                 is_sc: true,
-                metadata: fs::metadata(&self.cwd).unwrap(),
+                metadata: empty_metadata.clone(),
             },
         );
         listing.insert(
@@ -144,7 +145,7 @@ impl<'a> App<'a> {
             ItemInfo {
                 name: SC_BACK.to_string(),
                 is_sc: true,
-                metadata: fs::metadata(&self.cwd).unwrap(),
+                metadata: empty_metadata.clone(),
             },
         );
         listing.insert(
@@ -152,7 +153,7 @@ impl<'a> App<'a> {
             ItemInfo {
                 name: SC_UP.to_string(),
                 is_sc: true,
-                metadata: fs::metadata(&self.cwd).unwrap(),
+                metadata: empty_metadata.clone(),
             },
         );
         listing.insert(
@@ -160,7 +161,7 @@ impl<'a> App<'a> {
             ItemInfo {
                 name: SC_EXIT.to_string(),
                 is_sc: true,
-                metadata: fs::metadata(&self.cwd).unwrap(),
+                metadata: empty_metadata.clone(),
             },
         );
         self.dir_listing = listing;
@@ -235,6 +236,8 @@ impl<'a> App<'a> {
                 self.preview_content += sc_line("Go back to the last working directory");
             }
             _ => {
+                // TODO:
+                // Metadata is not coming from item its being re-fetched here
                 self.preview_content = Default::default();
                 let mut selected_path = self.cwd.clone();
                 selected_path.push(&self.selection);
