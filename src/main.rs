@@ -269,8 +269,10 @@ impl<'a> App<'a> {
                             info_line("permissions", &format!("{:o}", permissions.mode()));
                         self.preview_content += perm_line;
                     }
-                    for entry in listing.iter().take(20) {
-                        self.preview_content += Line::from(entry.name.clone());
+                    self.preview_content += Line::from("-------");
+                    let pretty_listing = App::dir_list_pretty(&listing);
+                    for line in pretty_listing.lines.iter().take(20) {
+                        self.preview_content += Line::from(line.clone());
                     }
                 } else if selected_path.is_file() {
                     let path_line = Line::styled(
@@ -295,6 +297,7 @@ impl<'a> App<'a> {
                             self.preview_content += mime_line;
                         }
                     }
+                    self.preview_content += Line::from("-------");
                     // Read file content (first 100 lines)
                     if let Ok(content) = fs::read_to_string(&selected_path) {
                         for line in content.lines().take(100) {
