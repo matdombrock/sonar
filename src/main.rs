@@ -66,9 +66,9 @@ impl App {
         let cwd = path;
         let mut entries = Vec::new();
         entries.push(format!("{} {}", "|", SC_EXIT.to_string()));
-        entries.push(SC_UP.to_string());
-        entries.push(SC_HOME.to_string());
-        entries.push(SC_BACK.to_string());
+        entries.push(format!("{} {}", "|", SC_UP.to_string()));
+        entries.push(format!("{} {}", "|", SC_HOME.to_string()));
+        entries.push(format!("{} {}", "|", SC_BACK.to_string()));
 
         match fs::read_dir(cwd) {
             Ok(read_dir) => {
@@ -181,26 +181,26 @@ impl App {
                 } else if selected_path.is_file() {
                     use std::process::Command;
 
-                    let output = Command::new("bat")
-                        // .arg("--color=always")
-                        .arg("--style=plain")
-                        .arg("--line-range=1:20")
-                        .arg(selected_path.to_str().unwrap())
-                        .output();
-
-                    match output {
-                        Ok(output) if output.status.success() => {
-                            self.preview_content =
-                                String::from_utf8_lossy(&output.stdout).to_string();
-                        }
-                        Ok(output) => {
-                            let err_msg = String::from_utf8_lossy(&output.stderr);
-                            self.preview_content = format!("bat failed: {}", err_msg);
-                        }
-                        Err(e) => {
-                            self.preview_content = format!("Failed to run bat: {}", e);
-                        }
-                    }
+                    // let output = Command::new("bat")
+                    //     // .arg("--color=always")
+                    //     .arg("--style=plain")
+                    //     .arg("--line-range=1:20")
+                    //     .arg(selected_path.to_str().unwrap())
+                    //     .output();
+                    //
+                    // match output {
+                    //     Ok(output) if output.status.success() => {
+                    //         self.preview_content =
+                    //             String::from_utf8_lossy(&output.stdout).to_string();
+                    //     }
+                    //     Ok(output) => {
+                    //         let err_msg = String::from_utf8_lossy(&output.stderr);
+                    //         self.preview_content = format!("bat failed: {}", err_msg);
+                    //     }
+                    //     Err(e) => {
+                    //         self.preview_content = format!("Failed to run bat: {}", e);
+                    //     }
+                    // }
                 } else {
                     self.preview_content =
                         "Selected item is neither a file nor a directory.".to_string();
@@ -266,8 +266,10 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                     }
                     KeyCode::Up => {
                         app.selection_index += -1;
-                        if app.selection_index < 0 {
+                        if app.selection_index < 0 && !app.results.is_empty() {
                             app.selection_index = app.results.len() as i32 - 1;
+                        } else if app.results.is_empty() {
+                            app.selection_index = 0;
                         }
                     }
                     KeyCode::Esc => break,
