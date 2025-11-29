@@ -105,30 +105,6 @@ impl<'a> App<'a> {
         entries
     }
 
-    fn dir_list_pretty(list: &Vec<ItemInfo>) -> Text<'a> {
-        let mut text = Text::default();
-        for item in list {
-            let line = if item.is_sc {
-                Line::styled(
-                    format!("{} {}", NF_CMD, item.name),
-                    Style::default().fg(Color::Yellow),
-                )
-            } else if item.metadata.is_dir() {
-                Line::styled(
-                    format!("{} {}", NF_DIR, item.name),
-                    Style::default().fg(Color::Green),
-                )
-            } else {
-                Line::styled(
-                    format!("{} {}", NF_FILE, item.name),
-                    Style::default().fg(Color::Cyan),
-                )
-            };
-            text.lines.push(Line::from(line));
-        }
-        text
-    }
-
     fn update_directory_listing(&mut self) {
         let mut listing = self.get_directory_listing(&self.cwd.clone());
         let empty_metadata = fs::metadata(&self.cwd).unwrap();
@@ -215,6 +191,30 @@ impl<'a> App<'a> {
             format!("{} {}", NF_CMD, description),
             Style::default().fg(Color::Green),
         )
+    }
+
+    fn dir_list_pretty(list: &Vec<ItemInfo>) -> Text<'a> {
+        let mut text = Text::default();
+        for item in list {
+            let line = if item.is_sc {
+                Line::styled(
+                    format!("{} {}", NF_CMD, item.name),
+                    Style::default().fg(Color::Yellow),
+                )
+            } else if item.metadata.is_dir() {
+                Line::styled(
+                    format!("{} {}/", NF_DIR, item.name),
+                    Style::default().fg(Color::Green),
+                )
+            } else {
+                Line::styled(
+                    format!("{} {}", NF_FILE, item.name),
+                    Style::default().fg(Color::Cyan),
+                )
+            };
+            text.lines.push(Line::from(line));
+        }
+        text
     }
 
     fn preview_dir(&mut self, selected_path: &PathBuf) {
