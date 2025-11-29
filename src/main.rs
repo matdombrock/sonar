@@ -198,42 +198,92 @@ impl<'a> App<'a> {
         }
     }
 
-    fn update_preview(&mut self) {
-        fn info_line<'a>(label: &str, value: &str) -> Line<'a> {
-            Line::styled(
-                format!("{} {}: {}", NF_INFO, label, value),
-                Style::default().fg(Color::Yellow),
-            )
-        }
-        fn path_line<'a>(path: &PathBuf) -> Line<'a> {
-            Line::styled(
-                format!("{} {}", NF_DIRO, path.to_str().unwrap()),
-                Style::default().fg(Color::Blue),
-            )
-        }
-        fn sc_line<'a>(description: &str) -> Line<'a> {
-            Line::styled(
-                format!("{} {}", NF_CMD, description),
-                Style::default().fg(Color::Green),
-            )
-        }
+    fn fmtln_info(label: &str, value: &str) -> Line<'a> {
+        Line::styled(
+            format!("{} {}: {}", NF_INFO, label, value),
+            Style::default().fg(Color::Yellow),
+        )
+    }
+    fn fmtln_path(path: &PathBuf) -> Line<'a> {
+        Line::styled(
+            format!("{} {}", NF_DIRO, path.to_str().unwrap()),
+            Style::default().fg(Color::Blue),
+        )
+    }
+    fn fmtln_sc(description: &str) -> Line<'a> {
+        Line::styled(
+            format!("{} {}", NF_CMD, description),
+            Style::default().fg(Color::Green),
+        )
+    }
 
+    fn preview_dir(&mut self, selected_path: &PathBuf) {
+        let path_line = App::fmtln_path(&selected_path);
+        self.preview_content += path_line;
+        // Get the file metadata
+        let metadata = fs::metadata(&selected_path);
+        if let Ok(meta) = metadata {
+            // Get permissions
+            let permissions = meta.permissions();
+            let perm_line = App::fmtln_info("permissions", &format!("{:o}", permissions.mode()));
+            self.preview_content += perm_line;
+        }
+        let listing = self.get_directory_listing(&selected_path);
+        let count_line = App::fmtln_info("count", &listing.len().to_string());
+        self.preview_content += count_line;
+        self.preview_content += Line::from("-------");
+        let pretty_listing = App::dir_list_pretty(&listing);
+        for line in pretty_listing.lines.iter().take(20) {
+            self.preview_content += Line::from(line.clone());
+        }
+    }
+
+    fn preview_file(&mut self, selected_path: &PathBuf) {
+        let path_line = App::fmtln_path(&selected_path);
+        self.preview_content += path_line;
+        // Get the file metadata
+        let metadata = fs::metadata(&selected_path);
+        if let Ok(meta) = metadata {
+            // Get permissions
+            let permissions = meta.permissions();
+            let perm_line = App::fmtln_info("permissions", &format!("{:o}", permissions.mode()));
+            self.preview_content += perm_line;
+            // Get mime type
+            if meta.file_type().is_file() {
+                // Get mimetype using mime_guess
+                let mime = mime_guess::from_path(&selected_path).first_or_octet_stream();
+                let mime_line = App::fmtln_info("mime", &mime.to_string());
+                self.preview_content += mime_line;
+            }
+        }
+        self.preview_content += Line::from("-------");
+        // Read file content (first 100 lines)
+        if let Ok(content) = fs::read_to_string(&selected_path) {
+            for line in content.lines().take(100) {
+                self.preview_content += Line::from(line.to_string());
+            }
+        } else {
+            self.preview_content += Line::from("Unable to read file content.");
+        }
+    }
+
+    fn update_preview(&mut self) {
         self.preview_content = Default::default();
         match self.selection.as_str() {
             SC_EXIT => {
-                self.preview_content += sc_line("Exit the application");
+                self.preview_content += App::fmtln_sc("Exit the application");
             }
             SC_HOME => {
-                self.preview_content += path_line(&dirs::home_dir().unwrap());
-                self.preview_content += sc_line("Go to the home directory");
+                self.preview_content += App::fmtln_path(&dirs::home_dir().unwrap());
+                self.preview_content += App::fmtln_sc("Go to the home directory");
             }
             SC_UP => {
-                self.preview_content += path_line(&self.cwd);
-                self.preview_content += sc_line("Go up to the parent directory");
+                self.preview_content += App::fmtln_path(&self.cwd);
+                self.preview_content += App::fmtln_sc("Go up to the parent directory");
             }
             SC_BACK => {
-                self.preview_content += path_line(&self.lwd);
-                self.preview_content += sc_line("Go back to the last working directory");
+                self.preview_content += App::fmtln_path(&self.lwd);
+                self.preview_content += App::fmtln_sc("Go back to the last working directory");
             }
             _ => {
                 // TODO:
@@ -243,54 +293,9 @@ impl<'a> App<'a> {
                 selected_path.push(&self.selection);
 
                 if selected_path.is_dir() {
-                    let path_line = path_line(&selected_path);
-                    self.preview_content += path_line;
-                    // Get the file metadata
-                    let metadata = fs::metadata(&selected_path);
-                    if let Ok(meta) = metadata {
-                        // Get permissions
-                        let permissions = meta.permissions();
-                        let perm_line =
-                            info_line("permissions", &format!("{:o}", permissions.mode()));
-                        self.preview_content += perm_line;
-                    }
-                    let listing = self.get_directory_listing(&selected_path);
-                    let count_line = info_line("count", &listing.len().to_string());
-                    self.preview_content += count_line;
-                    self.preview_content += Line::from("-------");
-                    let pretty_listing = App::dir_list_pretty(&listing);
-                    for line in pretty_listing.lines.iter().take(20) {
-                        self.preview_content += Line::from(line.clone());
-                    }
+                    self.preview_dir(&selected_path);
                 } else if selected_path.is_file() {
-                    let path_line = path_line(&selected_path);
-                    self.preview_content += path_line;
-                    // Get the file metadata
-                    let metadata = fs::metadata(&selected_path);
-                    if let Ok(meta) = metadata {
-                        // Get permissions
-                        let permissions = meta.permissions();
-                        let perm_line =
-                            info_line("permissions", &format!("{:o}", permissions.mode()));
-                        self.preview_content += perm_line;
-                        // Get mime type
-                        if meta.file_type().is_file() {
-                            // Get mimetype using mime_guess
-                            let mime =
-                                mime_guess::from_path(&selected_path).first_or_octet_stream();
-                            let mime_line = info_line("mime", &mime.to_string());
-                            self.preview_content += mime_line;
-                        }
-                    }
-                    self.preview_content += Line::from("-------");
-                    // Read file content (first 100 lines)
-                    if let Ok(content) = fs::read_to_string(&selected_path) {
-                        for line in content.lines().take(100) {
-                            self.preview_content += Line::from(line.to_string());
-                        }
-                    } else {
-                        self.preview_content += Line::from("Unable to read file content.");
-                    }
+                    self.preview_file(&selected_path);
                 } else {
                     self.preview_content +=
                         Line::from("Selected item is neither file nor directory.");
