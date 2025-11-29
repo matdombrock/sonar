@@ -106,14 +106,23 @@ impl<'a> App<'a> {
     fn dir_list_pretty(list: &Vec<ItemInfo>) -> Text<'a> {
         let mut text = Text::default();
         for item in list {
-            let display = if item.is_sc {
-                format!("{} {}", NF_CMD, item.name)
+            let line = if item.is_sc {
+                Line::styled(
+                    format!("{} {}", NF_CMD, item.name),
+                    Style::default().fg(Color::Yellow),
+                )
             } else if item.metadata.is_dir() {
-                format!("{} {}", NF_DIR, item.name)
+                Line::styled(
+                    format!("{} {}", NF_DIR, item.name),
+                    Style::default().fg(Color::Green),
+                )
             } else {
-                format!("{} {}", NF_FILE, item.name)
+                Line::styled(
+                    format!("{} {}", NF_FILE, item.name),
+                    Style::default().fg(Color::Cyan),
+                )
             };
-            text.lines.push(Line::from(display));
+            text.lines.push(Line::from(line));
         }
         text
     }
@@ -322,7 +331,8 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                             _ => {}
                         }
                         app.set_cwd(&selection.into());
-                        app.get_directory_listing(&app.cwd.clone());
+                        // app.get_directory_listing(&app.cwd.clone());
+                        app.update_directory_listing();
                         app.update_results();
                         app.selection_index = 0;
                     }
