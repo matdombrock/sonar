@@ -31,10 +31,16 @@ const SC_EXIT: &str = " exit";
 const SC_HOME: &str = "~ home";
 const SC_BACK: &str = " back";
 
+#[derive(Clone)]
+struct ItemInfo {
+    name: String,
+    metadata: fs::Metadata,
+}
+
 struct App<'a> {
     input: String,
-    dir_listing: Vec<String>,
-    results: Vec<String>,
+    dir_listing: Vec<ItemInfo>,
+    results: Vec<ItemInfo>,
     selection: String,
     selection_index: i32,
     preview_content: Text<'a>,
@@ -68,7 +74,7 @@ impl<'a> App<'a> {
         self.cwd = new_path;
     }
 
-    fn get_directory_listing(&self, path: &PathBuf) -> Vec<String> {
+    fn get_directory_listing(&self, path: &PathBuf) -> Vec<ItemInfo> {
         let cwd = path;
         let mut entries = Vec::new();
 
@@ -86,7 +92,10 @@ impl<'a> App<'a> {
                                 display_name = format!("{}| {}", NF_FILE, display_name);
                             }
                         }
-                        entries.push(display_name);
+                        entries.push(ItemInfo {
+                            name: display_name,
+                            metadata: entry.metadata().unwrap(),
+                        });
                     }
                 }
             }
@@ -99,10 +108,34 @@ impl<'a> App<'a> {
 
     fn update_directory_listing(&mut self) {
         let mut listing = self.get_directory_listing(&self.cwd.clone());
-        listing.insert(0, format!("{} {}", "|", SC_UP.to_string()));
-        listing.insert(0, format!("{} {}", "|", SC_HOME.to_string()));
-        listing.insert(0, format!("{} {}", "|", SC_BACK.to_string()));
-        listing.insert(0, format!("{} {}", "|", SC_EXIT.to_string()));
+        listing.insert(
+            0,
+            ItemInfo {
+                name: format!("{} {}", "|", SC_EXIT.to_string()),
+                metadata: fs::metadata(&self.cwd).unwrap(),
+            },
+        );
+        listing.insert(
+            0,
+            ItemInfo {
+                name: format!("{} {}", "|", SC_HOME.to_string()),
+                metadata: fs::metadata(&self.cwd).unwrap(),
+            },
+        );
+        listing.insert(
+            0,
+            ItemInfo {
+                name: format!("{} {}", "|", SC_BACK.to_string()),
+                metadata: fs::metadata(&self.cwd).unwrap(),
+            },
+        );
+        listing.insert(
+            0,
+            ItemInfo {
+                name: format!("{} {}", "|", SC_UP.to_string()),
+                metadata: fs::metadata(&self.cwd).unwrap(),
+            },
+        );
         self.dir_listing = listing;
     }
 
@@ -113,7 +146,7 @@ impl<'a> App<'a> {
             .iter()
             .filter_map(|item| {
                 matcher
-                    .fuzzy_match(item, &self.input)
+                    .fuzzy_match(&item.name, &self.input)
                     .map(|score| (score, item.clone()))
             })
             .collect();
@@ -123,10 +156,10 @@ impl<'a> App<'a> {
 
     fn update_selection(&mut self) {
         if self.selection_index < self.results.len() as i32 {
-            self.selection = self.results[self.selection_index as usize].clone();
+            self.selection = self.results[self.selection_index as usize].name.clone();
         } else if !self.results.is_empty() {
             self.selection_index = 0;
-            self.selection = self.results[0].clone();
+            self.selection = String::new();
         } else {
             self.selection_index = 0;
             self.selection = String::new();
@@ -187,7 +220,7 @@ impl<'a> App<'a> {
                         self.preview_content += perm_line;
                     }
                     for entry in listing.iter().take(20) {
-                        self.preview_content += Line::from(entry.clone());
+                        self.preview_content += Line::from(entry.name.clone());
                     }
                 } else if selected_path.is_file() {
                     // Get the file metadata
@@ -341,9 +374,9 @@ fn render(frame: &mut Frame, app: &App) {
         .enumerate()
         .map(|(idx, item)| {
             let display = if idx as i32 == app.selection_index {
-                format!("{} {}", NF_SEL, item)
+                format!("{} {}", NF_SEL, item.name)
             } else {
-                item.to_string()
+                item.name.to_string()
             };
             ListItem::new(display)
         })
