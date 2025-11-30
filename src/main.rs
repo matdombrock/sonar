@@ -5,7 +5,13 @@ use crossterm::{
 };
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
-use ratatui::{Frame, Terminal, layout::Constraint, prelude::Backend, text::Line, widgets::Wrap};
+use ratatui::{
+    Frame, Terminal,
+    layout::{Constraint, Rect},
+    prelude::Backend,
+    text::Line,
+    widgets::{Clear, Wrap},
+};
 use ratatui::{backend::CrosstermBackend, layout::Layout};
 use ratatui::{
     layout::Direction,
@@ -47,6 +53,7 @@ mod cmd_name {
     pub const DIR_BACK: &str = ":dir-back";
     pub const EXPLODE: &str = ":explode";
     pub const SELECT: &str = ":select";
+    pub const CMD_TOGGLE: &str = ":cmd-toggle";
 }
 
 #[derive(Clone)]
@@ -66,6 +73,8 @@ struct App<'a> {
     cwd: PathBuf,
     lwd: PathBuf,
     mode_explode: bool,
+    command_window_open: bool,
+    command_input: String,
 }
 
 impl<'a> App<'a> {
@@ -80,6 +89,8 @@ impl<'a> App<'a> {
             cwd: env::current_dir().unwrap(),
             lwd: env::current_dir().unwrap(),
             mode_explode: false,
+            command_window_open: false,
+            command_input: String::new(),
         }
     }
 
@@ -409,6 +420,10 @@ impl<'a> App<'a> {
             self.selection_index = 0;
         }
     }
+
+    fn cmd_cmd_window_toggle(&mut self) {
+        self.command_window_open = !self.command_window_open;
+    }
 }
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
@@ -425,6 +440,23 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                 code, modifiers, ..
             }) = event::read()?
             {
+                if app.command_window_open {
+                    // Command window input handling
+                    match (modifiers, code) {
+                        (KeyModifiers::NONE, KeyCode::Char(c)) => {
+                            app.command_input.push(c);
+                        }
+                        (KeyModifiers::NONE, KeyCode::Backspace) => {
+                            app.command_input.pop();
+                        }
+                        (KeyModifiers::NONE, KeyCode::Enter) => {}
+                        (KeyModifiers::NONE, KeyCode::Esc) => {
+                            app.command_window_open = false;
+                        }
+                        _ => {}
+                    }
+                    continue;
+                }
                 // Before key press handling
                 app.update_selection();
                 let mut input_changed = false;
@@ -446,6 +478,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                 }
                 // Process key to command mapping
                 let cmd = match (modifiers, code) {
+                    (KeyModifiers::CONTROL, KeyCode::Char('t')) => cmd_name::CMD_TOGGLE,
                     (KeyModifiers::NONE, KeyCode::Enter) => cmd_name::SELECT,
                     (KeyModifiers::NONE, KeyCode::Right) => cmd_name::SELECT,
                     (KeyModifiers::NONE, KeyCode::Up) => cmd_name::SEL_UP,
@@ -491,6 +524,9 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                     cmd_name::DIR_UP => app.cmd_dir_up(),
                     cmd_name::DIR_BACK => app.cmd_dir_back(),
                     cmd_name::EXPLODE => app.cmd_explode(),
+                    cmd_name::HOME => app.cmd_home(),
+                    cmd_name::CMD_TOGGLE => app.cmd_cmd_window_toggle(),
+                    cmd_name::EXIT => break,
                     _ => {
                         dbg!("No command matched: {}", cmd);
                     }
@@ -505,6 +541,32 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage((100 - percent_y) / 2),
+                Constraint::Percentage(percent_y),
+                Constraint::Percentage((100 - percent_y) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(area);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage((100 - percent_x) / 2),
+                Constraint::Percentage(percent_x),
+                Constraint::Percentage((100 - percent_x) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(popup_layout[1])[1]
 }
 
 fn render(frame: &mut Frame, app: &App) {
@@ -524,7 +586,7 @@ fn render(frame: &mut Frame, app: &App) {
         .split(horizontal_chunks[0]);
 
     // Input box
-    let mut input_color = Color::White;
+    let mut input_color;
     let input_str: String;
     if app.input.is_empty() {
         input_str = "Type to search...".to_string();
@@ -588,6 +650,23 @@ fn render(frame: &mut Frame, app: &App) {
     frame.render_widget(input, left_vertical_chunks[0]);
     frame.render_stateful_widget(list, left_vertical_chunks[1], &mut state);
     frame.render_widget(preview, horizontal_chunks[1]);
+
+    // Render command popup if open
+    if app.command_window_open {
+        let popup_area = centered_rect(50, 90, area);
+        let command_str = format!("> {}|", app.command_input);
+        frame.render_widget(Clear, popup_area); // Clears the area first
+        let command_paragraph = Paragraph::new(command_str)
+            .style(Style::default().bg(Color::Black))
+            .block(
+                Block::default()
+                    .title(format!("{} Command", NF_CMD))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Magenta))
+                    .style(Style::default().bg(Color::Black)),
+            );
+        frame.render_widget(command_paragraph, popup_area);
+    }
 }
 
 fn clear() {
