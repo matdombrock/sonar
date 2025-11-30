@@ -31,6 +31,74 @@ use syntect::parsing::SyntaxSet;
 // Might want Path
 use std::path::PathBuf;
 
+const APP_NAME: &str = "sona";
+
+const LOGO: &str = r#"
+ ██╗███████╗ ██████╗ ███╗   ██╗ █████╗ ██╗ ██╗ ██╗ 
+██╔╝██╔════╝██╔═══██╗████╗  ██║██╔══██╗╚██╗╚██╗╚██╗
+██║ ███████╗██║   ██║██╔██╗ ██║███████║ ██║ ██║ ██║
+██║ ╚════██║██║   ██║██║╚██╗██║██╔══██║ ██║ ██║ ██║
+╚██╗███████║╚██████╔╝██║ ╚████║██║  ██║██╔╝██╔╝██╔╝
+ ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝ ╚═╝ ╚═╝ 
+"#;
+
+// Limit for performance
+const DIR_PRETTY_LIMIT: usize = 1000;
+const SEARCH_LIMIT: usize = 1000;
+
+// Nerd font icons
+mod nf {
+    pub const MAG: &str = "󰍉";
+    pub const LOOK: &str = "";
+    pub const SEL: &str = ""; //➤
+    pub const DIR: &str = "";
+    pub const DIRO: &str = "󰉒";
+    pub const FILE: &str = "";
+    pub const CMD: &str = "";
+    pub const INFO: &str = "";
+    pub const CHECK: &str = "";
+}
+
+// Shortcut strings
+mod sc {
+    pub const DIR_UP: &str = " .. up";
+    pub const EXIT: &str = " exit";
+    pub const HOME: &str = "~ home";
+    pub const DIR_BACK: &str = " back";
+    pub const MENU_BACK: &str = " menu";
+    pub const EXP: &str = " explode";
+    pub const CMDS: &str = " cmds";
+    pub const MULTI_SHOW: &str = " show multi-selection";
+    pub const MULTI_CLEAR: &str = " clear multi-selection";
+    pub const MULTI_SAVE: &str = " save multi-selection";
+    pub const LOG: &str = " show log";
+    pub const LOG_CLEAR: &str = " clear log";
+}
+
+// Command names
+mod cmd_name {
+    pub const EXIT: &str = ":exit";
+    pub const HOME: &str = ":home";
+    pub const SEL_UP: &str = ":sel-up";
+    pub const SEL_DOWN: &str = ":sel-down";
+    pub const DIR_UP: &str = ":dir-up";
+    pub const DIR_BACK: &str = ":dir-back";
+    pub const EXPLODE: &str = ":explode";
+    pub const SELECT: &str = ":select";
+    pub const CMD_WIN_TOGGLE: &str = ":cmd";
+    pub const CMD_VIS_TOGGLE: &str = ":cmd-vis-toggle";
+    pub const CMD_VIS_SHOW: &str = ":cmd-vis-show";
+    pub const OUTPUT_WIN_TOGGLE: &str = ":output-toggle";
+    pub const MULTI_SEL: &str = ":multi-sel";
+    pub const MULTI_CLEAR: &str = ":multi-clear";
+    pub const MULTI_SHOW: &str = ":multi-show";
+    pub const MULTI_SAVE: &str = ":multi-save";
+    pub const MENU_BACK: &str = ":menu-back";
+    pub const LOG: &str = ":log";
+    pub const LOG_CLEAR: &str = ":log-clear";
+}
+
+// Logs to temp directory
 mod log {
     use super::APP_NAME;
     pub fn log_path() -> std::path::PathBuf {
@@ -58,66 +126,7 @@ mod log {
     }
 }
 
-const APP_NAME: &str = "sona";
-
-const LOGO: &str = r#"
- ██╗███████╗ ██████╗ ███╗   ██╗ █████╗ ██╗ ██╗ ██╗ 
-██╔╝██╔════╝██╔═══██╗████╗  ██║██╔══██╗╚██╗╚██╗╚██╗
-██║ ███████╗██║   ██║██╔██╗ ██║███████║ ██║ ██║ ██║
-██║ ╚════██║██║   ██║██║╚██╗██║██╔══██║ ██║ ██║ ██║
-╚██╗███████║╚██████╔╝██║ ╚████║██║  ██║██╔╝██╔╝██╔╝
- ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝ ╚═╝ ╚═╝ 
-"#;
-
-const DIR_PRETTY_LIMIT: usize = 1000;
-const SEARCH_LIMIT: usize = 1000;
-
-const NF_MAG: &str = "󰍉";
-const NF_LOOK: &str = "";
-const NF_SEL: &str = ""; //➤
-const NF_DIR: &str = "";
-const NF_DIRO: &str = "󰉒";
-const NF_FILE: &str = "";
-const NF_CMD: &str = "";
-const NF_INFO: &str = "";
-const NF_CHECK: &str = "";
-
-// Shortcut strings
-const SC_DIR_UP: &str = " .. up";
-const SC_EXIT: &str = " exit";
-const SC_HOME: &str = "~ home";
-const SC_DIR_BACK: &str = " back";
-const SC_MENU_BACK: &str = " menu"; // Extra space to avoid confusion with dir back
-const SC_EXP: &str = " explode";
-const SC_CMDS: &str = " cmds";
-const SC_MULTI_SHOW: &str = " show multi-selection";
-const SC_MULTI_CLEAR: &str = " clear multi-selection";
-const SC_MULTI_SAVE: &str = " save multi-selection";
-const SC_LOG: &str = " show log";
-const SC_LOG_CLEAR: &str = " clear log";
-
-mod cmd_name {
-    pub const EXIT: &str = ":exit";
-    pub const HOME: &str = ":home";
-    pub const SEL_UP: &str = ":sel-up";
-    pub const SEL_DOWN: &str = ":sel-down";
-    pub const DIR_UP: &str = ":dir-up";
-    pub const DIR_BACK: &str = ":dir-back";
-    pub const EXPLODE: &str = ":explode";
-    pub const SELECT: &str = ":select";
-    pub const CMD_WIN_TOGGLE: &str = ":cmd";
-    pub const CMD_VIS_TOGGLE: &str = ":cmd-vis-toggle";
-    pub const CMD_VIS_SHOW: &str = ":cmd-vis-show";
-    pub const OUTPUT_WIN_TOGGLE: &str = ":output-toggle";
-    pub const MULTI_SEL: &str = ":multi-sel";
-    pub const MULTI_CLEAR: &str = ":multi-clear";
-    pub const MULTI_SHOW: &str = ":multi-show";
-    pub const MULTI_SAVE: &str = ":multi-save";
-    pub const MENU_BACK: &str = ":menu-back";
-    pub const LOG: &str = ":log";
-    pub const LOG_CLEAR: &str = ":log-clear";
-}
-
+// Information about a file or directory
 #[derive(Clone)]
 struct ItemInfo {
     name: String,
@@ -125,12 +134,14 @@ struct ItemInfo {
     metadata: fs::Metadata,
 }
 
+// Return type for loop control
 enum LoopReturn {
     Continue,
     Break,
     Ok,
 }
 
+// Main application state
 struct App<'a> {
     input: String,
     dir_listing: Vec<ItemInfo>,
@@ -235,19 +246,19 @@ impl<'a> App<'a> {
 
     fn fmtln_info(label: &str, value: &str) -> Line<'a> {
         Line::styled(
-            format!("{} {}: {}", NF_INFO, label, value),
+            format!("{} {}: {}", nf::INFO, label, value),
             Style::default().fg(Color::Yellow),
         )
     }
     fn fmtln_path(path: &PathBuf) -> Line<'a> {
         Line::styled(
-            format!("{} {}", NF_DIRO, path.to_str().unwrap()),
+            format!("{} {}", nf::DIRO, path.to_str().unwrap()),
             Style::default().fg(Color::Blue),
         )
     }
     fn fmtln_sc(description: &str) -> Line<'a> {
         Line::styled(
-            format!("{} {}", NF_CMD, description),
+            format!("{} {}", nf::CMD, description),
             Style::default().fg(Color::Green),
         )
     }
@@ -266,19 +277,19 @@ impl<'a> App<'a> {
                     break;
                 }
             }
-            let ms_on = format!("{} ", NF_CHECK);
+            let ms_on = format!("{} ", nf::CHECK);
             if is_multi_selected {
                 ms = &ms_on;
             }
             // Limit for performance
             let line = if item.is_sc {
                 Line::styled(
-                    format!("{}{} {}", ms, NF_CMD, item.name),
+                    format!("{}{} {}", ms, nf::CMD, item.name),
                     Style::default().fg(Color::Yellow),
                 )
             } else if item.metadata.is_dir() {
                 Line::styled(
-                    format!("{}{} {}/", ms, NF_DIR, item.name),
+                    format!("{}{} {}/", ms, nf::DIR, item.name),
                     Style::default().fg(Color::Green),
                 )
             } else {
@@ -290,7 +301,7 @@ impl<'a> App<'a> {
                     item.name.clone()
                 };
                 Line::styled(
-                    format!("{}{} {}", ms, NF_FILE, name),
+                    format!("{}{} {}", ms, nf::FILE, name),
                     Style::default().fg(Color::Cyan),
                 )
             };
@@ -376,7 +387,7 @@ impl<'a> App<'a> {
     fn update_preview(&mut self) {
         self.preview_content = Default::default();
         match self.selection.as_str() {
-            SC_EXIT => {
+            sc::EXIT => {
                 self.preview_content += App::fmtln_sc("Exit the application");
                 self.preview_content += Line::from("");
                 for (i, line) in LOGO.lines().enumerate() {
@@ -387,19 +398,19 @@ impl<'a> App<'a> {
                         Line::styled(format!("{}", line), Style::default().fg(Color::LightGreen));
                 }
             }
-            SC_HOME => {
+            sc::HOME => {
                 self.preview_content += App::fmtln_path(&dirs::home_dir().unwrap());
                 self.preview_content += App::fmtln_sc("Go to the home directory");
             }
-            SC_DIR_UP => {
+            sc::DIR_UP => {
                 self.preview_content += App::fmtln_path(&self.cwd);
                 self.preview_content += App::fmtln_sc("Go up to the parent directory");
             }
-            SC_DIR_BACK => {
+            sc::DIR_BACK => {
                 self.preview_content += App::fmtln_path(&self.lwd);
                 self.preview_content += App::fmtln_sc("Go back to the last working directory");
             }
-            SC_EXP => {
+            sc::EXP => {
                 self.preview_content += App::fmtln_sc("Toggle explode mode");
                 self.preview_content += Line::styled(
                     "Shows all files in subdirectories under the current directory.",
@@ -408,49 +419,49 @@ impl<'a> App<'a> {
                 let status = if self.mode_explode { "ON" } else { "OFF" };
                 self.preview_content += App::fmtln_info("explode mode", status);
             }
-            SC_CMDS => {
+            sc::CMDS => {
                 self.preview_content += App::fmtln_sc("Show visual commands");
                 self.preview_content += Line::styled(
                     "Toggles a visual command menu in the listing.",
                     Style::default().fg(Color::Green),
                 );
             }
-            SC_MENU_BACK => {
+            sc::MENU_BACK => {
                 self.preview_content += App::fmtln_sc("Go back to the previous menu");
                 self.preview_content += Line::styled(
                     "Exits the current visual command menu.",
                     Style::default().fg(Color::Green),
                 );
             }
-            SC_MULTI_SHOW => {
+            sc::MULTI_SHOW => {
                 self.preview_content += App::fmtln_sc("Show multi-selection");
                 self.preview_content += Line::styled(
                     "Displays all currently selected items in the output window.",
                     Style::default().fg(Color::Green),
                 );
             }
-            SC_MULTI_CLEAR => {
+            sc::MULTI_CLEAR => {
                 self.preview_content += App::fmtln_sc("Clear multi-selection");
                 self.preview_content += Line::styled(
                     "Clears all items from the multi-selection list.",
                     Style::default().fg(Color::Green),
                 );
             }
-            SC_MULTI_SAVE => {
+            sc::MULTI_SAVE => {
                 self.preview_content += App::fmtln_sc("Save multi-selection");
                 self.preview_content += Line::styled(
                     "Saves the multi-selection to a file. (Not implemented yet)",
                     Style::default().fg(Color::Green),
                 );
             }
-            SC_LOG => {
+            sc::LOG => {
                 self.preview_content += App::fmtln_sc("Show application log");
                 self.preview_content += Line::styled(
                     "Displays the application log in the output window.",
                     Style::default().fg(Color::Green),
                 );
             }
-            SC_LOG_CLEAR => {
+            sc::LOG_CLEAR => {
                 self.preview_content += App::fmtln_sc("Clear application log");
                 self.preview_content += Line::styled(
                     "Clear the application log file.",
@@ -498,52 +509,52 @@ impl<'a> App<'a> {
         if self.mode_vis_commands {
             self.dir_listing.clear();
             self.dir_listing.push(ItemInfo {
-                name: SC_MENU_BACK.to_string(),
+                name: sc::MENU_BACK.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
             self.dir_listing.push(ItemInfo {
-                name: SC_EXIT.to_string(),
+                name: sc::EXIT.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
             self.dir_listing.push(ItemInfo {
-                name: SC_HOME.to_string(),
+                name: sc::HOME.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
             self.dir_listing.push(ItemInfo {
-                name: SC_DIR_UP.to_string(),
+                name: sc::DIR_UP.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
             self.dir_listing.push(ItemInfo {
-                name: SC_EXP.to_string(),
+                name: sc::EXP.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
             self.dir_listing.push(ItemInfo {
-                name: SC_MULTI_SHOW.to_string(),
+                name: sc::MULTI_SHOW.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
             self.dir_listing.push(ItemInfo {
-                name: SC_MULTI_CLEAR.to_string(),
+                name: sc::MULTI_CLEAR.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
             self.dir_listing.push(ItemInfo {
-                name: SC_MULTI_SAVE.to_string(),
+                name: sc::MULTI_SAVE.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
             self.dir_listing.push(ItemInfo {
-                name: SC_LOG.to_string(),
+                name: sc::LOG.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
             self.dir_listing.push(ItemInfo {
-                name: SC_LOG_CLEAR.to_string(),
+                name: sc::LOG_CLEAR.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
@@ -553,7 +564,7 @@ impl<'a> App<'a> {
         listing.insert(
             0,
             ItemInfo {
-                name: SC_CMDS.to_string(),
+                name: sc::CMDS.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             },
@@ -561,7 +572,7 @@ impl<'a> App<'a> {
         listing.insert(
             0,
             ItemInfo {
-                name: SC_DIR_BACK.to_string(),
+                name: sc::DIR_BACK.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             },
@@ -569,7 +580,7 @@ impl<'a> App<'a> {
         listing.insert(
             0,
             ItemInfo {
-                name: SC_DIR_UP.to_string(),
+                name: sc::DIR_UP.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             },
@@ -577,7 +588,7 @@ impl<'a> App<'a> {
         listing.insert(
             0,
             ItemInfo {
-                name: SC_EXP.to_string(),
+                name: sc::EXP.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             },
@@ -585,7 +596,7 @@ impl<'a> App<'a> {
         listing.insert(
             0,
             ItemInfo {
-                name: SC_EXIT.to_string(),
+                name: sc::EXIT.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             },
@@ -877,42 +888,42 @@ impl<'a> App<'a> {
                 // Get selection
                 let selection = self.selection.clone();
                 match selection.as_str() {
-                    SC_EXIT => return LoopReturn::Break,
-                    SC_HOME => {
+                    sc::EXIT => return LoopReturn::Break,
+                    sc::HOME => {
                         self.cmd_home();
                         return LoopReturn::Continue;
                     }
-                    SC_DIR_UP => {
+                    sc::DIR_UP => {
                         self.cmd_dir_up();
                     }
-                    SC_DIR_BACK => {
+                    sc::DIR_BACK => {
                         self.cmd_dir_back();
                     }
-                    SC_EXP => {
+                    sc::EXP => {
                         self.cmd_explode();
                         return LoopReturn::Continue;
                     }
-                    SC_CMDS => {
+                    sc::CMDS => {
                         self.cmd_vis_show();
                         return LoopReturn::Continue;
                     }
-                    SC_MENU_BACK => {
+                    sc::MENU_BACK => {
                         self.cmd_menu_back();
                         return LoopReturn::Continue;
                     }
-                    SC_MULTI_SHOW => {
+                    sc::MULTI_SHOW => {
                         self.cmd_multi_show();
                     }
-                    SC_MULTI_CLEAR => {
+                    sc::MULTI_CLEAR => {
                         self.cmd_multi_clear();
                     }
-                    SC_MULTI_SAVE => {
+                    sc::MULTI_SAVE => {
                         self.cmd_multi_save();
                     }
-                    SC_LOG => {
+                    sc::LOG => {
                         self.cmd_log_show();
                     }
-                    SC_LOG_CLEAR => {
+                    sc::LOG_CLEAR => {
                         self.cmd_log_clear();
                     }
                     _ => {
@@ -1064,7 +1075,7 @@ fn render(frame: &mut Frame, app: &App) {
         input_color = Color::Red;
     }
     let input_span: Span = Span::styled(format!("{}", input_str), Style::default().fg(input_color));
-    let suffix: Span = Span::styled(format!("|{} ", NF_MAG), Style::default().fg(Color::Green));
+    let suffix: Span = Span::styled(format!("|{} ", nf::MAG), Style::default().fg(Color::Green));
     let mut input_line = Line::from(input_span);
     input_line.push_span(suffix);
     let input = Paragraph::new(input_line).block(
@@ -1079,7 +1090,7 @@ fn render(frame: &mut Frame, app: &App) {
     for (idx, line) in results_pretty.lines.iter_mut().enumerate() {
         if idx as i32 == app.selection_index {
             let span = Span::styled(
-                format!("{}", NF_SEL),
+                format!("{}", nf::SEL),
                 Style::default().fg(Color::Blue).bg(Color::Black),
             );
             let mut new_line = Line::from(span);
@@ -1105,7 +1116,7 @@ fn render(frame: &mut Frame, app: &App) {
     let preview = Paragraph::new(app.preview_content.clone())
         .block(
             Block::default()
-                .title(format!("{} (0)_(0) {} ", NF_LOOK, app.selection))
+                .title(format!("{} (0)_(0) {} ", nf::LOOK, app.selection))
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Yellow))
                 .style(Style::default().bg(Color::Black)),
@@ -1126,7 +1137,7 @@ fn render(frame: &mut Frame, app: &App) {
             .style(Style::default().bg(Color::Black))
             .block(
                 Block::default()
-                    .title(format!("{} Command", NF_CMD))
+                    .title(format!("{} Command", nf::CMD))
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::Magenta))
                     .style(Style::default().bg(Color::Black)),
@@ -1141,7 +1152,7 @@ fn render(frame: &mut Frame, app: &App) {
             .style(Style::default().bg(Color::Black))
             .block(
                 Block::default()
-                    .title(format!("{} Output ('esc' to exit)", NF_CMD))
+                    .title(format!("{} Output ('esc' to exit)", nf::CMD))
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::Magenta))
                     .style(Style::default().bg(Color::Black)),
