@@ -1,9 +1,10 @@
 # Sonar
 ## Todo Feat
-- Git integration?
 - Custom keybinds
 - Image previews
 - Tab to use primary up/down on preview?
+- Git integration?
+- Select alt, like right click for context (delete, multi, etc)?
 - Seer?
 
 ## Todo Bug / Incomplete
