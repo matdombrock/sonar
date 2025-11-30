@@ -45,6 +45,15 @@ const SC_HOME: &str = "~ home";
 const SC_DIR_BACK: &str = " back";
 const SC_EXP: &str = " explode";
 
+const LOGO: &str = r#"
+ ██╗███████╗ ██████╗ ███╗   ██╗ █████╗ ██╗ ██╗ ██╗ 
+██╔╝██╔════╝██╔═══██╗████╗  ██║██╔══██╗╚██╗╚██╗╚██╗
+██║ ███████╗██║   ██║██╔██╗ ██║███████║ ██║ ██║ ██║
+██║ ╚════██║██║   ██║██║╚██╗██║██╔══██║ ██║ ██║ ██║
+╚██╗███████║╚██████╔╝██║ ╚████║██║  ██║██╔╝██╔╝██╔╝
+ ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝ ╚═╝ ╚═╝ 
+"#;
+
 mod cmd_name {
     pub const EXIT: &str = ":exit";
     pub const HOME: &str = ":home";
@@ -362,6 +371,14 @@ impl<'a> App<'a> {
         match self.selection.as_str() {
             SC_EXIT => {
                 self.preview_content += App::fmtln_sc("Exit the application");
+                self.preview_content += Line::from("");
+                for (i, line) in LOGO.lines().enumerate() {
+                    if i == 0 {
+                        continue;
+                    };
+                    self.preview_content +=
+                        Line::styled(format!("{}", line), Style::default().fg(Color::LightGreen));
+                }
             }
             SC_HOME => {
                 self.preview_content += App::fmtln_path(&dirs::home_dir().unwrap());
