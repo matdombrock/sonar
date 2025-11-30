@@ -44,6 +44,11 @@ const LOGO: &str = r#"
  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝ ╚═╝ ╚═╝ 
 "#;
 
+const WELCOME_MSG: &str = r#"
+Welcome to Sona!
+Type to search files and directories. Use arrow keys to navigate.
+"#;
+
 // Limit for performance
 const DIR_PRETTY_LIMIT: usize = 1000;
 const SEARCH_LIMIT: usize = 1000;
@@ -633,6 +638,9 @@ impl<'a> App<'a> {
         match self.selection.as_str() {
             sc::EXIT => {
                 self.preview_content += App::fmtln_sc("Exit the application");
+                if self.mode_vis_commands {
+                    return;
+                }
                 self.preview_content += Line::from("");
                 for (i, line) in LOGO.lines().enumerate() {
                     if i == 0 {
@@ -640,6 +648,9 @@ impl<'a> App<'a> {
                     };
                     self.preview_content +=
                         Line::styled(format!("{}", line), Style::default().fg(Color::LightGreen));
+                }
+                for line in WELCOME_MSG.lines() {
+                    self.preview_content += Line::from(line);
                 }
             }
             sc::HOME => {
@@ -828,15 +839,9 @@ impl<'a> App<'a> {
             });
             return;
         }
+        // Normal directory listing
         let mut listing = self.get_directory_listing(&self.cwd.clone());
-        listing.insert(
-            0,
-            ItemInfo {
-                name: sc::CMDS.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            },
-        );
+        // Inserted in reverse order
         listing.insert(
             0,
             ItemInfo {
@@ -849,6 +854,14 @@ impl<'a> App<'a> {
             0,
             ItemInfo {
                 name: sc::DIR_UP.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            },
+        );
+        listing.insert(
+            0,
+            ItemInfo {
+                name: sc::CMDS.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             },
