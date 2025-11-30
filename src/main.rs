@@ -613,6 +613,8 @@ impl<'a> App<'a> {
             (KeyModifiers::CONTROL, KeyCode::Char('j')) => cmd_name::SEL_DOWN,
             (KeyModifiers::CONTROL, KeyCode::Char('k')) => cmd_name::SEL_UP,
             (KeyModifiers::CONTROL, KeyCode::Char('l')) => cmd_name::SELECT,
+            (KeyModifiers::NONE, KeyCode::Esc) => cmd_name::EXIT,
+            (KeyModifiers::CONTROL, KeyCode::Char('q')) => cmd_name::EXIT,
             _ => "",
         };
         dbg!(&cmd);
