@@ -68,8 +68,10 @@ mod cmd_name {
     pub const EXPLODE: &str = ":explode";
     pub const SELECT: &str = ":select";
     pub const CMD_TOGGLE: &str = ":cmd-toggle";
+    pub const OUTPUT_TOGGLE: &str = ":output-toggle";
     pub const MULTI_SEL: &str = ":multi-sel";
     pub const MULTI_CLEAR: &str = ":multi-clear";
+    pub const MULTI_SHOW: &str = ":multi-show";
 }
 
 #[derive(Clone)]
@@ -98,6 +100,8 @@ struct App<'a> {
     mode_explode: bool,
     command_window_open: bool,
     command_input: String,
+    output_window_open: bool,
+    output_text: String,
 }
 impl<'a> App<'a> {
     fn new() -> Self {
@@ -114,6 +118,8 @@ impl<'a> App<'a> {
             mode_explode: false,
             command_window_open: false,
             command_input: String::new(),
+            output_window_open: false,
+            output_text: String::new(),
         }
     }
 
@@ -495,6 +501,10 @@ impl<'a> App<'a> {
         self.command_window_open = !self.command_window_open;
     }
 
+    fn cmd_output_window_toggle(&mut self) {
+        self.output_window_open = !self.output_window_open;
+    }
+
     fn cmd_multi_sel(&mut self) {
         let mut selected_path = self.cwd.clone();
         selected_path.push(&self.selection);
@@ -519,6 +529,19 @@ impl<'a> App<'a> {
 
     fn cmd_multi_clear(&mut self) {
         self.multi_selection.clear();
+    }
+
+    fn cmd_multi_show(&mut self) {
+        self.output_text = String::new();
+        if self.multi_selection.is_empty() {
+            self.output_text = "No items in multi selection.".to_string();
+            self.output_window_open = true;
+            return;
+        }
+        for path in self.multi_selection.iter() {
+            self.output_text += &format!("{}\n", path.to_str().unwrap());
+        }
+        self.output_window_open = true;
     }
 
     fn handle_command(&mut self, cmd: &str) -> LoopReturn {
@@ -556,8 +579,10 @@ impl<'a> App<'a> {
             cmd_name::EXPLODE => self.cmd_explode(),
             cmd_name::HOME => self.cmd_home(),
             cmd_name::CMD_TOGGLE => self.cmd_cmd_window_toggle(),
+            cmd_name::OUTPUT_TOGGLE => self.cmd_output_window_toggle(),
             cmd_name::MULTI_SEL => self.cmd_multi_sel(),
             cmd_name::MULTI_CLEAR => self.cmd_multi_clear(),
+            cmd_name::MULTI_SHOW => self.cmd_multi_show(),
             cmd_name::EXIT => return LoopReturn::Break,
             _ => {
                 dbg!("No command matched: {}", cmd);
@@ -581,6 +606,16 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                 code, modifiers, ..
             }) = event::read()?
             {
+                // Output window input handling
+                if app.output_window_open {
+                    match (modifiers, code) {
+                        (KeyModifiers::NONE, KeyCode::Esc) => {
+                            app.output_window_open = false;
+                        }
+                        _ => {}
+                    }
+                    continue;
+                }
                 // Command window input handling
                 if app.command_window_open {
                     match (modifiers, code) {
@@ -593,6 +628,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                         (KeyModifiers::NONE, KeyCode::Enter) => {
                             // Handle commands
                             let cmd = app.command_input.clone();
+                            dbg!(&cmd);
                             let lr = app.handle_command(&cmd);
                             match lr {
                                 LoopReturn::Continue => continue,
@@ -779,6 +815,21 @@ fn render(frame: &mut Frame, app: &App) {
             .block(
                 Block::default()
                     .title(format!("{} Command", NF_CMD))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Magenta))
+                    .style(Style::default().bg(Color::Black)),
+            );
+        frame.render_widget(command_paragraph, popup_area);
+    }
+
+    if app.output_window_open {
+        let popup_area = centered_rect(50, 90, area);
+        frame.render_widget(Clear, popup_area); // Clears the area first
+        let command_paragraph = Paragraph::new(app.output_text.clone())
+            .style(Style::default().bg(Color::Black))
+            .block(
+                Block::default()
+                    .title(format!("{} Output", NF_CMD))
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::Magenta))
                     .style(Style::default().bg(Color::Black)),
