@@ -100,6 +100,7 @@ mod cmd_list {
         CmdWinToggle,
         CmdVisToggle,
         CmdVisShow,
+        CmdFinder,
         CmdList,
         OutputWinToggle,
         OutputWinShow,
@@ -211,6 +212,14 @@ mod cmd_list {
                 fname: "cmd_cmd_vis_show",
                 description: "Show visual commands",
                 cmd: "cmd-vis-show",
+            },
+        );
+        map.insert(
+            CmdName::CmdFinder,
+            CmdData {
+                fname: "cmd_cmd_finder",
+                description: "Toggle command finder",
+                cmd: "cmd-finder",
             },
         );
         map.insert(
@@ -388,6 +397,7 @@ struct App<'a> {
     lwd: PathBuf,
     mode_explode: bool,
     mode_vis_commands: bool,
+    mode_cmd: bool,
     show_command_window: bool,
     command_input: String,
     show_output_window: bool,
@@ -411,6 +421,7 @@ impl<'a> App<'a> {
             lwd: env::current_dir().unwrap(),
             mode_explode: false,
             mode_vis_commands: false,
+            mode_cmd: false,
             show_command_window: false,
             command_input: String::new(),
             show_output_window: false,
@@ -766,14 +777,23 @@ impl<'a> App<'a> {
     }
 
     fn update_listing(&mut self) {
-        log!(
-            "Updating directory listing for cwd: {}",
-            self.cwd.to_str().unwrap()
-        );
         let empty_metadata = match fs::metadata(&self.cwd) {
             Ok(meta) => meta,
             Err(_) => fs::metadata(".").unwrap(),
         };
+        // Handle cmd search
+        if self.mode_cmd {
+            log!("Updating command listing");
+            self.listing.clear();
+            for (_, cmd_data) in self.cmd_list.iter() {
+                self.listing.push(ItemInfo {
+                    name: cmd_data.cmd.to_string(),
+                    is_sc: true,
+                    metadata: empty_metadata.clone(),
+                });
+            }
+            return;
+        }
         // Handle visual commands
         if self.mode_vis_commands {
             self.listing.clear();
@@ -840,6 +860,10 @@ impl<'a> App<'a> {
             return;
         }
         // Normal directory listing
+        log!(
+            "Updating directory listing for cwd: {}",
+            self.cwd.to_str().unwrap()
+        );
         let mut listing = self.get_directory_listing(&self.cwd.clone());
         // Inserted in reverse order
         listing.insert(
@@ -987,6 +1011,7 @@ impl<'a> App<'a> {
     fn input_cmd_map(&mut self, modifiers: KeyModifiers, code: KeyCode) -> String {
         let cmd = match (modifiers, code) {
             (KeyModifiers::CONTROL, KeyCode::Char('t')) => self.get_cmd(&CmdName::CmdWinToggle),
+            (KeyModifiers::CONTROL, KeyCode::Char('f')) => self.get_cmd(&CmdName::CmdFinder),
             (KeyModifiers::CONTROL, KeyCode::Char('s')) => self.get_cmd(&CmdName::MultiSel),
             (KeyModifiers::NONE, KeyCode::Enter) => self.get_cmd(&CmdName::Select),
             (KeyModifiers::NONE, KeyCode::Right) => self.get_cmd(&CmdName::Select),
@@ -1185,6 +1210,13 @@ impl<'a> App<'a> {
         self.selection_index = 0;
     }
 
+    fn cmd_cmd_finder(&mut self) {
+        self.mode_cmd = !self.mode_cmd;
+        self.update_listing();
+        self.update_results();
+        self.selection_index = 0;
+    }
+
     // Show a list of commands
     fn cmd_cmd_list(&mut self) {
         let mut text = String::new();
@@ -1358,6 +1390,7 @@ impl<'a> App<'a> {
             _ if cmd == self.get_cmd(&CmdName::MultiCopy) => self.cmd_multi_copy(),
             _ if cmd == self.get_cmd(&CmdName::CmdVisToggle) => self.cmd_cmd_vis_toggle(),
             _ if cmd == self.get_cmd(&CmdName::CmdVisShow) => self.cmd_vis_show(),
+            _ if cmd == self.get_cmd(&CmdName::CmdFinder) => self.cmd_cmd_finder(),
             _ if cmd == self.get_cmd(&CmdName::CmdList) => self.cmd_cmd_list(),
             _ if cmd == self.get_cmd(&CmdName::MenuBack) => self.cmd_menu_back(),
             _ if cmd == self.get_cmd(&CmdName::Log) => self.cmd_log_show(),
