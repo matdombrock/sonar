@@ -281,7 +281,13 @@ impl<'a> App<'a> {
         // Read file content (first 100 lines)
         if let Ok(content) = fs::read_to_string(&selected_path) {
             for line in content.lines().take(100) {
-                self.preview_content += Line::from(line.to_string());
+                // Sanitize line
+                let mut sanitized_line = line.replace("\t", "    ");
+                sanitized_line = sanitized_line
+                    .chars()
+                    .filter(|c| c.is_ascii() && !c.is_control())
+                    .collect::<String>();
+                self.preview_content += Line::from(sanitized_line);
             }
         } else {
             self.preview_content += Line::from("Unable to read file content.");
