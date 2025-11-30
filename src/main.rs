@@ -1314,6 +1314,7 @@ impl<'a> App<'a> {
 
     fn handle_cmd(&mut self, cmd: &str) -> LoopReturn {
         match cmd {
+            // The main Select command is long because it handles shortcuts
             _ if cmd == self.get_cmd(&CmdName::Select) => {
                 // Update input to empty to reset search
                 self.input = String::new();
