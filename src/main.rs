@@ -31,6 +31,27 @@ use syntect::parsing::SyntaxSet;
 // Might want Path
 use std::path::PathBuf;
 
+mod log {
+    pub fn log_impl(msg: &str) {
+        let log_path = std::env::temp_dir().join("sona").join("sona.log");
+        let _ = std::fs::create_dir_all(log_path.parent().unwrap());
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .unwrap();
+        use std::io::Write;
+        let _ = writeln!(file, "{}", msg);
+    }
+
+    #[macro_export]
+    macro_rules! log {
+        ($($arg:tt)*) => {
+            $crate::log::log_impl(&format!($($arg)*));
+        };
+    }
+}
+
 const DIR_PRETTY_LIMIT: usize = 1000;
 const SEARCH_LIMIT: usize = 1000;
 
@@ -117,6 +138,7 @@ struct App<'a> {
 }
 impl<'a> App<'a> {
     fn new() -> Self {
+        log!("App initialized");
         Self {
             input: String::new(),
             dir_listing: Vec::new(),
@@ -137,6 +159,7 @@ impl<'a> App<'a> {
     }
 
     fn set_cwd(&mut self, path: &PathBuf) {
+        log!("Changing directory to: {}", path.to_str().unwrap());
         let new_path = if path.to_str().unwrap() == ".." {
             self.cwd.parent().unwrap_or(&self.cwd).to_path_buf()
         } else {
@@ -149,6 +172,7 @@ impl<'a> App<'a> {
     }
 
     fn get_directory_listing(&self, path: &PathBuf) -> Vec<ItemInfo> {
+        log!("Getting directory listing for: {}", path.to_str().unwrap());
         let mut entries = Vec::new();
 
         match fs::read_dir(path) {
@@ -181,7 +205,8 @@ impl<'a> App<'a> {
                                 }
                             }
                             Err(_) => {
-                                // Optionally log or handle metadata errors
+                                // Handle metadata errors
+                                log!("Failed to get metadata for entry: {}", file_name_str);
                                 continue;
                             }
                         }
@@ -189,7 +214,8 @@ impl<'a> App<'a> {
                 }
             }
             Err(_) => {
-                // Optionally log or handle directory read errors
+                // Handle directory read errors
+                log!("Failed to read directory: {}", path.to_str().unwrap());
             }
         }
         entries
@@ -336,6 +362,7 @@ impl<'a> App<'a> {
     }
 
     fn update_preview(&mut self) {
+        log!("Updating preview for selection: {}", self.selection);
         self.preview_content = Default::default();
         match self.selection.as_str() {
             SC_EXIT => {
@@ -434,6 +461,10 @@ impl<'a> App<'a> {
     }
 
     fn update_listing(&mut self) {
+        log!(
+            "Updating directory listing for cwd: {}",
+            self.cwd.to_str().unwrap()
+        );
         let empty_metadata = match fs::metadata(&self.cwd) {
             Ok(meta) => meta,
             Err(_) => fs::metadata(".").unwrap(),
@@ -528,6 +559,7 @@ impl<'a> App<'a> {
     }
 
     fn update_results(&mut self) {
+        log!("Updating search results for input: {}", self.input);
         let matcher = SkimMatcherV2::default();
         let mut scored: Vec<_> = self
             .dir_listing
@@ -544,6 +576,7 @@ impl<'a> App<'a> {
     }
 
     fn update_selection(&mut self) {
+        log!("Updating selection index: {}", self.selection_index);
         if self.selection_index < self.results.len() as i32 {
             self.selection = self.results[self.selection_index as usize].name.clone();
         } else if !self.results.is_empty() {
@@ -582,7 +615,7 @@ impl<'a> App<'a> {
             (KeyModifiers::NONE, KeyCode::Enter) => {
                 // Handle commands
                 let cmd = self.command_input.clone();
-                dbg!(&cmd);
+                log!("{}", &cmd);
                 self.command_input = String::new();
                 return self.handle_cmd(&cmd);
             }
@@ -627,7 +660,7 @@ impl<'a> App<'a> {
             (KeyModifiers::CONTROL, KeyCode::Char('q')) => cmd_name::EXIT,
             _ => "",
         };
-        dbg!(&cmd);
+        log!("{}", &cmd);
         cmd.to_string()
     }
 
@@ -833,7 +866,7 @@ impl<'a> App<'a> {
             cmd_name::MENU_BACK => self.cmd_menu_back(),
             cmd_name::EXIT => return LoopReturn::Break,
             _ => {
-                dbg!("No command matched: {}", cmd);
+                log!("No command matched: {}", cmd);
             }
         }
         LoopReturn::Ok
@@ -841,6 +874,7 @@ impl<'a> App<'a> {
 }
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
+    log!("Starting main event loop");
     // Get directory listing
     app.set_cwd(&app.cwd.clone());
     app.update_listing();
@@ -1042,6 +1076,7 @@ fn clear() {
 }
 
 fn main() -> Result<()> {
+    log!("Starting application");
     color_eyre::install()?;
     clear();
     enable_raw_mode()?;
