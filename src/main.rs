@@ -77,6 +77,12 @@ struct App<'a> {
     command_input: String,
 }
 
+enum LoopReturn {
+    Continue,
+    Break,
+    Ok,
+}
+
 impl<'a> App<'a> {
     fn new() -> Self {
         Self {
@@ -412,7 +418,7 @@ impl<'a> App<'a> {
         }
     }
 
-    fn cmd_app_sel_up(&mut self) {
+    fn cmd_sel_up(&mut self) {
         self.selection_index += -1;
         if self.selection_index < 0 && !self.results.is_empty() {
             self.selection_index = self.results.len() as i32 - 1;
@@ -423,6 +429,49 @@ impl<'a> App<'a> {
 
     fn cmd_cmd_window_toggle(&mut self) {
         self.command_window_open = !self.command_window_open;
+    }
+
+    fn handle_command(&mut self, cmd: &str) -> LoopReturn {
+        match cmd {
+            cmd_name::SELECT => {
+                self.input = String::new();
+                let selection = self.selection.clone();
+                match selection.as_str() {
+                    SC_EXIT => return LoopReturn::Break,
+                    SC_HOME => {
+                        self.cmd_home();
+                        return LoopReturn::Continue;
+                    }
+                    SC_DIR_UP => {
+                        self.cmd_dir_up();
+                    }
+                    SC_DIR_BACK => {
+                        self.cmd_dir_back();
+                    }
+                    SC_EXP => {
+                        self.cmd_explode();
+                        return LoopReturn::Continue;
+                    }
+                    _ => {}
+                }
+                self.set_cwd(&self.selection.clone().into());
+                self.update_directory_listing();
+                self.update_results();
+                self.selection_index = 0;
+            }
+            cmd_name::SEL_DOWN => self.cmd_sel_down(),
+            cmd_name::SEL_UP => self.cmd_sel_up(),
+            cmd_name::DIR_UP => self.cmd_dir_up(),
+            cmd_name::DIR_BACK => self.cmd_dir_back(),
+            cmd_name::EXPLODE => self.cmd_explode(),
+            cmd_name::HOME => self.cmd_home(),
+            cmd_name::CMD_TOGGLE => self.cmd_cmd_window_toggle(),
+            cmd_name::EXIT => return LoopReturn::Break,
+            _ => {
+                dbg!("No command matched: {}", cmd);
+            }
+        }
+        LoopReturn::Ok
     }
 }
 
@@ -440,8 +489,8 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                 code, modifiers, ..
             }) = event::read()?
             {
+                // Command window input handling
                 if app.command_window_open {
-                    // Command window input handling
                     match (modifiers, code) {
                         (KeyModifiers::NONE, KeyCode::Char(c)) => {
                             app.command_input.push(c);
@@ -449,7 +498,17 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                         (KeyModifiers::NONE, KeyCode::Backspace) => {
                             app.command_input.pop();
                         }
-                        (KeyModifiers::NONE, KeyCode::Enter) => {}
+                        (KeyModifiers::NONE, KeyCode::Enter) => {
+                            // Handle commands
+                            let cmd = app.command_input.clone();
+                            let lr = app.handle_command(&cmd);
+                            match lr {
+                                LoopReturn::Continue => continue,
+                                LoopReturn::Break => break,
+                                LoopReturn::Ok => {}
+                            }
+                            app.command_input = String::new();
+                        }
                         (KeyModifiers::NONE, KeyCode::Esc) => {
                             app.command_window_open = false;
                         }
@@ -492,46 +551,12 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                 };
                 dbg!(&cmd);
                 // Handle commands
-                match cmd {
-                    cmd_name::SELECT => {
-                        app.input = String::new();
-                        let selection = app.selection.clone();
-                        match selection.as_str() {
-                            SC_EXIT => break,
-                            SC_HOME => {
-                                app.cmd_home();
-                                continue;
-                            }
-                            SC_DIR_UP => {
-                                app.cmd_dir_up();
-                            }
-                            SC_DIR_BACK => {
-                                app.cmd_dir_back();
-                            }
-                            SC_EXP => {
-                                app.cmd_explode();
-                                continue;
-                            }
-                            _ => {}
-                        }
-                        app.set_cwd(&app.selection.clone().into());
-                        app.update_directory_listing();
-                        app.update_results();
-                        app.selection_index = 0;
-                    }
-                    cmd_name::SEL_DOWN => app.cmd_sel_down(),
-                    cmd_name::SEL_UP => app.cmd_app_sel_up(),
-                    cmd_name::DIR_UP => app.cmd_dir_up(),
-                    cmd_name::DIR_BACK => app.cmd_dir_back(),
-                    cmd_name::EXPLODE => app.cmd_explode(),
-                    cmd_name::HOME => app.cmd_home(),
-                    cmd_name::CMD_TOGGLE => app.cmd_cmd_window_toggle(),
-                    cmd_name::EXIT => break,
-                    _ => {
-                        dbg!("No command matched: {}", cmd);
-                    }
+                let lr = app.handle_command(&cmd);
+                match lr {
+                    LoopReturn::Continue => continue,
+                    LoopReturn::Break => break,
+                    LoopReturn::Ok => {}
                 }
-
                 // After key press handling
 
                 app.update_selection();
@@ -653,7 +678,7 @@ fn render(frame: &mut Frame, app: &App) {
 
     // Render command popup if open
     if app.command_window_open {
-        let popup_area = centered_rect(50, 90, area);
+        let popup_area = centered_rect(50, 10, area);
         let command_str = format!("> {}|", app.command_input);
         frame.render_widget(Clear, popup_area); // Clears the area first
         let command_paragraph = Paragraph::new(command_str)
