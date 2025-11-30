@@ -1482,20 +1482,9 @@ fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
 
 fn render(frame: &mut Frame, app: &App) {
     let area = frame.area();
+    let threshold = 100;
 
-    // Split horizontally: left (40%), right (60%)
-    let horizontal_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)].as_ref())
-        .split(area);
-
-    // Split left chunk vertically: input (3), results (remaining)
-    let left_vertical_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(0)
-        .constraints([Constraint::Length(3), Constraint::Min(1)].as_ref())
-        .split(horizontal_chunks[0]);
-
+    // --- Widget creation ---
     // Input box
     let mut input_color;
     let input_str: String;
@@ -1513,14 +1502,14 @@ fn render(frame: &mut Frame, app: &App) {
     let suffix: Span = Span::styled(format!("|{} ", nf::MAG), Style::default().fg(Color::Green));
     let mut input_line = Line::from(input_span);
     input_line.push_span(suffix);
-    let input = Paragraph::new(input_line).block(
+    let input_widget = Paragraph::new(input_line).block(
         Block::default()
             .title(format!(" {}", app.cwd.to_str().unwrap()))
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Green)),
     );
 
-    // List of results
+    // Results list
     let mut results_pretty = app.dir_list_pretty(&app.results);
     for (idx, line) in results_pretty.lines.iter_mut().enumerate() {
         if idx as i32 == app.selection_index {
@@ -1534,21 +1523,19 @@ fn render(frame: &mut Frame, app: &App) {
         }
     }
     let list_title = format!("({})))[{}]", APP_NAME.to_uppercase(), app.results.len());
-    let list = List::new(results_pretty).block(
+    let list_widget = List::new(results_pretty).block(
         Block::default()
             .title(list_title)
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Blue)),
     );
-
-    // Create ListState and set selected index
     let mut state = ListState::default();
     if !app.results.is_empty() && app.selection_index >= 0 {
         state.select(Some(app.selection_index as usize));
     }
 
     // Preview box
-    let preview = Paragraph::new(app.preview_content.clone())
+    let preview_widget = Paragraph::new(app.preview_content.clone())
         .block(
             Block::default()
                 .title(format!("{} (0)_(0) {} ", nf::LOOK, app.selection))
@@ -1559,16 +1546,47 @@ fn render(frame: &mut Frame, app: &App) {
         .wrap(Wrap { trim: false })
         .scroll((app.scroll_off_preview as u16, app.scroll_off_preview as u16));
 
-    // Render widgets
-    frame.render_widget(input, left_vertical_chunks[0]);
-    frame.render_stateful_widget(list, left_vertical_chunks[1], &mut state);
-    frame.render_widget(preview, horizontal_chunks[1]);
+    // --- Layout and rendering ---
+    if area.width < threshold {
+        // Vertical layout
+        let vertical_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(
+                [
+                    Constraint::Length(3), // Input
+                    Constraint::Min(5),    // Results
+                    Constraint::Min(10),   // Preview
+                ]
+                .as_ref(),
+            )
+            .split(area);
 
-    // Render command popup if open
+        frame.render_widget(input_widget, vertical_chunks[0]);
+        frame.render_stateful_widget(list_widget, vertical_chunks[1], &mut state);
+        frame.render_widget(preview_widget, vertical_chunks[2]);
+    } else {
+        // Horizontal layout
+        let horizontal_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)].as_ref())
+            .split(area);
+
+        let left_vertical_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .margin(0)
+            .constraints([Constraint::Length(3), Constraint::Min(1)].as_ref())
+            .split(horizontal_chunks[0]);
+
+        frame.render_widget(input_widget, left_vertical_chunks[0]);
+        frame.render_stateful_widget(list_widget, left_vertical_chunks[1], &mut state);
+        frame.render_widget(preview_widget, horizontal_chunks[1]);
+    }
+
+    // --- Popups ---
     if app.show_command_window {
         let popup_area = centered_rect(50, 10, area);
         let command_str = format!("> {}|", app.command_input);
-        frame.render_widget(Clear, popup_area); // Clears the area first
+        frame.render_widget(Clear, popup_area);
         let command_paragraph = Paragraph::new(command_str)
             .style(Style::default().bg(Color::Black))
             .block(
@@ -1580,10 +1598,9 @@ fn render(frame: &mut Frame, app: &App) {
             );
         frame.render_widget(command_paragraph, popup_area);
     }
-
     if app.show_output_window {
         let popup_area = centered_rect(50, 90, area);
-        frame.render_widget(Clear, popup_area); // Clears the area first
+        frame.render_widget(Clear, popup_area);
         let command_paragraph = Paragraph::new(app.output_text.clone())
             .style(Style::default().bg(Color::Black))
             .block(
