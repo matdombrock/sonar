@@ -52,6 +52,7 @@ const SC_EXP: &str = " explode";
 const SC_CMDS: &str = " cmds";
 const SC_MULTI_SHOW: &str = " show multi-selection";
 const SC_MULTI_CLEAR: &str = " clear multi-selection";
+const SC_MULTI_SAVE: &str = " save multi-selection";
 
 const LOGO: &str = r#"
  ██╗███████╗ ██████╗ ███╗   ██╗ █████╗ ██╗ ██╗ ██╗ 
@@ -77,6 +78,7 @@ mod cmd_name {
     pub const MULTI_SEL: &str = ":multi-sel";
     pub const MULTI_CLEAR: &str = ":multi-clear";
     pub const MULTI_SHOW: &str = ":multi-show";
+    pub const MULTI_SAVE: &str = ":multi-save";
     pub const MENU_BACK: &str = ":menu-back";
 }
 
@@ -330,6 +332,97 @@ impl<'a> App<'a> {
         }
     }
 
+    fn update_preview(&mut self) {
+        self.preview_content = Default::default();
+        match self.selection.as_str() {
+            SC_EXIT => {
+                self.preview_content += App::fmtln_sc("Exit the application");
+                self.preview_content += Line::from("");
+                for (i, line) in LOGO.lines().enumerate() {
+                    if i == 0 {
+                        continue;
+                    };
+                    self.preview_content +=
+                        Line::styled(format!("{}", line), Style::default().fg(Color::LightGreen));
+                }
+            }
+            SC_HOME => {
+                self.preview_content += App::fmtln_path(&dirs::home_dir().unwrap());
+                self.preview_content += App::fmtln_sc("Go to the home directory");
+            }
+            SC_DIR_UP => {
+                self.preview_content += App::fmtln_path(&self.cwd);
+                self.preview_content += App::fmtln_sc("Go up to the parent directory");
+            }
+            SC_DIR_BACK => {
+                self.preview_content += App::fmtln_path(&self.lwd);
+                self.preview_content += App::fmtln_sc("Go back to the last working directory");
+            }
+            SC_EXP => {
+                self.preview_content += App::fmtln_sc("Toggle explode mode");
+                self.preview_content += Line::styled(
+                    "Shows all files in subdirectories under the current directory.",
+                    Style::default().fg(Color::Green),
+                );
+                let status = if self.mode_explode { "ON" } else { "OFF" };
+                self.preview_content += App::fmtln_info("explode mode", status);
+            }
+            SC_CMDS => {
+                self.preview_content += App::fmtln_sc("Show visual commands");
+                self.preview_content += Line::styled(
+                    "Toggles a visual command menu in the listing.",
+                    Style::default().fg(Color::Green),
+                );
+            }
+            SC_MENU_BACK => {
+                self.preview_content += App::fmtln_sc("Go back to the previous menu");
+                self.preview_content += Line::styled(
+                    "Exits the current visual command menu.",
+                    Style::default().fg(Color::Green),
+                );
+            }
+            SC_MULTI_SHOW => {
+                self.preview_content += App::fmtln_sc("Show multi-selection");
+                self.preview_content += Line::styled(
+                    "Displays all currently selected items in the output window.",
+                    Style::default().fg(Color::Green),
+                );
+            }
+            SC_MULTI_CLEAR => {
+                self.preview_content += App::fmtln_sc("Clear multi-selection");
+                self.preview_content += Line::styled(
+                    "Clears all items from the multi-selection list.",
+                    Style::default().fg(Color::Green),
+                );
+            }
+            SC_MULTI_SAVE => {
+                self.preview_content += App::fmtln_sc("Save multi-selection");
+                self.preview_content += Line::styled(
+                    "Saves the multi-selection to a file. (Not implemented yet)",
+                    Style::default().fg(Color::Green),
+                );
+            }
+            _ => {
+                // TODO:
+                // Metadata is not coming from item its being re-fetched here
+                self.preview_content = Default::default();
+                let mut selected_path = self.cwd.clone();
+                selected_path.push(&self.selection);
+
+                if selected_path.is_dir() {
+                    self.preview_dir(&selected_path);
+                } else if selected_path.is_file() {
+                    self.preview_file(&selected_path);
+                } else {
+                    self.preview_content +=
+                        Line::from("Selected item is neither file nor directory.");
+                    let metadata = fs::metadata(&selected_path);
+                    self.preview_content += Line::from(format!("{:?}", metadata))
+                }
+            }
+        }
+    }
+
     fn update_listing(&mut self) {
         let empty_metadata = match fs::metadata(&self.cwd) {
             Ok(meta) => meta,
@@ -370,6 +463,11 @@ impl<'a> App<'a> {
             });
             self.dir_listing.push(ItemInfo {
                 name: SC_MULTI_CLEAR.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            });
+            self.dir_listing.push(ItemInfo {
+                name: SC_MULTI_SAVE.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
@@ -451,74 +549,74 @@ impl<'a> App<'a> {
         }
     }
 
-    fn update_preview(&mut self) {
-        self.preview_content = Default::default();
-        match self.selection.as_str() {
-            SC_EXIT => {
-                self.preview_content += App::fmtln_sc("Exit the application");
-                self.preview_content += Line::from("");
-                for (i, line) in LOGO.lines().enumerate() {
-                    if i == 0 {
-                        continue;
-                    };
-                    self.preview_content +=
-                        Line::styled(format!("{}", line), Style::default().fg(Color::LightGreen));
-                }
+    fn input_out_window(&mut self, modifiers: KeyModifiers, code: KeyCode) {
+        match (modifiers, code) {
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                self.output_window_open = false;
             }
-            SC_HOME => {
-                self.preview_content += App::fmtln_path(&dirs::home_dir().unwrap());
-                self.preview_content += App::fmtln_sc("Go to the home directory");
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                self.output_window_open = false;
             }
-            SC_DIR_UP => {
-                self.preview_content += App::fmtln_path(&self.cwd);
-                self.preview_content += App::fmtln_sc("Go up to the parent directory");
-            }
-            SC_DIR_BACK => {
-                self.preview_content += App::fmtln_path(&self.lwd);
-                self.preview_content += App::fmtln_sc("Go back to the last working directory");
-            }
-            SC_EXP => {
-                self.preview_content += App::fmtln_sc("Toggle explode mode");
-                self.preview_content += Line::styled(
-                    "Shows all files in subdirectories under the current directory.",
-                    Style::default().fg(Color::Green),
-                );
-                let status = if self.mode_explode { "ON" } else { "OFF" };
-                self.preview_content += App::fmtln_info("explode mode", status);
-            }
-            SC_CMDS => {
-                self.preview_content += App::fmtln_sc("Show visual commands");
-                self.preview_content += Line::styled(
-                    "Toggles a visual command menu in the listing.",
-                    Style::default().fg(Color::Green),
-                );
-            }
-            SC_MENU_BACK => {
-                self.preview_content += App::fmtln_sc("Go back to the previous menu");
-                self.preview_content += Line::styled(
-                    "Exits the current visual command menu.",
-                    Style::default().fg(Color::Green),
-                );
-            }
-            _ => {
-                // TODO:
-                // Metadata is not coming from item its being re-fetched here
-                self.preview_content = Default::default();
-                let mut selected_path = self.cwd.clone();
-                selected_path.push(&self.selection);
-
-                if selected_path.is_dir() {
-                    self.preview_dir(&selected_path);
-                } else if selected_path.is_file() {
-                    self.preview_file(&selected_path);
-                } else {
-                    self.preview_content +=
-                        Line::from("Selected item is neither file nor directory.");
-                    let metadata = fs::metadata(&selected_path);
-                    self.preview_content += Line::from(format!("{:?}", metadata))
-                }
-            }
+            _ => {}
         }
+    }
+
+    fn input_cmd_window(&mut self, modifiers: KeyModifiers, code: KeyCode) -> LoopReturn {
+        match (modifiers, code) {
+            (KeyModifiers::NONE, KeyCode::Char(c)) => {
+                self.command_input.push(c);
+            }
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
+                self.command_input.pop();
+            }
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                // Handle commands
+                let cmd = self.command_input.clone();
+                dbg!(&cmd);
+                self.command_input = String::new();
+                return self.handle_cmd(&cmd);
+            }
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                self.command_window_open = false;
+            }
+            _ => {}
+        }
+        LoopReturn::Ok
+    }
+
+    // Returns true if input changed
+    fn input_main(&mut self, modifiers: KeyModifiers, code: KeyCode) -> bool {
+        match (modifiers, code) {
+            (KeyModifiers::NONE, KeyCode::Char(c)) => {
+                self.input.push(c);
+                return true;
+            }
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
+                self.input.pop();
+                return true;
+            }
+            _ => {}
+        }
+        return false;
+    }
+
+    fn input_cmd_map(&mut self, modifiers: KeyModifiers, code: KeyCode) -> String {
+        let cmd = match (modifiers, code) {
+            (KeyModifiers::CONTROL, KeyCode::Char('t')) => cmd_name::CMD_WIN_TOGGLE,
+            (KeyModifiers::CONTROL, KeyCode::Char('s')) => cmd_name::MULTI_SEL,
+            (KeyModifiers::NONE, KeyCode::Enter) => cmd_name::SELECT,
+            (KeyModifiers::NONE, KeyCode::Right) => cmd_name::SELECT,
+            (KeyModifiers::NONE, KeyCode::Up) => cmd_name::SEL_UP,
+            (KeyModifiers::NONE, KeyCode::Down) => cmd_name::SEL_DOWN,
+            (KeyModifiers::NONE, KeyCode::Left) => cmd_name::DIR_BACK,
+            (KeyModifiers::CONTROL, KeyCode::Char('h')) => cmd_name::DIR_BACK,
+            (KeyModifiers::CONTROL, KeyCode::Char('j')) => cmd_name::SEL_DOWN,
+            (KeyModifiers::CONTROL, KeyCode::Char('k')) => cmd_name::SEL_UP,
+            (KeyModifiers::CONTROL, KeyCode::Char('l')) => cmd_name::SELECT,
+            _ => "",
+        };
+        dbg!(&cmd);
+        cmd.to_string()
     }
 
     fn cmd_home(&mut self) {
@@ -609,6 +707,27 @@ impl<'a> App<'a> {
         self.output_window_open = true;
     }
 
+    // Write multi selection to a file
+    fn cmd_multi_save(&mut self) {
+        let tmp = env::temp_dir();
+        let file = tmp.join("sona").join("multi.txt");
+        fs::write(
+            &file,
+            self.multi_selection
+                .iter()
+                .map(|p| p.to_str().unwrap())
+                .collect::<Vec<&str>>()
+                .join("\n"),
+        )
+        .unwrap_or(());
+        self.output_text = format!(
+            "Multi selection saved to {} ({} items).",
+            file.to_str().unwrap(),
+            self.multi_selection.len()
+        );
+        self.output_window_open = true;
+    }
+
     fn cmd_cmd_vis_toggle(&mut self) {
         self.mode_vis_commands = !self.mode_vis_commands;
     }
@@ -617,7 +736,8 @@ impl<'a> App<'a> {
         self.mode_vis_commands = false;
     }
 
-    fn handle_command(&mut self, cmd: &str) -> LoopReturn {
+    // TODO: LoopReturn deprecated?
+    fn handle_cmd(&mut self, cmd: &str) -> LoopReturn {
         match cmd {
             cmd_name::SELECT => {
                 self.input = String::new();
@@ -630,9 +750,17 @@ impl<'a> App<'a> {
                     }
                     SC_DIR_UP => {
                         self.cmd_dir_up();
+                        self.set_cwd(&self.selection.clone().into());
+                        self.update_listing();
+                        self.update_results();
+                        self.selection_index = 0;
                     }
                     SC_DIR_BACK => {
                         self.cmd_dir_back();
+                        self.set_cwd(&self.selection.clone().into());
+                        self.update_listing();
+                        self.update_results();
+                        self.selection_index = 0;
                     }
                     SC_EXP => {
                         self.cmd_explode();
@@ -658,12 +786,11 @@ impl<'a> App<'a> {
                     SC_MULTI_CLEAR => {
                         self.cmd_multi_clear();
                     }
+                    SC_MULTI_SAVE => {
+                        self.cmd_multi_save();
+                    }
                     _ => {}
                 }
-                self.set_cwd(&self.selection.clone().into());
-                self.update_listing();
-                self.update_results();
-                self.selection_index = 0;
             }
             cmd_name::SEL_DOWN => self.cmd_sel_down(),
             cmd_name::SEL_UP => self.cmd_sel_up(),
@@ -676,6 +803,7 @@ impl<'a> App<'a> {
             cmd_name::MULTI_SEL => self.cmd_multi_sel(),
             cmd_name::MULTI_CLEAR => self.cmd_multi_clear(),
             cmd_name::MULTI_SHOW => self.cmd_multi_show(),
+            cmd_name::MULTI_SAVE => self.cmd_multi_save(),
             cmd_name::CMD_VIS_TOGGLE => self.cmd_cmd_vis_toggle(),
             cmd_name::MENU_BACK => self.cmd_menu_back(),
             cmd_name::EXIT => return LoopReturn::Break,
@@ -703,82 +831,30 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
             {
                 // Output window input handling
                 if app.output_window_open {
-                    match (modifiers, code) {
-                        (KeyModifiers::NONE, KeyCode::Esc) => {
-                            app.output_window_open = false;
-                        }
-                        (KeyModifiers::NONE, KeyCode::Enter) => {
-                            app.output_window_open = false;
-                        }
-                        _ => {}
-                    }
+                    app.input_out_window(modifiers, code);
                     continue;
                 }
                 // Command window input handling
                 if app.command_window_open {
-                    match (modifiers, code) {
-                        (KeyModifiers::NONE, KeyCode::Char(c)) => {
-                            app.command_input.push(c);
-                        }
-                        (KeyModifiers::NONE, KeyCode::Backspace) => {
-                            app.command_input.pop();
-                        }
-                        (KeyModifiers::NONE, KeyCode::Enter) => {
-                            // Handle commands
-                            let cmd = app.command_input.clone();
-                            dbg!(&cmd);
-                            let lr = app.handle_command(&cmd);
-                            match lr {
-                                LoopReturn::Continue => continue,
-                                LoopReturn::Break => break,
-                                LoopReturn::Ok => {}
-                            }
-                            app.command_input = String::new();
-                        }
-                        (KeyModifiers::NONE, KeyCode::Esc) => {
-                            app.command_window_open = false;
-                        }
-                        _ => {}
+                    let lr = app.input_cmd_window(modifiers, code);
+                    match lr {
+                        LoopReturn::Continue => continue,
+                        LoopReturn::Break => break,
+                        LoopReturn::Ok => {}
                     }
                     continue;
                 }
                 // Before key press handling
                 app.update_selection();
-                let mut input_changed = false;
+                let input_changed = app.input_main(modifiers, code);
                 // Some things are not bindable
-                match (modifiers, code) {
-                    (KeyModifiers::NONE, KeyCode::Char(c)) => {
-                        app.input.push(c);
-                        input_changed = true;
-                    }
-                    (KeyModifiers::NONE, KeyCode::Backspace) => {
-                        app.input.pop();
-                        input_changed = true;
-                    }
-                    (KeyModifiers::NONE, KeyCode::Esc) => break,
-                    _ => {}
-                }
                 if input_changed {
                     app.update_results();
                 }
                 // Process key to command mapping
-                let cmd = match (modifiers, code) {
-                    (KeyModifiers::CONTROL, KeyCode::Char('t')) => cmd_name::CMD_WIN_TOGGLE,
-                    (KeyModifiers::CONTROL, KeyCode::Char('s')) => cmd_name::MULTI_SEL,
-                    (KeyModifiers::NONE, KeyCode::Enter) => cmd_name::SELECT,
-                    (KeyModifiers::NONE, KeyCode::Right) => cmd_name::SELECT,
-                    (KeyModifiers::NONE, KeyCode::Up) => cmd_name::SEL_UP,
-                    (KeyModifiers::NONE, KeyCode::Down) => cmd_name::SEL_DOWN,
-                    (KeyModifiers::NONE, KeyCode::Left) => cmd_name::DIR_BACK,
-                    (KeyModifiers::CONTROL, KeyCode::Char('h')) => cmd_name::DIR_BACK,
-                    (KeyModifiers::CONTROL, KeyCode::Char('j')) => cmd_name::SEL_DOWN,
-                    (KeyModifiers::CONTROL, KeyCode::Char('k')) => cmd_name::SEL_UP,
-                    (KeyModifiers::CONTROL, KeyCode::Char('l')) => cmd_name::SELECT,
-                    _ => "",
-                };
-                dbg!(&cmd);
+                let cmd = app.input_cmd_map(modifiers, code);
                 // Handle commands
-                let lr = app.handle_command(&cmd);
+                let lr = app.handle_cmd(&cmd);
                 match lr {
                     LoopReturn::Continue => continue,
                     LoopReturn::Break => break,
