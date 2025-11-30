@@ -32,8 +32,11 @@ use syntect::parsing::SyntaxSet;
 use std::path::PathBuf;
 
 mod log {
+    use super::APP_NAME;
     pub fn log_path() -> std::path::PathBuf {
-        std::env::temp_dir().join("sona").join("sona.log")
+        std::env::temp_dir()
+            .join(APP_NAME)
+            .join(format!("{}.log", APP_NAME))
     }
     pub fn log_impl(msg: &str) {
         let log_path = log_path();
@@ -54,6 +57,8 @@ mod log {
         };
     }
 }
+
+const APP_NAME: &str = "sona";
 
 const LOGO: &str = r#"
  ██╗███████╗ ██████╗ ███╗   ██╗ █████╗ ██╗ ██╗ ██╗ 
@@ -643,7 +648,7 @@ impl<'a> App<'a> {
             (KeyModifiers::NONE, KeyCode::Enter) => {
                 // Handle commands
                 let cmd = self.command_input.clone();
-                log!("{}", &cmd);
+                log!("cmd: {}", &cmd);
                 self.command_input = String::new();
                 return self.handle_cmd(&cmd);
             }
@@ -688,7 +693,9 @@ impl<'a> App<'a> {
             (KeyModifiers::CONTROL, KeyCode::Char('q')) => cmd_name::EXIT,
             _ => "",
         };
-        log!("{}", &cmd);
+        if !cmd.is_empty() {
+            log!("cmd from mapping: {}", &cmd);
+        }
         cmd.to_string()
     }
 
@@ -792,7 +799,7 @@ impl<'a> App<'a> {
     // Write multi selection to a file
     fn cmd_multi_save(&mut self) {
         let tmp = env::temp_dir();
-        let file = tmp.join("sona").join("multi.txt");
+        let file = tmp.join(APP_NAME).join("multi.txt");
         fs::write(
             &file,
             self.multi_selection
@@ -864,7 +871,10 @@ impl<'a> App<'a> {
     fn handle_cmd(&mut self, cmd: &str) -> LoopReturn {
         match cmd {
             cmd_name::SELECT => {
+                // Update input to empty to reset search
                 self.input = String::new();
+                self.update_results();
+                // Get selection
                 let selection = self.selection.clone();
                 match selection.as_str() {
                     SC_EXIT => return LoopReturn::Break,
@@ -932,7 +942,9 @@ impl<'a> App<'a> {
             cmd_name::LOG_CLEAR => self.cmd_log_clear(),
             cmd_name::EXIT => return LoopReturn::Break,
             _ => {
-                log!("No command matched: {}", cmd);
+                if !cmd.is_empty() {
+                    log!("No command matched: {}", cmd);
+                }
             }
         }
         LoopReturn::Ok
@@ -1075,7 +1087,7 @@ fn render(frame: &mut Frame, app: &App) {
             *line = new_line;
         }
     }
-    let list_title = format!("(SONA)))[{}]", app.results.len());
+    let list_title = format!("({})))[{}]", APP_NAME.to_uppercase(), app.results.len());
     let list = List::new(results_pretty).block(
         Block::default()
             .title(list_title)
@@ -1095,7 +1107,8 @@ fn render(frame: &mut Frame, app: &App) {
             Block::default()
                 .title(format!("{} (0)_(0) {} ", NF_LOOK, app.selection))
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Yellow)),
+                .border_style(Style::default().fg(Color::Yellow))
+                .style(Style::default().bg(Color::Black)),
         )
         .wrap(Wrap { trim: false });
 
