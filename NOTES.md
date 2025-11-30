@@ -25,8 +25,6 @@ But then its not easily possible to run a command on a single selection
 Maybe caching the selection while in command finder could work?
 When a cmd is selected just send it to the cmd popup?
 
-Should use "type" instead of metadat for listing
-
 ### fn in cmd struct
 Might be able to use functions in the cmd def type. Right now all cmd_* functions just take self. They might need to take some other params in the future but that could just be a space delimited string like a bash command. 
 
@@ -35,6 +33,7 @@ Command functions should never really need to return any values. They cant be pi
 One problem there though is that the commands operate on self (app) so if they move out of the app impl they will need to refer to an instance of app. 
 
 
+## Features
 
 ## VS FF
 - Multi-select across dirs

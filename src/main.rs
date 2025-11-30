@@ -403,6 +403,18 @@ struct ItemInfo {
     node_type: NodeType,
 }
 impl ItemInfo {
+    fn new(name: &str, node_type: NodeType) -> Self {
+        Self {
+            name: name.to_string(),
+            node_type,
+        }
+    }
+    fn empty() -> Self {
+        Self {
+            name: String::new(),
+            node_type: NodeType::Unknown,
+        }
+    }
     fn is(&self, _is: NodeType) -> bool {
         return self.node_type == _is;
     }
@@ -442,7 +454,7 @@ struct App<'a> {
     input: String,
     listing: Vec<ItemInfo>,
     results: Vec<ItemInfo>,
-    selection: String,
+    selection: ItemInfo,
     selection_index: i32,
     multi_selection: Vec<PathBuf>,
     preview_content: Text<'a>,
@@ -466,7 +478,7 @@ impl<'a> App<'a> {
             input: String::new(),
             listing: Vec::new(),
             results: Vec::new(),
-            selection: String::new(),
+            selection: ItemInfo::empty(),
             selection_index: 0,
             multi_selection: Vec::new(),
             preview_content: Default::default(),
@@ -697,10 +709,10 @@ impl<'a> App<'a> {
     }
 
     fn update_preview(&mut self) {
-        log!("Updating preview for selection: {}", self.selection);
+        log!("Updating preview for selection: {}", self.selection.name);
         self.preview_content = Default::default();
         self.reset_sec_scroll();
-        match self.selection.as_str() {
+        match self.selection.name.as_str() {
             sc::EXIT => {
                 self.preview_content += App::fmtln_sc("Exit the application");
                 if self.mode_vis_commands {
@@ -807,7 +819,7 @@ impl<'a> App<'a> {
                 // Metadata is not coming from item its being re-fetched here
                 self.preview_content = Default::default();
                 let mut selected_path = self.cwd.clone();
-                selected_path.push(&self.selection);
+                selected_path.push(&self.selection.name);
 
                 if selected_path.is_dir() {
                     self.preview_dir(&selected_path);
@@ -965,19 +977,20 @@ impl<'a> App<'a> {
     fn update_selection(&mut self) -> bool {
         let old = self.selection.clone();
         if self.selection_index < self.results.len() as i32 {
-            self.selection = self.results[self.selection_index as usize].name.clone();
+            self.selection = self.results[self.selection_index as usize].clone();
         } else if !self.results.is_empty() {
             self.selection_index = 0;
-            self.selection = String::new();
+            self.selection = ItemInfo::empty();
         } else {
             self.selection_index = 0;
-            self.selection = String::new();
+            self.selection = ItemInfo::empty();
         }
         // Remove icon prefix from selection
-        if let Some(pos) = self.selection.find("| ") {
-            self.selection = self.selection[(pos + 2)..].to_string();
+        // NOTE: This should be safe since file name should not contain pipe
+        if let Some(pos) = self.selection.name.find("| ") {
+            self.selection.name = self.selection.name[(pos + 2)..].to_string();
         }
-        return old != self.selection;
+        return old.name != self.selection.name;
     }
 
     fn input_out_window(&mut self, modifiers: KeyModifiers, code: KeyCode) {
@@ -1074,16 +1087,14 @@ impl<'a> App<'a> {
     }
 
     fn cmd_dir_up(&mut self) {
-        self.selection = "..".to_string();
-        self.set_cwd(&self.selection.clone().into());
+        self.set_cwd(&"..".into());
         self.update_listing();
         self.update_results();
         self.selection_index = 0;
     }
 
     fn cmd_dir_back(&mut self) {
-        self.selection = self.lwd.to_str().unwrap().to_string();
-        self.set_cwd(&self.selection.clone().into());
+        self.set_cwd(&self.lwd.clone());
         self.update_listing();
         self.update_results();
         self.selection_index = 0;
@@ -1132,7 +1143,7 @@ impl<'a> App<'a> {
 
     fn cmd_multi_sel(&mut self) {
         let mut selected_path = self.cwd.clone();
-        selected_path.push(&self.selection);
+        selected_path.push(&self.selection.name);
         let is_sc = self
             .results
             .get(self.selection_index as usize)
@@ -1354,7 +1365,7 @@ impl<'a> App<'a> {
                 // Get selection
                 let selection = self.selection.clone();
                 // NOTE: Handle shortcuts selections
-                match selection.as_str() {
+                match selection.name.as_str() {
                     sc::EXIT => return LoopReturn::Break,
                     sc::HOME => {
                         self.cmd_home();
@@ -1399,7 +1410,7 @@ impl<'a> App<'a> {
                     }
                     _ => {
                         // Selection is a file or directory
-                        self.set_cwd(&self.selection.clone().into());
+                        self.set_cwd(&self.selection.name.clone().into());
                         self.update_listing();
                         self.update_results();
                         self.selection_index = 0;
@@ -1604,7 +1615,7 @@ fn render(frame: &mut Frame, app: &App) {
     let preview_widget = Paragraph::new(app.preview_content.clone())
         .block(
             Block::default()
-                .title(format!("{} (0)_(0) {} ", nf::LOOK, app.selection))
+                .title(format!("{} (0)_(0) {} ", nf::LOOK, app.selection.name))
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Yellow))
                 .style(Style::default().bg(Color::Black)),
