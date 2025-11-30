@@ -31,6 +31,8 @@ use syntect::parsing::SyntaxSet;
 // Might want Path
 use std::path::PathBuf;
 
+use crate::cmd_list::CmdName;
+
 const APP_NAME: &str = "sona";
 
 const LOGO: &str = r#"
@@ -74,63 +76,253 @@ mod sc {
     pub const MULTI_COPY: &str = " copy multi-selection";
     pub const LOG: &str = " show log";
     pub const LOG_CLEAR: &str = " clear log";
+    pub const CMDS_LIST: &str = " command list";
 }
 
-// Command names
-// These will be used for key mappings and command handling
-mod cmd_name {
-    pub const EXIT: &str = "exit";
-    pub const HOME: &str = "home";
-    pub const SEL_UP: &str = "sel-up";
-    pub const SEL_DOWN: &str = "sel-down";
-    pub const DIR_UP: &str = "dir-up";
-    pub const DIR_BACK: &str = "dir-back";
-    pub const EXPLODE: &str = "explode";
-    pub const SELECT: &str = "select";
-    pub const CMD_WIN_TOGGLE: &str = "cmd";
-    pub const CMD_VIS_TOGGLE: &str = "cmd-vis-toggle";
-    pub const CMD_VIS_SHOW: &str = "cmd-vis-show";
-    pub const CMD_LIST: &str = "cmd-list";
-    pub const OUTPUT_WIN_TOGGLE: &str = "output-toggle";
-    pub const OUTPUT_WIN_SHOW: &str = "output-show";
-    pub const OUTPUT_WIN_HIDE: &str = "output-hide";
-    pub const MULTI_SEL: &str = "multi-sel";
-    pub const MULTI_CLEAR: &str = "multi-clear";
-    pub const MULTI_SHOW: &str = "multi-show";
-    pub const MULTI_SAVE: &str = "multi-save";
-    pub const MULTI_COPY: &str = "multi-copy";
-    pub const MENU_BACK: &str = "menu-back";
-    pub const LOG: &str = "log";
-    pub const LOG_CLEAR: &str = "log-clear";
-    pub const SEC_UP: &str = "sec-up";
-    pub const SEC_DOWN: &str = "sec-down";
-    pub const LIST: [&str; 25] = [
-        EXIT,
-        HOME,
-        SEL_UP,
-        SEL_DOWN,
-        DIR_UP,
-        DIR_BACK,
-        EXPLODE,
-        SELECT,
-        CMD_WIN_TOGGLE,
-        CMD_VIS_TOGGLE,
-        CMD_VIS_SHOW,
-        CMD_LIST,
-        OUTPUT_WIN_TOGGLE,
-        OUTPUT_WIN_SHOW,
-        OUTPUT_WIN_HIDE,
-        MULTI_SEL,
-        MULTI_CLEAR,
-        MULTI_SHOW,
-        MULTI_SAVE,
-        MULTI_COPY,
-        MENU_BACK,
-        LOG,
-        LOG_CLEAR,
-        SEC_UP,
-        SEC_DOWN,
-    ];
+mod cmd_list {
+    use std::collections::HashMap;
+
+    #[derive(Hash, Eq, PartialEq, Debug, Clone)]
+    pub enum CmdName {
+        Exit,
+        Home,
+        SelUp,
+        SelDown,
+        DirUp,
+        DirBack,
+        Explode,
+        Select,
+        CmdWinToggle,
+        CmdVisToggle,
+        CmdVisShow,
+        CmdList,
+        OutputWinToggle,
+        OutputWinShow,
+        OutputWinHide,
+        MultiSel,
+        MultiClear,
+        MultiShow,
+        MultiSave,
+        MultiCopy,
+        MenuBack,
+        Log,
+        LogClear,
+        SecUp,
+        SecDown,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct CmdData {
+        pub fname: &'static str,
+        pub description: &'static str,
+        pub cmd: &'static str,
+    }
+    pub type CmdList = HashMap<CmdName, CmdData>;
+    pub fn make_cmd_list() -> CmdList {
+        let mut map = HashMap::new();
+        map.insert(
+            CmdName::Exit,
+            CmdData {
+                fname: "cmd_exit",
+                description: "Exit the application",
+                cmd: "exit",
+            },
+        );
+        map.insert(
+            CmdName::Home,
+            CmdData {
+                fname: "cmd_home",
+                description: "Go to the home directory",
+                cmd: "home",
+            },
+        );
+        map.insert(
+            CmdName::SelUp,
+            CmdData {
+                fname: "cmd_sel_up",
+                description: "Move selection up",
+                cmd: "sel-up",
+            },
+        );
+        map.insert(
+            CmdName::SelDown,
+            CmdData {
+                fname: "cmd_sel_down",
+                description: "Move selection down",
+                cmd: "sel-down",
+            },
+        );
+        map.insert(
+            CmdName::DirUp,
+            CmdData {
+                fname: "cmd_dir_up",
+                description: "Go up to the parent directory",
+                cmd: "dir-up",
+            },
+        );
+        map.insert(
+            CmdName::DirBack,
+            CmdData {
+                fname: "cmd_dir_back",
+                description: "Go back to the last working directory",
+                cmd: "dir-back",
+            },
+        );
+        map.insert(
+            CmdName::Explode,
+            CmdData {
+                fname: "cmd_explode",
+                description: "Toggle explode mode",
+                cmd: "explode",
+            },
+        );
+        map.insert(
+            CmdName::Select,
+            CmdData {
+                fname: "cmd_select",
+                description: "Select the current item",
+                cmd: "select",
+            },
+        );
+        map.insert(
+            CmdName::CmdWinToggle,
+            CmdData {
+                fname: "cmd_cmd_window_toggle",
+                description: "Toggle command window",
+                cmd: "cmd",
+            },
+        );
+        map.insert(
+            CmdName::CmdVisToggle,
+            CmdData {
+                fname: "cmd_cmd_vis_toggle",
+                description: "Toggle visual commands",
+                cmd: "cmd-vis-toggle",
+            },
+        );
+        map.insert(
+            CmdName::CmdVisShow,
+            CmdData {
+                fname: "cmd_cmd_vis_show",
+                description: "Show visual commands",
+                cmd: "cmd-vis-show",
+            },
+        );
+        map.insert(
+            CmdName::CmdList,
+            CmdData {
+                fname: "cmd_cmd_list",
+                description: "List all commands",
+                cmd: "cmd-list",
+            },
+        );
+        map.insert(
+            CmdName::OutputWinToggle,
+            CmdData {
+                fname: "cmd_output_window_toggle",
+                description: "Toggle output window",
+                cmd: "output-toggle",
+            },
+        );
+        map.insert(
+            CmdName::OutputWinShow,
+            CmdData {
+                fname: "cmd_output_window_show",
+                description: "Show output window",
+                cmd: "output-show",
+            },
+        );
+        map.insert(
+            CmdName::OutputWinHide,
+            CmdData {
+                fname: "cmd_output_window_hide",
+                description: "Hide output window",
+                cmd: "output-hide",
+            },
+        );
+        map.insert(
+            CmdName::MultiSel,
+            CmdData {
+                fname: "cmd_multi_sel",
+                description: "Toggle multi-selection for current item",
+                cmd: "multi-sel",
+            },
+        );
+        map.insert(
+            CmdName::MultiClear,
+            CmdData {
+                fname: "cmd_multi_clear",
+                description: "Clear multi-selection",
+                cmd: "multi-clear",
+            },
+        );
+        map.insert(
+            CmdName::MultiShow,
+            CmdData {
+                fname: "cmd_multi_show",
+                description: "Show multi-selection",
+                cmd: "multi-show",
+            },
+        );
+        map.insert(
+            CmdName::MultiSave,
+            CmdData {
+                fname: "cmd_multi_save",
+                description: "Save multi-selection to file",
+                cmd: "multi-save",
+            },
+        );
+        map.insert(
+            CmdName::MultiCopy,
+            CmdData {
+                fname: "cmd_multi_copy",
+                description: "Copy multi-selection to clipboard",
+                cmd: "multi-copy",
+            },
+        );
+        map.insert(
+            CmdName::MenuBack,
+            CmdData {
+                fname: "cmd_menu_back",
+                description: "Go back to previous menu",
+                cmd: "menu-back",
+            },
+        );
+        map.insert(
+            CmdName::Log,
+            CmdData {
+                fname: "cmd_log",
+                description: "Show application log",
+                cmd: "log",
+            },
+        );
+        map.insert(
+            CmdName::LogClear,
+            CmdData {
+                fname: "cmd_log_clear",
+                description: "Clear application log",
+                cmd: "log-clear",
+            },
+        );
+        map.insert(
+            CmdName::SecUp,
+            CmdData {
+                fname: "cmd_sec_up",
+                description: "Scroll secondary window up",
+                cmd: "sec-up",
+            },
+        );
+        map.insert(
+            CmdName::SecDown,
+            CmdData {
+                fname: "cmd_sec_down",
+                description: "Scroll secondary window down",
+                cmd: "sec-down",
+            },
+        );
+
+        map
+    }
 }
 
 // Logs to temp directory
@@ -195,6 +387,7 @@ struct App<'a> {
     command_input: String,
     show_output_window: bool,
     output_text: String,
+    cmd_list: cmd_list::CmdList,
 }
 impl<'a> App<'a> {
     fn new() -> Self {
@@ -217,6 +410,7 @@ impl<'a> App<'a> {
             command_input: String::new(),
             show_output_window: false,
             output_text: String::new(),
+            cmd_list: cmd_list::make_cmd_list(),
         }
     }
 
@@ -286,6 +480,10 @@ impl<'a> App<'a> {
     fn set_output(&mut self, text: &str) {
         self.reset_sec_scroll();
         self.output_text = text.to_string();
+    }
+
+    fn get_cmd(&self, name: &cmd_list::CmdName) -> &'static str {
+        self.cmd_list.get(name).unwrap().cmd
     }
 
     fn fmtln_info(label: &str, value: &str) -> Line<'a> {
@@ -521,6 +719,13 @@ impl<'a> App<'a> {
                     Style::default().fg(Color::Green),
                 );
             }
+            sc::CMDS_LIST => {
+                self.preview_content += App::fmtln_sc("Command list");
+                self.preview_content += Line::styled(
+                    "Show a list of all available commands",
+                    Style::default().fg(Color::Green),
+                );
+            }
             _ => {
                 // TODO:
                 // Metadata is not coming from item its being re-fetched here
@@ -613,6 +818,11 @@ impl<'a> App<'a> {
             });
             self.listing.push(ItemInfo {
                 name: sc::LOG_CLEAR.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            });
+            self.listing.push(ItemInfo {
+                name: sc::CMDS_LIST.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
@@ -715,8 +925,8 @@ impl<'a> App<'a> {
         }
         // Special command matching just for output window
         let cmd = match (modifiers, code) {
-            (KeyModifiers::ALT, KeyCode::Char('j')) => cmd_name::SEC_DOWN,
-            (KeyModifiers::ALT, KeyCode::Char('k')) => cmd_name::SEC_UP,
+            (KeyModifiers::ALT, KeyCode::Char('j')) => self.get_cmd(&cmd_list::CmdName::SecDown),
+            (KeyModifiers::ALT, KeyCode::Char('k')) => self.get_cmd(&cmd_list::CmdName::SecUp),
             _ => "",
         };
         self.handle_cmd(&cmd);
@@ -763,21 +973,21 @@ impl<'a> App<'a> {
 
     fn input_cmd_map(&mut self, modifiers: KeyModifiers, code: KeyCode) -> String {
         let cmd = match (modifiers, code) {
-            (KeyModifiers::CONTROL, KeyCode::Char('t')) => cmd_name::CMD_WIN_TOGGLE,
-            (KeyModifiers::CONTROL, KeyCode::Char('s')) => cmd_name::MULTI_SEL,
-            (KeyModifiers::NONE, KeyCode::Enter) => cmd_name::SELECT,
-            (KeyModifiers::NONE, KeyCode::Right) => cmd_name::SELECT,
-            (KeyModifiers::NONE, KeyCode::Up) => cmd_name::SEL_UP,
-            (KeyModifiers::NONE, KeyCode::Down) => cmd_name::SEL_DOWN,
-            (KeyModifiers::NONE, KeyCode::Left) => cmd_name::DIR_BACK,
-            (KeyModifiers::CONTROL, KeyCode::Char('h')) => cmd_name::DIR_BACK,
-            (KeyModifiers::CONTROL, KeyCode::Char('j')) => cmd_name::SEL_DOWN,
-            (KeyModifiers::CONTROL, KeyCode::Char('k')) => cmd_name::SEL_UP,
-            (KeyModifiers::CONTROL, KeyCode::Char('l')) => cmd_name::SELECT,
-            (KeyModifiers::NONE, KeyCode::Esc) => cmd_name::EXIT,
-            (KeyModifiers::CONTROL, KeyCode::Char('q')) => cmd_name::EXIT,
-            (KeyModifiers::ALT, KeyCode::Char('j')) => cmd_name::SEC_DOWN,
-            (KeyModifiers::ALT, KeyCode::Char('k')) => cmd_name::SEC_UP,
+            (KeyModifiers::CONTROL, KeyCode::Char('t')) => self.get_cmd(&CmdName::CmdWinToggle),
+            (KeyModifiers::CONTROL, KeyCode::Char('s')) => self.get_cmd(&CmdName::MultiSel),
+            (KeyModifiers::NONE, KeyCode::Enter) => self.get_cmd(&CmdName::Select),
+            (KeyModifiers::NONE, KeyCode::Right) => self.get_cmd(&CmdName::Select),
+            (KeyModifiers::NONE, KeyCode::Up) => self.get_cmd(&CmdName::SelUp),
+            (KeyModifiers::NONE, KeyCode::Down) => self.get_cmd(&CmdName::SelDown),
+            (KeyModifiers::NONE, KeyCode::Left) => self.get_cmd(&CmdName::DirBack),
+            (KeyModifiers::CONTROL, KeyCode::Char('h')) => self.get_cmd(&CmdName::DirBack),
+            (KeyModifiers::CONTROL, KeyCode::Char('j')) => self.get_cmd(&CmdName::SelDown),
+            (KeyModifiers::CONTROL, KeyCode::Char('k')) => self.get_cmd(&CmdName::SelUp),
+            (KeyModifiers::CONTROL, KeyCode::Char('l')) => self.get_cmd(&CmdName::Select),
+            (KeyModifiers::NONE, KeyCode::Esc) => self.get_cmd(&CmdName::Exit),
+            (KeyModifiers::CONTROL, KeyCode::Char('q')) => self.get_cmd(&CmdName::Exit),
+            (KeyModifiers::ALT, KeyCode::Char('j')) => self.get_cmd(&CmdName::SecDown),
+            (KeyModifiers::ALT, KeyCode::Char('k')) => self.get_cmd(&CmdName::SecUp),
             _ => "",
         };
         if !cmd.is_empty() {
@@ -963,11 +1173,15 @@ impl<'a> App<'a> {
     }
 
     // Show a list of commands
-    fn cmd_list(&mut self) {
+    fn cmd_cmd_list(&mut self) {
         let mut text = String::new();
         text += "Available Commands:\n";
-        for cmd in cmd_name::LIST.iter() {
-            text += &format!(" - {}\n", cmd);
+        text += "-------------------\n";
+        // Sort by command name
+        let mut vec: Vec<_> = self.cmd_list.iter().collect();
+        vec.sort_by(|a, b| a.1.cmd.cmp(&b.1.cmd));
+        for (_name, cmd_data) in vec {
+            text += &format!("{} - {}\n", cmd_data.cmd, cmd_data.description);
         }
         self.set_output(&text);
         self.cmd_output_window_show();
@@ -1055,7 +1269,7 @@ impl<'a> App<'a> {
 
     fn handle_cmd(&mut self, cmd: &str) -> LoopReturn {
         match cmd {
-            cmd_name::SELECT => {
+            _ if cmd == self.get_cmd(&CmdName::Select) => {
                 // Update input to empty to reset search
                 self.input = String::new();
                 self.update_results();
@@ -1102,6 +1316,9 @@ impl<'a> App<'a> {
                     sc::LOG_CLEAR => {
                         self.cmd_log_clear();
                     }
+                    sc::CMDS_LIST => {
+                        self.cmd_cmd_list();
+                    }
                     _ => {
                         // Selection is a file or directory
                         self.set_cwd(&self.selection.clone().into());
@@ -1111,30 +1328,30 @@ impl<'a> App<'a> {
                     }
                 }
             }
-            cmd_name::SEL_DOWN => self.cmd_sel_down(),
-            cmd_name::SEL_UP => self.cmd_sel_up(),
-            cmd_name::DIR_UP => self.cmd_dir_up(),
-            cmd_name::DIR_BACK => self.cmd_dir_back(),
-            cmd_name::EXPLODE => self.cmd_explode(),
-            cmd_name::HOME => self.cmd_home(),
-            cmd_name::CMD_WIN_TOGGLE => self.cmd_cmd_window_toggle(),
-            cmd_name::OUTPUT_WIN_TOGGLE => self.cmd_output_window_toggle(),
-            cmd_name::OUTPUT_WIN_SHOW => self.cmd_output_window_show(),
-            cmd_name::OUTPUT_WIN_HIDE => self.cmd_output_window_hide(),
-            cmd_name::MULTI_SEL => self.cmd_multi_sel(),
-            cmd_name::MULTI_CLEAR => self.cmd_multi_clear(),
-            cmd_name::MULTI_SHOW => self.cmd_multi_show(),
-            cmd_name::MULTI_SAVE => self.cmd_multi_save(),
-            cmd_name::MULTI_COPY => self.cmd_multi_copy(),
-            cmd_name::CMD_VIS_TOGGLE => self.cmd_cmd_vis_toggle(),
-            cmd_name::CMD_VIS_SHOW => self.cmd_vis_show(),
-            cmd_name::CMD_LIST => self.cmd_list(),
-            cmd_name::MENU_BACK => self.cmd_menu_back(),
-            cmd_name::LOG => self.cmd_log_show(),
-            cmd_name::LOG_CLEAR => self.cmd_log_clear(),
-            cmd_name::SEC_DOWN => self.cmd_sec_down(),
-            cmd_name::SEC_UP => self.cmd_sec_up(),
-            cmd_name::EXIT => return LoopReturn::Break,
+            _ if cmd == self.get_cmd(&CmdName::SelDown) => self.cmd_sel_down(),
+            _ if cmd == self.get_cmd(&CmdName::SelUp) => self.cmd_sel_up(),
+            _ if cmd == self.get_cmd(&CmdName::DirUp) => self.cmd_dir_up(),
+            _ if cmd == self.get_cmd(&CmdName::DirBack) => self.cmd_dir_back(),
+            _ if cmd == self.get_cmd(&CmdName::Explode) => self.cmd_explode(),
+            _ if cmd == self.get_cmd(&CmdName::Home) => self.cmd_home(),
+            _ if cmd == self.get_cmd(&CmdName::CmdWinToggle) => self.cmd_cmd_window_toggle(),
+            _ if cmd == self.get_cmd(&CmdName::OutputWinToggle) => self.cmd_output_window_toggle(),
+            _ if cmd == self.get_cmd(&CmdName::OutputWinShow) => self.cmd_output_window_show(),
+            _ if cmd == self.get_cmd(&CmdName::OutputWinHide) => self.cmd_output_window_hide(),
+            _ if cmd == self.get_cmd(&CmdName::MultiSel) => self.cmd_multi_sel(),
+            _ if cmd == self.get_cmd(&CmdName::MultiClear) => self.cmd_multi_clear(),
+            _ if cmd == self.get_cmd(&CmdName::MultiShow) => self.cmd_multi_show(),
+            _ if cmd == self.get_cmd(&CmdName::MultiSave) => self.cmd_multi_save(),
+            _ if cmd == self.get_cmd(&CmdName::MultiCopy) => self.cmd_multi_copy(),
+            _ if cmd == self.get_cmd(&CmdName::CmdVisToggle) => self.cmd_cmd_vis_toggle(),
+            _ if cmd == self.get_cmd(&CmdName::CmdVisShow) => self.cmd_vis_show(),
+            _ if cmd == self.get_cmd(&CmdName::CmdList) => self.cmd_cmd_list(),
+            _ if cmd == self.get_cmd(&CmdName::MenuBack) => self.cmd_menu_back(),
+            _ if cmd == self.get_cmd(&CmdName::Log) => self.cmd_log_show(),
+            _ if cmd == self.get_cmd(&CmdName::LogClear) => self.cmd_log_clear(),
+            _ if cmd == self.get_cmd(&CmdName::SecDown) => self.cmd_sec_down(),
+            _ if cmd == self.get_cmd(&CmdName::SecUp) => self.cmd_sec_up(),
+            _ if cmd == self.get_cmd(&CmdName::Exit) => return LoopReturn::Break,
             _ => {
                 // If the cmd starts with `!` treat it as a shell command
 
