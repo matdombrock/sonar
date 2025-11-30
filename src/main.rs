@@ -148,7 +148,7 @@ enum LoopReturn {
 // Main application state
 struct App<'a> {
     input: String,
-    dir_listing: Vec<ItemInfo>,
+    listing: Vec<ItemInfo>,
     results: Vec<ItemInfo>,
     selection: String,
     selection_index: i32,
@@ -170,7 +170,7 @@ impl<'a> App<'a> {
         log!("App initialized");
         Self {
             input: String::new(),
-            dir_listing: Vec::new(),
+            listing: Vec::new(),
             results: Vec::new(),
             selection: String::new(),
             selection_index: 0,
@@ -522,53 +522,53 @@ impl<'a> App<'a> {
         };
         // Handle visual commands
         if self.mode_vis_commands {
-            self.dir_listing.clear();
-            self.dir_listing.push(ItemInfo {
+            self.listing.clear();
+            self.listing.push(ItemInfo {
                 name: sc::MENU_BACK.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
-            self.dir_listing.push(ItemInfo {
+            self.listing.push(ItemInfo {
                 name: sc::EXIT.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
-            self.dir_listing.push(ItemInfo {
+            self.listing.push(ItemInfo {
                 name: sc::HOME.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
-            self.dir_listing.push(ItemInfo {
+            self.listing.push(ItemInfo {
                 name: sc::DIR_UP.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
-            self.dir_listing.push(ItemInfo {
+            self.listing.push(ItemInfo {
                 name: sc::EXP.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
-            self.dir_listing.push(ItemInfo {
+            self.listing.push(ItemInfo {
                 name: sc::MULTI_SHOW.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
-            self.dir_listing.push(ItemInfo {
+            self.listing.push(ItemInfo {
                 name: sc::MULTI_CLEAR.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
-            self.dir_listing.push(ItemInfo {
+            self.listing.push(ItemInfo {
                 name: sc::MULTI_SAVE.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
-            self.dir_listing.push(ItemInfo {
+            self.listing.push(ItemInfo {
                 name: sc::LOG.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
-            self.dir_listing.push(ItemInfo {
+            self.listing.push(ItemInfo {
                 name: sc::LOG_CLEAR.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
@@ -616,13 +616,13 @@ impl<'a> App<'a> {
                 metadata: empty_metadata.clone(),
             },
         );
-        self.dir_listing = listing;
+        self.listing = listing;
     }
 
     fn update_results(&mut self) {
         let matcher = SkimMatcherV2::default();
         let mut scored: Vec<_> = self
-            .dir_listing
+            .listing
             .iter()
             .take(SEARCH_LIMIT) // Limit for performance
             .filter_map(|item| {

@@ -7,6 +7,7 @@
 - Handle large dirs
 - Fix file read not clearing
 - Native commands (:!)
+- Beter metadata handling
 
 ## VS FF
 - Multi-select across dirs
