@@ -5,3 +5,7 @@
 - Better input handling (especially for commands)
 - Image previews
 - Handle large dirs
+
+## VS FF
+- Multi-select across dirs
+- Floating/extra windows

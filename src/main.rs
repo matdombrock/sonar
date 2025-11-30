@@ -47,7 +47,11 @@ const SC_DIR_UP: &str = " .. up";
 const SC_EXIT: &str = " exit";
 const SC_HOME: &str = "~ home";
 const SC_DIR_BACK: &str = " back";
+const SC_MENU_BACK: &str = " menu"; // Extra space to avoid confusion with dir back
 const SC_EXP: &str = " explode";
+const SC_CMDS: &str = " cmds";
+const SC_MULTI_SHOW: &str = " show multi-selection";
+const SC_MULTI_CLEAR: &str = " clear multi-selection";
 
 const LOGO: &str = r#"
  ██╗███████╗ ██████╗ ███╗   ██╗ █████╗ ██╗ ██╗ ██╗ 
@@ -67,11 +71,13 @@ mod cmd_name {
     pub const DIR_BACK: &str = ":dir-back";
     pub const EXPLODE: &str = ":explode";
     pub const SELECT: &str = ":select";
-    pub const CMD_TOGGLE: &str = ":cmd-toggle";
-    pub const OUTPUT_TOGGLE: &str = ":output-toggle";
+    pub const CMD_WIN_TOGGLE: &str = ":cmd";
+    pub const CMD_VIS_TOGGLE: &str = ":cmd-vis-toggle";
+    pub const OUTPUT_WIN_TOGGLE: &str = ":output-toggle";
     pub const MULTI_SEL: &str = ":multi-sel";
     pub const MULTI_CLEAR: &str = ":multi-clear";
     pub const MULTI_SHOW: &str = ":multi-show";
+    pub const MENU_BACK: &str = ":menu-back";
 }
 
 #[derive(Clone)]
@@ -98,6 +104,7 @@ struct App<'a> {
     cwd: PathBuf,
     lwd: PathBuf,
     mode_explode: bool,
+    mode_vis_commands: bool,
     command_window_open: bool,
     command_input: String,
     output_window_open: bool,
@@ -116,6 +123,7 @@ impl<'a> App<'a> {
             cwd: env::current_dir().unwrap(),
             lwd: env::current_dir().unwrap(),
             mode_explode: false,
+            mode_vis_commands: false,
             command_window_open: false,
             command_input: String::new(),
             output_window_open: false,
@@ -322,13 +330,56 @@ impl<'a> App<'a> {
         }
     }
 
-    fn update_directory_listing(&mut self) {
+    fn update_listing(&mut self) {
+        let empty_metadata = match fs::metadata(&self.cwd) {
+            Ok(meta) => meta,
+            Err(_) => fs::metadata(".").unwrap(),
+        };
+        // Handle visual commands
+        if self.mode_vis_commands {
+            self.dir_listing.clear();
+            self.dir_listing.push(ItemInfo {
+                name: SC_MENU_BACK.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            });
+            self.dir_listing.push(ItemInfo {
+                name: SC_EXIT.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            });
+            self.dir_listing.push(ItemInfo {
+                name: SC_HOME.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            });
+            self.dir_listing.push(ItemInfo {
+                name: SC_DIR_UP.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            });
+            self.dir_listing.push(ItemInfo {
+                name: SC_EXP.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            });
+            self.dir_listing.push(ItemInfo {
+                name: SC_MULTI_SHOW.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            });
+            self.dir_listing.push(ItemInfo {
+                name: SC_MULTI_CLEAR.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            });
+            return;
+        }
         let mut listing = self.get_directory_listing(&self.cwd.clone());
-        let empty_metadata = fs::metadata(&self.cwd).unwrap();
         listing.insert(
             0,
             ItemInfo {
-                name: SC_HOME.to_string(),
+                name: SC_CMDS.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             },
@@ -435,6 +486,20 @@ impl<'a> App<'a> {
                 let status = if self.mode_explode { "ON" } else { "OFF" };
                 self.preview_content += App::fmtln_info("explode mode", status);
             }
+            SC_CMDS => {
+                self.preview_content += App::fmtln_sc("Show visual commands");
+                self.preview_content += Line::styled(
+                    "Toggles a visual command menu in the listing.",
+                    Style::default().fg(Color::Green),
+                );
+            }
+            SC_MENU_BACK => {
+                self.preview_content += App::fmtln_sc("Go back to the previous menu");
+                self.preview_content += Line::styled(
+                    "Exits the current visual command menu.",
+                    Style::default().fg(Color::Green),
+                );
+            }
             _ => {
                 // TODO:
                 // Metadata is not coming from item its being re-fetched here
@@ -458,7 +523,7 @@ impl<'a> App<'a> {
 
     fn cmd_home(&mut self) {
         self.set_cwd(&dirs::home_dir().unwrap());
-        self.update_directory_listing();
+        self.update_listing();
         self.update_results();
         self.selection_index = 0;
     }
@@ -474,7 +539,7 @@ impl<'a> App<'a> {
     fn cmd_explode(&mut self) {
         self.mode_explode = !self.mode_explode;
         // TODO: Not sure why this needs to continue
-        self.update_directory_listing();
+        self.update_listing();
         self.update_results();
         self.update_selection();
         self.update_preview();
@@ -544,6 +609,14 @@ impl<'a> App<'a> {
         self.output_window_open = true;
     }
 
+    fn cmd_cmd_vis_toggle(&mut self) {
+        self.mode_vis_commands = !self.mode_vis_commands;
+    }
+
+    fn cmd_menu_back(&mut self) {
+        self.mode_vis_commands = false;
+    }
+
     fn handle_command(&mut self, cmd: &str) -> LoopReturn {
         match cmd {
             cmd_name::SELECT => {
@@ -565,10 +638,30 @@ impl<'a> App<'a> {
                         self.cmd_explode();
                         return LoopReturn::Continue;
                     }
+                    SC_CMDS => {
+                        self.mode_vis_commands = true;
+                        self.update_listing();
+                        self.update_results();
+                        self.selection_index = 0;
+                        return LoopReturn::Continue;
+                    }
+                    SC_MENU_BACK => {
+                        self.mode_vis_commands = false;
+                        self.update_listing();
+                        self.update_results();
+                        self.selection_index = 0;
+                        return LoopReturn::Continue;
+                    }
+                    SC_MULTI_SHOW => {
+                        self.cmd_multi_show();
+                    }
+                    SC_MULTI_CLEAR => {
+                        self.cmd_multi_clear();
+                    }
                     _ => {}
                 }
                 self.set_cwd(&self.selection.clone().into());
-                self.update_directory_listing();
+                self.update_listing();
                 self.update_results();
                 self.selection_index = 0;
             }
@@ -578,11 +671,13 @@ impl<'a> App<'a> {
             cmd_name::DIR_BACK => self.cmd_dir_back(),
             cmd_name::EXPLODE => self.cmd_explode(),
             cmd_name::HOME => self.cmd_home(),
-            cmd_name::CMD_TOGGLE => self.cmd_cmd_window_toggle(),
-            cmd_name::OUTPUT_TOGGLE => self.cmd_output_window_toggle(),
+            cmd_name::CMD_WIN_TOGGLE => self.cmd_cmd_window_toggle(),
+            cmd_name::OUTPUT_WIN_TOGGLE => self.cmd_output_window_toggle(),
             cmd_name::MULTI_SEL => self.cmd_multi_sel(),
             cmd_name::MULTI_CLEAR => self.cmd_multi_clear(),
             cmd_name::MULTI_SHOW => self.cmd_multi_show(),
+            cmd_name::CMD_VIS_TOGGLE => self.cmd_cmd_vis_toggle(),
+            cmd_name::MENU_BACK => self.cmd_menu_back(),
             cmd_name::EXIT => return LoopReturn::Break,
             _ => {
                 dbg!("No command matched: {}", cmd);
@@ -595,7 +690,7 @@ impl<'a> App<'a> {
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
     // Get directory listing
     app.set_cwd(&app.cwd.clone());
-    app.update_directory_listing();
+    app.update_listing();
     app.update_results(); // Initial results
     app.update_selection();
     app.update_preview();
@@ -610,6 +705,9 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                 if app.output_window_open {
                     match (modifiers, code) {
                         (KeyModifiers::NONE, KeyCode::Esc) => {
+                            app.output_window_open = false;
+                        }
+                        (KeyModifiers::NONE, KeyCode::Enter) => {
                             app.output_window_open = false;
                         }
                         _ => {}
@@ -665,7 +763,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                 }
                 // Process key to command mapping
                 let cmd = match (modifiers, code) {
-                    (KeyModifiers::CONTROL, KeyCode::Char('t')) => cmd_name::CMD_TOGGLE,
+                    (KeyModifiers::CONTROL, KeyCode::Char('t')) => cmd_name::CMD_WIN_TOGGLE,
                     (KeyModifiers::CONTROL, KeyCode::Char('s')) => cmd_name::MULTI_SEL,
                     (KeyModifiers::NONE, KeyCode::Enter) => cmd_name::SELECT,
                     (KeyModifiers::NONE, KeyCode::Right) => cmd_name::SELECT,
@@ -829,7 +927,7 @@ fn render(frame: &mut Frame, app: &App) {
             .style(Style::default().bg(Color::Black))
             .block(
                 Block::default()
-                    .title(format!("{} Output", NF_CMD))
+                    .title(format!("{} Output ('esc' to exit)", NF_CMD))
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::Magenta))
                     .style(Style::default().bg(Color::Black)),
