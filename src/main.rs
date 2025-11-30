@@ -5,6 +5,7 @@ use crossterm::{
 };
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
+use mime_guess::mime;
 use ratatui::{
     Frame, Terminal,
     layout::{Constraint, Rect},
@@ -413,6 +414,13 @@ impl<'a> App<'a> {
                 if selected_path.is_dir() {
                     self.preview_dir(&selected_path);
                 } else if selected_path.is_file() {
+                    // Check if we have an image
+                    let mime = mime_guess::from_path(&selected_path).first_or_octet_stream();
+                    if mime.type_() == mime::IMAGE {
+                        self.preview_content += Line::from("Image file preview not yet supported.");
+                        return;
+                    }
+                    // Preview a text file
                     self.preview_file(&selected_path);
                 } else {
                     self.preview_content +=
@@ -647,7 +655,6 @@ impl<'a> App<'a> {
 
     fn cmd_explode(&mut self) {
         self.mode_explode = !self.mode_explode;
-        // TODO: Not sure why this needs to continue
         self.update_listing();
         self.update_results();
         self.update_selection();
@@ -762,7 +769,6 @@ impl<'a> App<'a> {
         self.selection_index = 0;
     }
 
-    // TODO: LoopReturn deprecated?
     fn handle_cmd(&mut self, cmd: &str) -> LoopReturn {
         match cmd {
             cmd_name::SELECT => {
