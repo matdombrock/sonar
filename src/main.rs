@@ -377,21 +377,22 @@ enum NodeType {
     Image,
     Unknown,
 }
-
-fn get_node_type(metadata: fs::Metadata) -> NodeType {
-    if metadata.is_dir() {
-        NodeType::Directory
-    } else if metadata.is_file() {
-        // Check if executable
-        #[cfg(unix)]
-        {
-            if metadata.permissions().mode() & 0o111 != 0 {
-                return NodeType::Executable;
+impl NodeType {
+    fn find(metadata: fs::Metadata) -> NodeType {
+        if metadata.is_dir() {
+            NodeType::Directory
+        } else if metadata.is_file() {
+            // Check if executable
+            #[cfg(unix)]
+            {
+                if metadata.permissions().mode() & 0o111 != 0 {
+                    return NodeType::Executable;
+                }
             }
+            NodeType::File
+        } else {
+            NodeType::Unknown
         }
-        NodeType::File
-    } else {
-        NodeType::Unknown
     }
 }
 
@@ -402,6 +403,9 @@ struct ItemInfo {
     node_type: NodeType,
 }
 impl ItemInfo {
+    fn is(&self, _is: NodeType) -> bool {
+        return self.node_type == _is;
+    }
     fn is_file(&self) -> bool {
         return self.node_type == NodeType::File;
     }
@@ -420,9 +424,13 @@ impl ItemInfo {
     fn is_image(&self) -> bool {
         return self.node_type == NodeType::Image;
     }
+    fn is_unknown(&self) -> bool {
+        return self.node_type == NodeType::Unknown;
+    }
 }
 
 // Return type for loop control
+// TODO: Im still suspicious of this design
 enum LoopReturn {
     Continue,
     Break,
@@ -502,7 +510,7 @@ impl<'a> App<'a> {
                         let file_name_str = file_name.to_string_lossy();
                         match entry.metadata() {
                             Ok(metadata) => {
-                                let node_type = get_node_type(metadata.clone());
+                                let node_type = NodeType::find(metadata.clone());
                                 if !self.mode_explode {
                                     entries.push(ItemInfo {
                                         name: file_name_str.to_string(),

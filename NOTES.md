@@ -33,4 +33,4 @@ One problem there though is that the commands operate on self (app) so if they m
 ## VS FF
 - Multi-select across dirs
 - Floating/extra windows
-
+- Resume location
