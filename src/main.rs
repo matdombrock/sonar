@@ -77,31 +77,60 @@ mod sc {
 }
 
 // Command names
+// These will be used for key mappings and command handling
 mod cmd_name {
-    pub const EXIT: &str = ":exit";
-    pub const HOME: &str = ":home";
-    pub const SEL_UP: &str = ":sel-up";
-    pub const SEL_DOWN: &str = ":sel-down";
-    pub const DIR_UP: &str = ":dir-up";
-    pub const DIR_BACK: &str = ":dir-back";
-    pub const EXPLODE: &str = ":explode";
-    pub const SELECT: &str = ":select";
-    pub const CMD_WIN_TOGGLE: &str = ":cmd";
-    pub const CMD_VIS_TOGGLE: &str = ":cmd-vis-toggle";
-    pub const CMD_VIS_SHOW: &str = ":cmd-vis-show";
-    pub const OUTPUT_WIN_TOGGLE: &str = ":output-toggle";
-    pub const OUTPUT_WIN_SHOW: &str = ":output-show";
-    pub const OUTPUT_WIN_HIDE: &str = ":output-hide";
-    pub const MULTI_SEL: &str = ":multi-sel";
-    pub const MULTI_CLEAR: &str = ":multi-clear";
-    pub const MULTI_SHOW: &str = ":multi-show";
-    pub const MULTI_SAVE: &str = ":multi-save";
-    pub const MULTI_COPY: &str = ":multi-copy";
-    pub const MENU_BACK: &str = ":menu-back";
-    pub const LOG: &str = ":log";
-    pub const LOG_CLEAR: &str = ":log-clear";
-    pub const SEC_UP: &str = ":sec-up";
-    pub const SEC_DOWN: &str = ":sec-down";
+    pub const EXIT: &str = "exit";
+    pub const HOME: &str = "home";
+    pub const SEL_UP: &str = "sel-up";
+    pub const SEL_DOWN: &str = "sel-down";
+    pub const DIR_UP: &str = "dir-up";
+    pub const DIR_BACK: &str = "dir-back";
+    pub const EXPLODE: &str = "explode";
+    pub const SELECT: &str = "select";
+    pub const CMD_WIN_TOGGLE: &str = "cmd";
+    pub const CMD_VIS_TOGGLE: &str = "cmd-vis-toggle";
+    pub const CMD_VIS_SHOW: &str = "cmd-vis-show";
+    pub const CMD_LIST: &str = "cmd-list";
+    pub const OUTPUT_WIN_TOGGLE: &str = "output-toggle";
+    pub const OUTPUT_WIN_SHOW: &str = "output-show";
+    pub const OUTPUT_WIN_HIDE: &str = "output-hide";
+    pub const MULTI_SEL: &str = "multi-sel";
+    pub const MULTI_CLEAR: &str = "multi-clear";
+    pub const MULTI_SHOW: &str = "multi-show";
+    pub const MULTI_SAVE: &str = "multi-save";
+    pub const MULTI_COPY: &str = "multi-copy";
+    pub const MENU_BACK: &str = "menu-back";
+    pub const LOG: &str = "log";
+    pub const LOG_CLEAR: &str = "log-clear";
+    pub const SEC_UP: &str = "sec-up";
+    pub const SEC_DOWN: &str = "sec-down";
+    pub const LIST: [&str; 25] = [
+        EXIT,
+        HOME,
+        SEL_UP,
+        SEL_DOWN,
+        DIR_UP,
+        DIR_BACK,
+        EXPLODE,
+        SELECT,
+        CMD_WIN_TOGGLE,
+        CMD_VIS_TOGGLE,
+        CMD_VIS_SHOW,
+        CMD_LIST,
+        OUTPUT_WIN_TOGGLE,
+        OUTPUT_WIN_SHOW,
+        OUTPUT_WIN_HIDE,
+        MULTI_SEL,
+        MULTI_CLEAR,
+        MULTI_SHOW,
+        MULTI_SAVE,
+        MULTI_COPY,
+        MENU_BACK,
+        LOG,
+        LOG_CLEAR,
+        SEC_UP,
+        SEC_DOWN,
+    ];
 }
 
 // Logs to temp directory
@@ -695,7 +724,7 @@ impl<'a> App<'a> {
 
     fn input_cmd_window(&mut self, modifiers: KeyModifiers, code: KeyCode) -> LoopReturn {
         match (modifiers, code) {
-            (KeyModifiers::NONE, KeyCode::Char(c)) => {
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => {
                 self.command_input.push(c);
             }
             (KeyModifiers::NONE, KeyCode::Backspace) => {
@@ -719,7 +748,7 @@ impl<'a> App<'a> {
     // Returns true if input changed
     fn input_main(&mut self, modifiers: KeyModifiers, code: KeyCode) -> bool {
         match (modifiers, code) {
-            (KeyModifiers::NONE, KeyCode::Char(c)) => {
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => {
                 self.input.push(c);
                 return true;
             }
@@ -933,6 +962,17 @@ impl<'a> App<'a> {
         self.selection_index = 0;
     }
 
+    // Show a list of commands
+    fn cmd_list(&mut self) {
+        let mut text = String::new();
+        text += "Available Commands:\n";
+        for cmd in cmd_name::LIST.iter() {
+            text += &format!(" - {}\n", cmd);
+        }
+        self.set_output(&text);
+        self.cmd_output_window_show();
+    }
+
     fn cmd_menu_back(&mut self) {
         self.mode_vis_commands = false;
         self.update_listing();
@@ -1088,6 +1128,7 @@ impl<'a> App<'a> {
             cmd_name::MULTI_COPY => self.cmd_multi_copy(),
             cmd_name::CMD_VIS_TOGGLE => self.cmd_cmd_vis_toggle(),
             cmd_name::CMD_VIS_SHOW => self.cmd_vis_show(),
+            cmd_name::CMD_LIST => self.cmd_list(),
             cmd_name::MENU_BACK => self.cmd_menu_back(),
             cmd_name::LOG => self.cmd_log_show(),
             cmd_name::LOG_CLEAR => self.cmd_log_clear(),
