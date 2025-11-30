@@ -1,6 +1,6 @@
 use color_eyre::eyre::Result;
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent},
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 use fuzzy_matcher::FuzzyMatcher;
@@ -32,11 +32,22 @@ const NF_CMD: &str = "";
 const NF_INFO: &str = "";
 
 // Shortcut strings
-const SC_UP: &str = " .. up";
+const SC_DIR_UP: &str = " .. up";
 const SC_EXIT: &str = " exit";
 const SC_HOME: &str = "~ home";
-const SC_BACK: &str = " back";
+const SC_DIR_BACK: &str = " back";
 const SC_EXP: &str = " explode";
+
+mod cmd_name {
+    pub const EXIT: &str = ":exit";
+    pub const HOME: &str = ":home";
+    pub const SEL_UP: &str = ":sel-up";
+    pub const SEL_DOWN: &str = ":sel-down";
+    pub const DIR_UP: &str = ":dir-up";
+    pub const DIR_BACK: &str = ":dir-back";
+    pub const EXPLODE: &str = ":explode";
+    pub const SELECT: &str = ":select";
+}
 
 #[derive(Clone)]
 struct ItemInfo {
@@ -129,84 +140,6 @@ impl<'a> App<'a> {
             }
         }
         entries
-    }
-
-    fn update_directory_listing(&mut self) {
-        let mut listing = self.get_directory_listing(&self.cwd.clone());
-        let empty_metadata = fs::metadata(&self.cwd).unwrap();
-        listing.insert(
-            0,
-            ItemInfo {
-                name: SC_HOME.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            },
-        );
-        listing.insert(
-            0,
-            ItemInfo {
-                name: SC_BACK.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            },
-        );
-        listing.insert(
-            0,
-            ItemInfo {
-                name: SC_UP.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            },
-        );
-        listing.insert(
-            0,
-            ItemInfo {
-                name: SC_EXP.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            },
-        );
-        listing.insert(
-            0,
-            ItemInfo {
-                name: SC_EXIT.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            },
-        );
-        self.dir_listing = listing;
-    }
-
-    fn update_results(&mut self) {
-        let matcher = SkimMatcherV2::default();
-        let mut scored: Vec<_> = self
-            .dir_listing
-            .iter()
-            .take(SEARCH_LIMIT) // Limit for performance
-            .filter_map(|item| {
-                matcher
-                    .fuzzy_match(&item.name, &self.input)
-                    .map(|score| (score, item.clone()))
-            })
-            .collect();
-        scored.sort_by(|a, b| b.0.cmp(&a.0));
-        self.results = scored.into_iter().map(|(_, item)| item).collect();
-    }
-
-    fn update_selection(&mut self) {
-        if self.selection_index < self.results.len() as i32 {
-            self.selection = self.results[self.selection_index as usize].name.clone();
-        } else if !self.results.is_empty() {
-            self.selection_index = 0;
-            self.selection = String::new();
-        } else {
-            self.selection_index = 0;
-            self.selection = String::new();
-        }
-        // Remove icon prefix from selection
-        if let Some(pos) = self.selection.find("| ") {
-            self.selection = self.selection[(pos + 2)..].to_string();
-        }
     }
 
     fn fmtln_info(label: &str, value: &str) -> Line<'a> {
@@ -310,6 +243,84 @@ impl<'a> App<'a> {
         }
     }
 
+    fn update_directory_listing(&mut self) {
+        let mut listing = self.get_directory_listing(&self.cwd.clone());
+        let empty_metadata = fs::metadata(&self.cwd).unwrap();
+        listing.insert(
+            0,
+            ItemInfo {
+                name: SC_HOME.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            },
+        );
+        listing.insert(
+            0,
+            ItemInfo {
+                name: SC_DIR_BACK.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            },
+        );
+        listing.insert(
+            0,
+            ItemInfo {
+                name: SC_DIR_UP.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            },
+        );
+        listing.insert(
+            0,
+            ItemInfo {
+                name: SC_EXP.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            },
+        );
+        listing.insert(
+            0,
+            ItemInfo {
+                name: SC_EXIT.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            },
+        );
+        self.dir_listing = listing;
+    }
+
+    fn update_results(&mut self) {
+        let matcher = SkimMatcherV2::default();
+        let mut scored: Vec<_> = self
+            .dir_listing
+            .iter()
+            .take(SEARCH_LIMIT) // Limit for performance
+            .filter_map(|item| {
+                matcher
+                    .fuzzy_match(&item.name, &self.input)
+                    .map(|score| (score, item.clone()))
+            })
+            .collect();
+        scored.sort_by(|a, b| b.0.cmp(&a.0));
+        self.results = scored.into_iter().map(|(_, item)| item).collect();
+    }
+
+    fn update_selection(&mut self) {
+        if self.selection_index < self.results.len() as i32 {
+            self.selection = self.results[self.selection_index as usize].name.clone();
+        } else if !self.results.is_empty() {
+            self.selection_index = 0;
+            self.selection = String::new();
+        } else {
+            self.selection_index = 0;
+            self.selection = String::new();
+        }
+        // Remove icon prefix from selection
+        if let Some(pos) = self.selection.find("| ") {
+            self.selection = self.selection[(pos + 2)..].to_string();
+        }
+    }
+
     fn update_preview(&mut self) {
         self.preview_content = Default::default();
         match self.selection.as_str() {
@@ -320,11 +331,11 @@ impl<'a> App<'a> {
                 self.preview_content += App::fmtln_path(&dirs::home_dir().unwrap());
                 self.preview_content += App::fmtln_sc("Go to the home directory");
             }
-            SC_UP => {
+            SC_DIR_UP => {
                 self.preview_content += App::fmtln_path(&self.cwd);
                 self.preview_content += App::fmtln_sc("Go up to the parent directory");
             }
-            SC_BACK => {
+            SC_DIR_BACK => {
                 self.preview_content += App::fmtln_path(&self.lwd);
                 self.preview_content += App::fmtln_sc("Go back to the last working directory");
             }
@@ -357,6 +368,47 @@ impl<'a> App<'a> {
             }
         }
     }
+
+    fn cmd_home(&mut self) {
+        self.set_cwd(&dirs::home_dir().unwrap());
+        self.update_directory_listing();
+        self.update_results();
+        self.selection_index = 0;
+    }
+
+    fn cmd_dir_up(&mut self) {
+        self.selection = "..".to_string();
+    }
+
+    fn cmd_dir_back(&mut self) {
+        self.selection = self.lwd.to_str().unwrap().to_string();
+    }
+
+    fn cmd_explode(&mut self) {
+        self.mode_explode = !self.mode_explode;
+        // TODO: Not sure why this needs to continue
+        self.update_directory_listing();
+        self.update_results();
+        self.update_selection();
+        self.update_preview();
+        self.selection_index = 0;
+    }
+
+    fn cmd_sel_down(&mut self) {
+        self.selection_index += 1;
+        if self.selection_index >= self.results.len() as i32 {
+            self.selection_index = 0;
+        }
+    }
+
+    fn cmd_app_sel_up(&mut self) {
+        self.selection_index += -1;
+        if self.selection_index < 0 && !self.results.is_empty() {
+            self.selection_index = self.results.len() as i32 - 1;
+        } else if self.results.is_empty() {
+            self.selection_index = 0;
+        }
+    }
 }
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
@@ -369,77 +421,82 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
     loop {
         terminal.draw(|f| render(f, &app))?;
         if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(KeyEvent { code, .. }) = event::read()? {
+            if let Event::Key(KeyEvent {
+                code, modifiers, ..
+            }) = event::read()?
+            {
                 // Before key press handling
                 app.update_selection();
                 let mut input_changed = false;
-                match code {
-                    KeyCode::Char(c) => {
+                // Some things are not bindable
+                match (modifiers, code) {
+                    (KeyModifiers::NONE, KeyCode::Char(c)) => {
                         app.input.push(c);
                         input_changed = true;
                     }
-                    KeyCode::Backspace => {
+                    (KeyModifiers::NONE, KeyCode::Backspace) => {
                         app.input.pop();
                         input_changed = true;
                     }
-                    KeyCode::Enter => {
+                    (KeyModifiers::NONE, KeyCode::Esc) => break,
+                    _ => {}
+                }
+                if input_changed {
+                    app.update_results();
+                }
+                // Process key to command mapping
+                let cmd = match (modifiers, code) {
+                    (KeyModifiers::NONE, KeyCode::Enter) => cmd_name::SELECT,
+                    (KeyModifiers::NONE, KeyCode::Right) => cmd_name::SELECT,
+                    (KeyModifiers::NONE, KeyCode::Up) => cmd_name::SEL_UP,
+                    (KeyModifiers::NONE, KeyCode::Down) => cmd_name::SEL_DOWN,
+                    (KeyModifiers::NONE, KeyCode::Left) => cmd_name::DIR_BACK,
+                    (KeyModifiers::CONTROL, KeyCode::Char('h')) => cmd_name::DIR_BACK,
+                    (KeyModifiers::CONTROL, KeyCode::Char('j')) => cmd_name::SEL_DOWN,
+                    (KeyModifiers::CONTROL, KeyCode::Char('k')) => cmd_name::SEL_UP,
+                    (KeyModifiers::CONTROL, KeyCode::Char('l')) => cmd_name::SELECT,
+                    _ => "",
+                };
+                dbg!(&cmd);
+                // Handle commands
+                match cmd {
+                    cmd_name::SELECT => {
                         app.input = String::new();
-                        let mut selection = app.selection.clone();
+                        let selection = app.selection.clone();
                         match selection.as_str() {
                             SC_EXIT => break,
                             SC_HOME => {
-                                app.set_cwd(&dirs::home_dir().unwrap());
-                                app.update_directory_listing();
-                                app.update_results();
-                                app.selection_index = 0;
+                                app.cmd_home();
                                 continue;
                             }
-                            SC_UP => {
-                                selection = "..".to_string();
+                            SC_DIR_UP => {
+                                app.cmd_dir_up();
                             }
-                            SC_BACK => {
-                                selection = app.lwd.to_str().unwrap().to_string();
+                            SC_DIR_BACK => {
+                                app.cmd_dir_back();
                             }
                             SC_EXP => {
-                                app.mode_explode = !app.mode_explode;
-                                // TODO: Not sure why this needs to continue
-                                app.update_directory_listing();
-                                app.update_results();
-                                app.update_selection();
-                                app.update_preview();
-                                app.selection_index = 0;
+                                app.cmd_explode();
                                 continue;
                             }
                             _ => {}
                         }
-                        app.set_cwd(&selection.into());
+                        app.set_cwd(&app.selection.clone().into());
                         app.update_directory_listing();
                         app.update_results();
                         app.selection_index = 0;
                     }
-                    KeyCode::Down => {
-                        app.selection_index += 1;
-                        if app.selection_index >= app.results.len() as i32 {
-                            app.selection_index = 0;
-                        }
+                    cmd_name::SEL_DOWN => app.cmd_sel_down(),
+                    cmd_name::SEL_UP => app.cmd_app_sel_up(),
+                    cmd_name::DIR_UP => app.cmd_dir_up(),
+                    cmd_name::DIR_BACK => app.cmd_dir_back(),
+                    cmd_name::EXPLODE => app.cmd_explode(),
+                    _ => {
+                        dbg!("No command matched: {}", cmd);
                     }
-                    KeyCode::Up => {
-                        app.selection_index += -1;
-                        if app.selection_index < 0 && !app.results.is_empty() {
-                            app.selection_index = app.results.len() as i32 - 1;
-                        } else if app.results.is_empty() {
-                            app.selection_index = 0;
-                        }
-                    }
-                    KeyCode::Esc => break,
-                    _ => {}
                 }
 
                 // After key press handling
-
-                if input_changed {
-                    app.update_results();
-                }
 
                 app.update_selection();
                 app.update_preview();
