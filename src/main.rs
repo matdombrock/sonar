@@ -20,6 +20,7 @@ use ratatui::text::{Span, Text};
 use std::os::unix::fs::PermissionsExt;
 
 const DIR_PRETTY_LIMIT: usize = 1000;
+const SEARCH_LIMIT: usize = 1000;
 
 const NF_MAG: &str = "󰍉";
 const NF_LOOK: &str = "";
@@ -181,6 +182,7 @@ impl<'a> App<'a> {
         let mut scored: Vec<_> = self
             .dir_listing
             .iter()
+            .take(SEARCH_LIMIT) // Limit for performance
             .filter_map(|item| {
                 matcher
                     .fuzzy_match(&item.name, &self.input)
