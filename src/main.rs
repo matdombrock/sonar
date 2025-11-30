@@ -1178,5 +1178,6 @@ fn main() -> Result<()> {
 
     disable_raw_mode()?;
     clear();
+    println!("{} exited successfully.", APP_NAME);
     Ok(())
 }
