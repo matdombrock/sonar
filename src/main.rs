@@ -36,6 +36,7 @@ const NF_DIRO: &str = "󰉒";
 const NF_FILE: &str = "";
 const NF_CMD: &str = "";
 const NF_INFO: &str = "";
+const NF_CHECK: &str = "";
 
 // Shortcut strings
 const SC_DIR_UP: &str = " .. up";
@@ -54,6 +55,8 @@ mod cmd_name {
     pub const EXPLODE: &str = ":explode";
     pub const SELECT: &str = ":select";
     pub const CMD_TOGGLE: &str = ":cmd-toggle";
+    pub const MULTI_SEL: &str = ":multi-sel";
+    pub const MULTI_CLEAR: &str = ":multi-clear";
 }
 
 #[derive(Clone)]
@@ -63,12 +66,19 @@ struct ItemInfo {
     metadata: fs::Metadata,
 }
 
+enum LoopReturn {
+    Continue,
+    Break,
+    Ok,
+}
+
 struct App<'a> {
     input: String,
     dir_listing: Vec<ItemInfo>,
     results: Vec<ItemInfo>,
     selection: String,
     selection_index: i32,
+    multi_selection: Vec<PathBuf>,
     preview_content: Text<'a>,
     cwd: PathBuf,
     lwd: PathBuf,
@@ -76,13 +86,6 @@ struct App<'a> {
     command_window_open: bool,
     command_input: String,
 }
-
-enum LoopReturn {
-    Continue,
-    Break,
-    Ok,
-}
-
 impl<'a> App<'a> {
     fn new() -> Self {
         Self {
@@ -91,6 +94,7 @@ impl<'a> App<'a> {
             results: Vec::new(),
             selection: String::new(),
             selection_index: 0,
+            multi_selection: Vec::new(),
             preview_content: Default::default(),
             cwd: env::current_dir().unwrap(),
             lwd: env::current_dir().unwrap(),
@@ -181,15 +185,30 @@ impl<'a> App<'a> {
     fn dir_list_pretty(&self, list: &Vec<ItemInfo>) -> Text<'a> {
         let mut text = Text::default();
         for item in list.iter().take(DIR_PRETTY_LIMIT) {
+            // Check if this item is part of the multi selection
+            let mut ms = "";
+            let mut is_multi_selected = false;
+            let mut selected_path = self.cwd.clone();
+            selected_path.push(&item.name);
+            for ms_item in self.multi_selection.iter() {
+                if *ms_item == selected_path {
+                    is_multi_selected = true;
+                    break;
+                }
+            }
+            let ms_on = format!("{} ", NF_CHECK);
+            if is_multi_selected {
+                ms = &ms_on;
+            }
             // Limit for performance
             let line = if item.is_sc {
                 Line::styled(
-                    format!("{} {}", NF_CMD, item.name),
+                    format!("{}{} {}", ms, NF_CMD, item.name),
                     Style::default().fg(Color::Yellow),
                 )
             } else if item.metadata.is_dir() {
                 Line::styled(
-                    format!("{} {}/", NF_DIR, item.name),
+                    format!("{}{} {}/", ms, NF_DIR, item.name),
                     Style::default().fg(Color::Green),
                 )
             } else {
@@ -201,7 +220,7 @@ impl<'a> App<'a> {
                     item.name.clone()
                 };
                 Line::styled(
-                    format!("{} {}", NF_FILE, name),
+                    format!("{}{} {}", ms, NF_FILE, name),
                     Style::default().fg(Color::Cyan),
                 )
             };
@@ -431,6 +450,32 @@ impl<'a> App<'a> {
         self.command_window_open = !self.command_window_open;
     }
 
+    fn cmd_multi_sel(&mut self) {
+        let mut selected_path = self.cwd.clone();
+        selected_path.push(&self.selection);
+        let is_sc = self
+            .results
+            .get(self.selection_index as usize)
+            .map_or(false, |item| item.is_sc);
+        if is_sc {
+            return;
+        }
+        // Check if already in multi selection
+        if let Some(pos) = self
+            .multi_selection
+            .iter()
+            .position(|x| *x == selected_path)
+        {
+            self.multi_selection.remove(pos);
+        } else {
+            self.multi_selection.push(selected_path);
+        }
+    }
+
+    fn cmd_multi_clear(&mut self) {
+        self.multi_selection.clear();
+    }
+
     fn handle_command(&mut self, cmd: &str) -> LoopReturn {
         match cmd {
             cmd_name::SELECT => {
@@ -466,6 +511,8 @@ impl<'a> App<'a> {
             cmd_name::EXPLODE => self.cmd_explode(),
             cmd_name::HOME => self.cmd_home(),
             cmd_name::CMD_TOGGLE => self.cmd_cmd_window_toggle(),
+            cmd_name::MULTI_SEL => self.cmd_multi_sel(),
+            cmd_name::MULTI_CLEAR => self.cmd_multi_clear(),
             cmd_name::EXIT => return LoopReturn::Break,
             _ => {
                 dbg!("No command matched: {}", cmd);
@@ -538,6 +585,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                 // Process key to command mapping
                 let cmd = match (modifiers, code) {
                     (KeyModifiers::CONTROL, KeyCode::Char('t')) => cmd_name::CMD_TOGGLE,
+                    (KeyModifiers::CONTROL, KeyCode::Char('s')) => cmd_name::MULTI_SEL,
                     (KeyModifiers::NONE, KeyCode::Enter) => cmd_name::SELECT,
                     (KeyModifiers::NONE, KeyCode::Right) => cmd_name::SELECT,
                     (KeyModifiers::NONE, KeyCode::Up) => cmd_name::SEL_UP,
