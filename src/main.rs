@@ -96,6 +96,8 @@ mod cmd_name {
     pub const MENU_BACK: &str = ":menu-back";
     pub const LOG: &str = ":log";
     pub const LOG_CLEAR: &str = ":log-clear";
+    pub const SEC_UP: &str = ":sec-up";
+    pub const SEC_DOWN: &str = ":sec-down";
 }
 
 // Logs to temp directory
@@ -150,6 +152,8 @@ struct App<'a> {
     selection_index: i32,
     multi_selection: Vec<PathBuf>,
     preview_content: Text<'a>,
+    scroll_off_preview: u16,
+    scroll_off_output: u16,
     cwd: PathBuf,
     lwd: PathBuf,
     mode_explode: bool,
@@ -170,6 +174,8 @@ impl<'a> App<'a> {
             selection_index: 0,
             multi_selection: Vec::new(),
             preview_content: Default::default(),
+            scroll_off_preview: 0,
+            scroll_off_output: 0,
             cwd: env::current_dir().unwrap(),
             lwd: env::current_dir().unwrap(),
             mode_explode: false,
@@ -640,12 +646,21 @@ impl<'a> App<'a> {
         match (modifiers, code) {
             (KeyModifiers::NONE, KeyCode::Esc) => {
                 self.output_window_open = false;
+                return;
             }
             (KeyModifiers::NONE, KeyCode::Enter) => {
                 self.output_window_open = false;
+                return;
             }
             _ => {}
         }
+        // Special command matching just for output window
+        let cmd = match (modifiers, code) {
+            (KeyModifiers::ALT, KeyCode::Char('j')) => cmd_name::SEC_DOWN,
+            (KeyModifiers::ALT, KeyCode::Char('k')) => cmd_name::SEC_UP,
+            _ => "",
+        };
+        self.handle_cmd(&cmd);
     }
 
     fn input_cmd_window(&mut self, modifiers: KeyModifiers, code: KeyCode) -> LoopReturn {
@@ -702,6 +717,8 @@ impl<'a> App<'a> {
             (KeyModifiers::CONTROL, KeyCode::Char('l')) => cmd_name::SELECT,
             (KeyModifiers::NONE, KeyCode::Esc) => cmd_name::EXIT,
             (KeyModifiers::CONTROL, KeyCode::Char('q')) => cmd_name::EXIT,
+            (KeyModifiers::ALT, KeyCode::Char('j')) => cmd_name::SEC_DOWN,
+            (KeyModifiers::ALT, KeyCode::Char('k')) => cmd_name::SEC_UP,
             _ => "",
         };
         if !cmd.is_empty() {
@@ -866,6 +883,33 @@ impl<'a> App<'a> {
         self.output_window_open = true;
     }
 
+    fn cmd_sec_up(&mut self) {
+        if self.output_window_open {
+            if self.scroll_off_output >= 5 {
+                self.scroll_off_output -= 5;
+            } else {
+                self.scroll_off_output = 0;
+            }
+            log!("Output scroll offset: {}", self.scroll_off_output);
+            return;
+        }
+        if self.scroll_off_preview >= 5 {
+            self.scroll_off_preview -= 5;
+        } else {
+            self.scroll_off_preview = 0;
+        }
+        log!("Scroll offset: {}", self.scroll_off_preview);
+    }
+    fn cmd_sec_down(&mut self) {
+        if self.output_window_open {
+            self.scroll_off_output += 5;
+            log!("Output scroll offset: {}", self.scroll_off_output);
+            return;
+        }
+        self.scroll_off_preview += 5;
+        log!("Scroll offset: {}", self.scroll_off_preview);
+    }
+
     fn cmd_log_clear(&mut self) {
         let log_path = log::log_path();
         match fs::remove_file(&log_path) {
@@ -951,6 +995,8 @@ impl<'a> App<'a> {
             cmd_name::MENU_BACK => self.cmd_menu_back(),
             cmd_name::LOG => self.cmd_log_show(),
             cmd_name::LOG_CLEAR => self.cmd_log_clear(),
+            cmd_name::SEC_DOWN => self.cmd_sec_down(),
+            cmd_name::SEC_UP => self.cmd_sec_up(),
             cmd_name::EXIT => return LoopReturn::Break,
             _ => {
                 if !cmd.is_empty() {
@@ -1121,7 +1167,8 @@ fn render(frame: &mut Frame, app: &App) {
                 .border_style(Style::default().fg(Color::Yellow))
                 .style(Style::default().bg(Color::Black)),
         )
-        .wrap(Wrap { trim: false });
+        .wrap(Wrap { trim: false })
+        .scroll((app.scroll_off_preview as u16, app.scroll_off_preview as u16));
 
     // Render widgets
     frame.render_widget(input, left_vertical_chunks[0]);
@@ -1156,7 +1203,8 @@ fn render(frame: &mut Frame, app: &App) {
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::Magenta))
                     .style(Style::default().bg(Color::Black)),
-            );
+            )
+            .scroll((app.scroll_off_output as u16, app.scroll_off_output as u16));
         frame.render_widget(command_paragraph, popup_area);
     }
 }
