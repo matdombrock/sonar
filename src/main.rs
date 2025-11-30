@@ -6,6 +6,9 @@ use crossterm::{
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use mime_guess::mime;
+use ratatui::style::Color as RColor;
+use ratatui::style::{Color, Style};
+use ratatui::text::{Span, Text};
 use ratatui::{
     Frame, Terminal,
     layout::{Constraint, Rect},
@@ -15,20 +18,18 @@ use ratatui::{
 };
 use ratatui::{backend::CrosstermBackend, layout::Layout};
 use ratatui::{
+    // Might want ListItem
     layout::Direction,
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, List, ListState, Paragraph},
 };
 use std::env;
 use std::fs;
-use std::path::{Path, PathBuf};
-
-use ratatui::style::Color as RColor;
-use ratatui::style::{Color, Style};
-use ratatui::text::{Span, Text};
 use std::os::unix::fs::PermissionsExt;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style as SyntectStyle, ThemeSet};
 use syntect::parsing::SyntaxSet;
+// Might want Path
+use std::path::PathBuf;
 
 const DIR_PRETTY_LIMIT: usize = 1000;
 const SEARCH_LIMIT: usize = 1000;
