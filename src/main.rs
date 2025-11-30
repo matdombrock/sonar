@@ -89,6 +89,8 @@ mod cmd_name {
     pub const CMD_VIS_TOGGLE: &str = ":cmd-vis-toggle";
     pub const CMD_VIS_SHOW: &str = ":cmd-vis-show";
     pub const OUTPUT_WIN_TOGGLE: &str = ":output-toggle";
+    pub const OUTPUT_WIN_SHOW: &str = ":output-show";
+    pub const OUTPUT_WIN_HIDE: &str = ":output-hide";
     pub const MULTI_SEL: &str = ":multi-sel";
     pub const MULTI_CLEAR: &str = ":multi-clear";
     pub const MULTI_SHOW: &str = ":multi-show";
@@ -250,6 +252,11 @@ impl<'a> App<'a> {
         entries
     }
 
+    fn set_output(&mut self, text: &str) {
+        self.reset_sec_scroll();
+        self.output_text = text.to_string();
+    }
+
     fn fmtln_info(label: &str, value: &str) -> Line<'a> {
         Line::styled(
             format!("{} {}: {}", nf::INFO, label, value),
@@ -391,7 +398,9 @@ impl<'a> App<'a> {
     }
 
     fn update_preview(&mut self) {
+        log!("Updating preview for selection: {}", self.selection);
         self.preview_content = Default::default();
+        self.reset_sec_scroll();
         match self.selection.as_str() {
             sc::EXIT => {
                 self.preview_content += App::fmtln_sc("Exit the application");
@@ -626,7 +635,13 @@ impl<'a> App<'a> {
         self.results = scored.into_iter().map(|(_, item)| item).collect();
     }
 
-    fn update_selection(&mut self) {
+    fn reset_sec_scroll(&mut self) {
+        self.scroll_off_preview = 0;
+        self.scroll_off_output = 0;
+    }
+
+    fn update_selection(&mut self) -> bool {
+        let old = self.selection.clone();
         if self.selection_index < self.results.len() as i32 {
             self.selection = self.results[self.selection_index as usize].name.clone();
         } else if !self.results.is_empty() {
@@ -640,16 +655,17 @@ impl<'a> App<'a> {
         if let Some(pos) = self.selection.find("| ") {
             self.selection = self.selection[(pos + 2)..].to_string();
         }
+        return old != self.selection;
     }
 
     fn input_out_window(&mut self, modifiers: KeyModifiers, code: KeyCode) {
         match (modifiers, code) {
             (KeyModifiers::NONE, KeyCode::Esc) => {
-                self.output_window_open = false;
+                self.cmd_output_window_hide();
                 return;
             }
             (KeyModifiers::NONE, KeyCode::Enter) => {
-                self.output_window_open = false;
+                self.cmd_output_window_hide();
                 return;
             }
             _ => {}
@@ -783,6 +799,14 @@ impl<'a> App<'a> {
         self.output_window_open = !self.output_window_open;
     }
 
+    fn cmd_output_window_show(&mut self) {
+        self.output_window_open = true;
+    }
+
+    fn cmd_output_window_hide(&mut self) {
+        self.output_window_open = false;
+    }
+
     fn cmd_multi_sel(&mut self) {
         let mut selected_path = self.cwd.clone();
         selected_path.push(&self.selection);
@@ -807,21 +831,22 @@ impl<'a> App<'a> {
 
     fn cmd_multi_clear(&mut self) {
         self.multi_selection.clear();
-        self.output_text = "Multi selection cleared.".to_string();
-        self.output_window_open = true;
+        self.set_output("Multi selection cleared.");
+        self.cmd_output_window_show();
     }
 
     fn cmd_multi_show(&mut self) {
-        self.output_text = String::new();
+        let mut output_text = String::new();
         if self.multi_selection.is_empty() {
-            self.output_text = "No items in multi selection.".to_string();
-            self.output_window_open = true;
+            self.set_output("No items in multi selection.");
+            self.cmd_output_window_show();
             return;
         }
         for path in self.multi_selection.iter() {
-            self.output_text += &format!("{}\n", path.to_str().unwrap());
+            output_text += &format!("{}\n", path.to_str().unwrap());
         }
-        self.output_window_open = true;
+        self.set_output(&output_text);
+        self.cmd_output_window_show();
     }
 
     // Write multi selection to a file
@@ -837,12 +862,12 @@ impl<'a> App<'a> {
                 .join("\n"),
         )
         .unwrap_or(());
-        self.output_text = format!(
+        self.set_output(&format!(
             "Multi selection saved to {} ({} items).",
             file.to_str().unwrap(),
             self.multi_selection.len()
-        );
-        self.output_window_open = true;
+        ));
+        self.cmd_output_window_show();
     }
 
     fn cmd_cmd_vis_toggle(&mut self) {
@@ -872,15 +897,17 @@ impl<'a> App<'a> {
             Ok(content) => {
                 // Reverse the log content to show latest entries first
                 let mut lines: Vec<&str> = content.lines().collect();
+                lines.push("-------");
+                lines.push("Top of log");
                 lines.reverse();
                 let content = lines.join("\n");
-                self.output_text = content;
+                self.set_output(content.as_str());
             }
             Err(_) => {
-                self.output_text = "No log file found.".to_string();
+                self.set_output("No log file found.");
             }
         }
-        self.output_window_open = true;
+        self.cmd_output_window_show();
     }
 
     fn cmd_sec_up(&mut self) {
@@ -890,7 +917,7 @@ impl<'a> App<'a> {
             } else {
                 self.scroll_off_output = 0;
             }
-            log!("Output scroll offset: {}", self.scroll_off_output);
+            log!("Output scroll offset up: {}", self.scroll_off_output);
             return;
         }
         if self.scroll_off_preview >= 5 {
@@ -898,29 +925,43 @@ impl<'a> App<'a> {
         } else {
             self.scroll_off_preview = 0;
         }
-        log!("Scroll offset: {}", self.scroll_off_preview);
+        log!("Preview scroll offset up: {}", self.scroll_off_preview);
     }
     fn cmd_sec_down(&mut self) {
         if self.output_window_open {
-            self.scroll_off_output += 5;
-            log!("Output scroll offset: {}", self.scroll_off_output);
+            let height = self.output_text.split("\n").count() as u16;
+            if self.scroll_off_output < height {
+                self.scroll_off_output += 5;
+            }
+            log!(
+                "Output scroll offset down: {}/{}",
+                self.scroll_off_output,
+                height
+            );
             return;
         }
-        self.scroll_off_preview += 5;
-        log!("Scroll offset: {}", self.scroll_off_preview);
+        let height = self.preview_content.lines.len() as u16;
+        if self.scroll_off_preview < height {
+            self.scroll_off_preview += 5;
+        }
+        log!(
+            "Preview scroll offset down: {}/{}",
+            self.scroll_off_preview,
+            height
+        );
     }
 
     fn cmd_log_clear(&mut self) {
         let log_path = log::log_path();
         match fs::remove_file(&log_path) {
             Ok(_) => {
-                self.output_text = "Log file cleared.".to_string();
+                self.set_output("Log file cleared.");
             }
             Err(_) => {
-                self.output_text = "No log file found to clear.".to_string();
+                self.set_output("No log file found to clear.");
             }
         }
-        self.output_window_open = true;
+        self.cmd_output_window_show();
     }
 
     fn handle_cmd(&mut self, cmd: &str) -> LoopReturn {
@@ -986,6 +1027,8 @@ impl<'a> App<'a> {
             cmd_name::HOME => self.cmd_home(),
             cmd_name::CMD_WIN_TOGGLE => self.cmd_cmd_window_toggle(),
             cmd_name::OUTPUT_WIN_TOGGLE => self.cmd_output_window_toggle(),
+            cmd_name::OUTPUT_WIN_SHOW => self.cmd_output_window_show(),
+            cmd_name::OUTPUT_WIN_HIDE => self.cmd_output_window_hide(),
             cmd_name::MULTI_SEL => self.cmd_multi_sel(),
             cmd_name::MULTI_CLEAR => self.cmd_multi_clear(),
             cmd_name::MULTI_SHOW => self.cmd_multi_show(),
@@ -1039,7 +1082,6 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                     continue;
                 }
                 // Before key press handling
-                app.update_selection();
                 let input_changed = app.input_main(modifiers, code);
                 // Some things are not bindable
                 if input_changed {
@@ -1055,9 +1097,10 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                     LoopReturn::Ok => {}
                 }
                 // After key press handling
-
-                app.update_selection();
-                app.update_preview();
+                let sel_changed = app.update_selection();
+                if sel_changed {
+                    app.update_preview();
+                }
             }
         }
     }
@@ -1204,6 +1247,7 @@ fn render(frame: &mut Frame, app: &App) {
                     .border_style(Style::default().fg(Color::Magenta))
                     .style(Style::default().bg(Color::Black)),
             )
+            .wrap(Wrap { trim: false })
             .scroll((app.scroll_off_output as u16, app.scroll_off_output as u16));
         frame.render_widget(command_paragraph, popup_area);
     }

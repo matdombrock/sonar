@@ -6,7 +6,6 @@
 - Image previews
 - Handle large dirs
 - Fix file read not clearing
-- Window scrolling
 - Native commands (:!)
 
 ## VS FF
