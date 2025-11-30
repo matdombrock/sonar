@@ -367,12 +367,59 @@ mod log {
     }
 }
 
+#[derive(Clone, PartialEq)]
+enum NodeType {
+    File,
+    Directory,
+    Shortcut, // Internal shortcut
+    Command,  // Internal command
+    Executable,
+    Image,
+    Unknown,
+}
+
+fn get_node_type(metadata: fs::Metadata) -> NodeType {
+    if metadata.is_dir() {
+        NodeType::Directory
+    } else if metadata.is_file() {
+        // Check if executable
+        #[cfg(unix)]
+        {
+            if metadata.permissions().mode() & 0o111 != 0 {
+                return NodeType::Executable;
+            }
+        }
+        NodeType::File
+    } else {
+        NodeType::Unknown
+    }
+}
+
 // Information about a file or directory
 #[derive(Clone)]
 struct ItemInfo {
     name: String,
-    is_sc: bool,
-    metadata: fs::Metadata,
+    node_type: NodeType,
+}
+impl ItemInfo {
+    fn is_file(&self) -> bool {
+        return self.node_type == NodeType::File;
+    }
+    fn is_dir(&self) -> bool {
+        return self.node_type == NodeType::Directory;
+    }
+    fn is_shortcut(&self) -> bool {
+        return self.node_type == NodeType::Shortcut;
+    }
+    fn is_command(&self) -> bool {
+        return self.node_type == NodeType::Command;
+    }
+    fn is_executable(&self) -> bool {
+        return self.node_type == NodeType::Executable;
+    }
+    fn is_image(&self) -> bool {
+        return self.node_type == NodeType::Image;
+    }
 }
 
 // Return type for loop control
@@ -455,11 +502,11 @@ impl<'a> App<'a> {
                         let file_name_str = file_name.to_string_lossy();
                         match entry.metadata() {
                             Ok(metadata) => {
+                                let node_type = get_node_type(metadata.clone());
                                 if !self.mode_explode {
                                     entries.push(ItemInfo {
                                         name: file_name_str.to_string(),
-                                        is_sc: false,
-                                        metadata,
+                                        node_type,
                                     });
                                 } else {
                                     let sub_path = entry.path();
@@ -470,8 +517,7 @@ impl<'a> App<'a> {
                                     } else {
                                         entries.push(ItemInfo {
                                             name: sub_path.to_str().unwrap().to_string(),
-                                            is_sc: false,
-                                            metadata,
+                                            node_type,
                                         });
                                     }
                                 }
@@ -540,12 +586,12 @@ impl<'a> App<'a> {
                 ms = &ms_on;
             }
             // Limit for performance
-            let line = if item.is_sc {
+            let line = if item.is_shortcut() {
                 Line::styled(
                     format!("{}{} {}", ms, nf::CMD, item.name),
                     Style::default().fg(Color::Yellow),
                 )
-            } else if item.metadata.is_dir() {
+            } else if item.is_dir() {
                 Line::styled(
                     format!("{}{} {}/", ms, nf::DIR, item.name),
                     Style::default().fg(Color::Green),
@@ -788,8 +834,7 @@ impl<'a> App<'a> {
             for (_, cmd_data) in self.cmd_list.iter() {
                 self.listing.push(ItemInfo {
                     name: cmd_data.cmd.to_string(),
-                    is_sc: true,
-                    metadata: empty_metadata.clone(),
+                    node_type: NodeType::Command,
                 });
             }
             return;
@@ -799,63 +844,51 @@ impl<'a> App<'a> {
             self.listing.clear();
             self.listing.push(ItemInfo {
                 name: sc::MENU_BACK.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             });
             self.listing.push(ItemInfo {
                 name: sc::EXIT.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             });
             self.listing.push(ItemInfo {
                 name: sc::HOME.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             });
             self.listing.push(ItemInfo {
                 name: sc::DIR_UP.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             });
             self.listing.push(ItemInfo {
                 name: sc::EXP.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             });
             self.listing.push(ItemInfo {
                 name: sc::MULTI_SHOW.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             });
             self.listing.push(ItemInfo {
                 name: sc::MULTI_CLEAR.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             });
             self.listing.push(ItemInfo {
                 name: sc::MULTI_SAVE.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             });
             self.listing.push(ItemInfo {
                 name: sc::MULTI_COPY.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             });
             self.listing.push(ItemInfo {
                 name: sc::LOG.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             });
             self.listing.push(ItemInfo {
                 name: sc::LOG_CLEAR.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             });
             self.listing.push(ItemInfo {
                 name: sc::CMDS_LIST.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             });
             return;
         }
@@ -870,40 +903,35 @@ impl<'a> App<'a> {
             0,
             ItemInfo {
                 name: sc::DIR_BACK.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             },
         );
         listing.insert(
             0,
             ItemInfo {
                 name: sc::DIR_UP.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             },
         );
         listing.insert(
             0,
             ItemInfo {
                 name: sc::CMDS.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             },
         );
         listing.insert(
             0,
             ItemInfo {
                 name: sc::EXP.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             },
         );
         listing.insert(
             0,
             ItemInfo {
                 name: sc::EXIT.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             },
         );
         self.listing = listing;
@@ -1104,7 +1132,7 @@ impl<'a> App<'a> {
         let is_sc = self
             .results
             .get(self.selection_index as usize)
-            .map_or(false, |item| item.is_sc);
+            .map_or(false, |item| item.is_shortcut());
         if is_sc {
             return;
         }
