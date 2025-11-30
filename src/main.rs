@@ -36,7 +36,7 @@ const NF_DIRO: &str = "󰉒";
 const NF_FILE: &str = "";
 const NF_CMD: &str = "";
 const NF_INFO: &str = "";
-const NF_CHECK: &str = "";
+const NF_CHECK: &str = "";
 
 // Shortcut strings
 const SC_DIR_UP: &str = " .. up";
