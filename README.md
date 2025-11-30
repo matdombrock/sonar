@@ -6,8 +6,10 @@
 - Image previews
 - Handle large dirs
 - Fix file read not clearing
-- Native commands (:!)
 - Beter metadata handling
+- Use primary up/down for scrolling output
+- Tab to use primary up/down on preview?
+
 
 ## VS FF
 - Multi-select across dirs
