@@ -823,10 +823,6 @@ impl<'a> App<'a> {
     }
 
     fn update_listing(&mut self) {
-        let empty_metadata = match fs::metadata(&self.cwd) {
-            Ok(meta) => meta,
-            Err(_) => fs::metadata(".").unwrap(),
-        };
         // Handle cmd search
         if self.mode_cmd {
             log!("Updating command listing");
