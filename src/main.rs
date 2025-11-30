@@ -32,8 +32,11 @@ use syntect::parsing::SyntaxSet;
 use std::path::PathBuf;
 
 mod log {
+    pub fn log_path() -> std::path::PathBuf {
+        std::env::temp_dir().join("sona").join("sona.log")
+    }
     pub fn log_impl(msg: &str) {
-        let log_path = std::env::temp_dir().join("sona").join("sona.log");
+        let log_path = log_path();
         let _ = std::fs::create_dir_all(log_path.parent().unwrap());
         let mut file = std::fs::OpenOptions::new()
             .create(true)
@@ -51,6 +54,15 @@ mod log {
         };
     }
 }
+
+const LOGO: &str = r#"
+ ██╗███████╗ ██████╗ ███╗   ██╗ █████╗ ██╗ ██╗ ██╗ 
+██╔╝██╔════╝██╔═══██╗████╗  ██║██╔══██╗╚██╗╚██╗╚██╗
+██║ ███████╗██║   ██║██╔██╗ ██║███████║ ██║ ██║ ██║
+██║ ╚════██║██║   ██║██║╚██╗██║██╔══██║ ██║ ██║ ██║
+╚██╗███████║╚██████╔╝██║ ╚████║██║  ██║██╔╝██╔╝██╔╝
+ ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝ ╚═╝ ╚═╝ 
+"#;
 
 const DIR_PRETTY_LIMIT: usize = 1000;
 const SEARCH_LIMIT: usize = 1000;
@@ -76,15 +88,8 @@ const SC_CMDS: &str = " cmds";
 const SC_MULTI_SHOW: &str = " show multi-selection";
 const SC_MULTI_CLEAR: &str = " clear multi-selection";
 const SC_MULTI_SAVE: &str = " save multi-selection";
-
-const LOGO: &str = r#"
- ██╗███████╗ ██████╗ ███╗   ██╗ █████╗ ██╗ ██╗ ██╗ 
-██╔╝██╔════╝██╔═══██╗████╗  ██║██╔══██╗╚██╗╚██╗╚██╗
-██║ ███████╗██║   ██║██╔██╗ ██║███████║ ██║ ██║ ██║
-██║ ╚════██║██║   ██║██║╚██╗██║██╔══██║ ██║ ██║ ██║
-╚██╗███████║╚██████╔╝██║ ╚████║██║  ██║██╔╝██╔╝██╔╝
- ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝ ╚═╝ ╚═╝ 
-"#;
+const SC_LOG: &str = " show log";
+const SC_LOG_CLEAR: &str = " clear log";
 
 mod cmd_name {
     pub const EXIT: &str = ":exit";
@@ -104,6 +109,8 @@ mod cmd_name {
     pub const MULTI_SHOW: &str = ":multi-show";
     pub const MULTI_SAVE: &str = ":multi-save";
     pub const MENU_BACK: &str = ":menu-back";
+    pub const LOG: &str = ":log";
+    pub const LOG_CLEAR: &str = ":log-clear";
 }
 
 #[derive(Clone)]
@@ -362,7 +369,6 @@ impl<'a> App<'a> {
     }
 
     fn update_preview(&mut self) {
-        log!("Updating preview for selection: {}", self.selection);
         self.preview_content = Default::default();
         match self.selection.as_str() {
             SC_EXIT => {
@@ -429,6 +435,20 @@ impl<'a> App<'a> {
                 self.preview_content += App::fmtln_sc("Save multi-selection");
                 self.preview_content += Line::styled(
                     "Saves the multi-selection to a file. (Not implemented yet)",
+                    Style::default().fg(Color::Green),
+                );
+            }
+            SC_LOG => {
+                self.preview_content += App::fmtln_sc("Show application log");
+                self.preview_content += Line::styled(
+                    "Displays the application log in the output window.",
+                    Style::default().fg(Color::Green),
+                );
+            }
+            SC_LOG_CLEAR => {
+                self.preview_content += App::fmtln_sc("Clear application log");
+                self.preview_content += Line::styled(
+                    "Clear the application log file.",
                     Style::default().fg(Color::Green),
                 );
             }
@@ -512,6 +532,16 @@ impl<'a> App<'a> {
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
+            self.dir_listing.push(ItemInfo {
+                name: SC_LOG.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            });
+            self.dir_listing.push(ItemInfo {
+                name: SC_LOG_CLEAR.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            });
             return;
         }
         let mut listing = self.get_directory_listing(&self.cwd.clone());
@@ -559,7 +589,6 @@ impl<'a> App<'a> {
     }
 
     fn update_results(&mut self) {
-        log!("Updating search results for input: {}", self.input);
         let matcher = SkimMatcherV2::default();
         let mut scored: Vec<_> = self
             .dir_listing
@@ -576,7 +605,6 @@ impl<'a> App<'a> {
     }
 
     fn update_selection(&mut self) {
-        log!("Updating selection index: {}", self.selection_index);
         if self.selection_index < self.results.len() as i32 {
             self.selection = self.results[self.selection_index as usize].name.clone();
         } else if !self.results.is_empty() {
@@ -803,6 +831,36 @@ impl<'a> App<'a> {
         self.selection_index = 0;
     }
 
+    fn cmd_log_show(&mut self) {
+        let log_path = log::log_path();
+        match fs::read_to_string(&log_path) {
+            Ok(content) => {
+                // Reverse the log content to show latest entries first
+                let mut lines: Vec<&str> = content.lines().collect();
+                lines.reverse();
+                let content = lines.join("\n");
+                self.output_text = content;
+            }
+            Err(_) => {
+                self.output_text = "No log file found.".to_string();
+            }
+        }
+        self.output_window_open = true;
+    }
+
+    fn cmd_log_clear(&mut self) {
+        let log_path = log::log_path();
+        match fs::remove_file(&log_path) {
+            Ok(_) => {
+                self.output_text = "Log file cleared.".to_string();
+            }
+            Err(_) => {
+                self.output_text = "No log file found to clear.".to_string();
+            }
+        }
+        self.output_window_open = true;
+    }
+
     fn handle_cmd(&mut self, cmd: &str) -> LoopReturn {
         match cmd {
             cmd_name::SELECT => {
@@ -841,6 +899,12 @@ impl<'a> App<'a> {
                     SC_MULTI_SAVE => {
                         self.cmd_multi_save();
                     }
+                    SC_LOG => {
+                        self.cmd_log_show();
+                    }
+                    SC_LOG_CLEAR => {
+                        self.cmd_log_clear();
+                    }
                     _ => {
                         self.set_cwd(&self.selection.clone().into());
                         self.update_listing();
@@ -864,6 +928,8 @@ impl<'a> App<'a> {
             cmd_name::CMD_VIS_TOGGLE => self.cmd_cmd_vis_toggle(),
             cmd_name::CMD_VIS_SHOW => self.cmd_vis_show(),
             cmd_name::MENU_BACK => self.cmd_menu_back(),
+            cmd_name::LOG => self.cmd_log_show(),
+            cmd_name::LOG_CLEAR => self.cmd_log_clear(),
             cmd_name::EXIT => return LoopReturn::Break,
             _ => {
                 log!("No command matched: {}", cmd);
@@ -1076,7 +1142,7 @@ fn clear() {
 }
 
 fn main() -> Result<()> {
-    log!("Starting application");
+    log!("======= Starting application =======");
     color_eyre::install()?;
     clear();
     enable_raw_mode()?;
