@@ -74,6 +74,7 @@ mod cmd_name {
     pub const SELECT: &str = ":select";
     pub const CMD_WIN_TOGGLE: &str = ":cmd";
     pub const CMD_VIS_TOGGLE: &str = ":cmd-vis-toggle";
+    pub const CMD_VIS_SHOW: &str = ":cmd-vis-show";
     pub const OUTPUT_WIN_TOGGLE: &str = ":output-toggle";
     pub const MULTI_SEL: &str = ":multi-sel";
     pub const MULTI_CLEAR: &str = ":multi-clear";
@@ -630,10 +631,18 @@ impl<'a> App<'a> {
 
     fn cmd_dir_up(&mut self) {
         self.selection = "..".to_string();
+        self.set_cwd(&self.selection.clone().into());
+        self.update_listing();
+        self.update_results();
+        self.selection_index = 0;
     }
 
     fn cmd_dir_back(&mut self) {
         self.selection = self.lwd.to_str().unwrap().to_string();
+        self.set_cwd(&self.selection.clone().into());
+        self.update_listing();
+        self.update_results();
+        self.selection_index = 0;
     }
 
     fn cmd_explode(&mut self) {
@@ -734,10 +743,23 @@ impl<'a> App<'a> {
 
     fn cmd_cmd_vis_toggle(&mut self) {
         self.mode_vis_commands = !self.mode_vis_commands;
+        self.update_listing();
+        self.update_results();
+        self.selection_index = 0;
+    }
+
+    fn cmd_vis_show(&mut self) {
+        self.mode_vis_commands = true;
+        self.update_listing();
+        self.update_results();
+        self.selection_index = 0;
     }
 
     fn cmd_menu_back(&mut self) {
         self.mode_vis_commands = false;
+        self.update_listing();
+        self.update_results();
+        self.selection_index = 0;
     }
 
     // TODO: LoopReturn deprecated?
@@ -754,34 +776,20 @@ impl<'a> App<'a> {
                     }
                     SC_DIR_UP => {
                         self.cmd_dir_up();
-                        self.set_cwd(&self.selection.clone().into());
-                        self.update_listing();
-                        self.update_results();
-                        self.selection_index = 0;
                     }
                     SC_DIR_BACK => {
                         self.cmd_dir_back();
-                        self.set_cwd(&self.selection.clone().into());
-                        self.update_listing();
-                        self.update_results();
-                        self.selection_index = 0;
                     }
                     SC_EXP => {
                         self.cmd_explode();
                         return LoopReturn::Continue;
                     }
                     SC_CMDS => {
-                        self.mode_vis_commands = true;
-                        self.update_listing();
-                        self.update_results();
-                        self.selection_index = 0;
+                        self.cmd_vis_show();
                         return LoopReturn::Continue;
                     }
                     SC_MENU_BACK => {
-                        self.mode_vis_commands = false;
-                        self.update_listing();
-                        self.update_results();
-                        self.selection_index = 0;
+                        self.cmd_menu_back();
                         return LoopReturn::Continue;
                     }
                     SC_MULTI_SHOW => {
@@ -793,7 +801,12 @@ impl<'a> App<'a> {
                     SC_MULTI_SAVE => {
                         self.cmd_multi_save();
                     }
-                    _ => {}
+                    _ => {
+                        self.set_cwd(&self.selection.clone().into());
+                        self.update_listing();
+                        self.update_results();
+                        self.selection_index = 0;
+                    }
                 }
             }
             cmd_name::SEL_DOWN => self.cmd_sel_down(),
@@ -809,6 +822,7 @@ impl<'a> App<'a> {
             cmd_name::MULTI_SHOW => self.cmd_multi_show(),
             cmd_name::MULTI_SAVE => self.cmd_multi_save(),
             cmd_name::CMD_VIS_TOGGLE => self.cmd_cmd_vis_toggle(),
+            cmd_name::CMD_VIS_SHOW => self.cmd_vis_show(),
             cmd_name::MENU_BACK => self.cmd_menu_back(),
             cmd_name::EXIT => return LoopReturn::Break,
             _ => {
