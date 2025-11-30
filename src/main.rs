@@ -694,6 +694,8 @@ impl<'a> App<'a> {
 
     fn cmd_multi_clear(&mut self) {
         self.multi_selection.clear();
+        self.output_text = "Multi selection cleared.".to_string();
+        self.output_window_open = true;
     }
 
     fn cmd_multi_show(&mut self) {
