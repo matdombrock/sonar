@@ -22,9 +22,9 @@ use ratatui::{
     layout::Direction,
     widgets::{Block, Borders, List, ListState, Paragraph},
 };
-use std::env;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
+use std::{env, process::Command};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style as SyntectStyle, ThemeSet};
 use syntect::parsing::SyntaxSet;
@@ -71,6 +71,7 @@ mod sc {
     pub const MULTI_SHOW: &str = " show multi-selection";
     pub const MULTI_CLEAR: &str = " clear multi-selection";
     pub const MULTI_SAVE: &str = " save multi-selection";
+    pub const MULTI_COPY: &str = " copy multi-selection";
     pub const LOG: &str = " show log";
     pub const LOG_CLEAR: &str = " clear log";
 }
@@ -95,6 +96,7 @@ mod cmd_name {
     pub const MULTI_CLEAR: &str = ":multi-clear";
     pub const MULTI_SHOW: &str = ":multi-show";
     pub const MULTI_SAVE: &str = ":multi-save";
+    pub const MULTI_COPY: &str = ":multi-copy";
     pub const MENU_BACK: &str = ":menu-back";
     pub const LOG: &str = ":log";
     pub const LOG_CLEAR: &str = ":log-clear";
@@ -160,9 +162,9 @@ struct App<'a> {
     lwd: PathBuf,
     mode_explode: bool,
     mode_vis_commands: bool,
-    command_window_open: bool,
+    show_command_window: bool,
     command_input: String,
-    output_window_open: bool,
+    show_output_window: bool,
     output_text: String,
 }
 impl<'a> App<'a> {
@@ -182,9 +184,9 @@ impl<'a> App<'a> {
             lwd: env::current_dir().unwrap(),
             mode_explode: false,
             mode_vis_commands: false,
-            command_window_open: false,
+            show_command_window: false,
             command_input: String::new(),
-            output_window_open: false,
+            show_output_window: false,
             output_text: String::new(),
         }
     }
@@ -465,7 +467,14 @@ impl<'a> App<'a> {
             sc::MULTI_SAVE => {
                 self.preview_content += App::fmtln_sc("Save multi-selection");
                 self.preview_content += Line::styled(
-                    "Saves the multi-selection to a file. (Not implemented yet)",
+                    "Saves the multi-selection to a file.",
+                    Style::default().fg(Color::Green),
+                );
+            }
+            sc::MULTI_COPY => {
+                self.preview_content += App::fmtln_sc("Copy multi-selection");
+                self.preview_content += Line::styled(
+                    "Copies the multi-selection to the clipboard.",
                     Style::default().fg(Color::Green),
                 );
             }
@@ -560,6 +569,11 @@ impl<'a> App<'a> {
             });
             self.listing.push(ItemInfo {
                 name: sc::MULTI_SAVE.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            });
+            self.listing.push(ItemInfo {
+                name: sc::MULTI_COPY.to_string(),
                 is_sc: true,
                 metadata: empty_metadata.clone(),
             });
@@ -695,7 +709,7 @@ impl<'a> App<'a> {
                 return self.handle_cmd(&cmd);
             }
             (KeyModifiers::NONE, KeyCode::Esc) => {
-                self.command_window_open = false;
+                self.show_command_window = false;
             }
             _ => {}
         }
@@ -792,19 +806,19 @@ impl<'a> App<'a> {
     }
 
     fn cmd_cmd_window_toggle(&mut self) {
-        self.command_window_open = !self.command_window_open;
+        self.show_command_window = !self.show_command_window;
     }
 
     fn cmd_output_window_toggle(&mut self) {
-        self.output_window_open = !self.output_window_open;
+        self.show_output_window = !self.show_output_window;
     }
 
     fn cmd_output_window_show(&mut self) {
-        self.output_window_open = true;
+        self.show_output_window = true;
     }
 
     fn cmd_output_window_hide(&mut self) {
-        self.output_window_open = false;
+        self.show_output_window = false;
     }
 
     fn cmd_multi_sel(&mut self) {
@@ -870,6 +884,41 @@ impl<'a> App<'a> {
         self.cmd_output_window_show();
     }
 
+    // Copy multi selection to the cwd
+    fn cmd_multi_copy(&mut self) {
+        let mut output_text = String::new();
+        if self.multi_selection.is_empty() {
+            self.set_output("No items in multi selection to copy.");
+            self.cmd_output_window_show();
+            return;
+        }
+        for path in self.multi_selection.iter() {
+            let file_name = match path.file_name() {
+                Some(name) => name,
+                None => continue,
+            };
+            let dest_path = self.cwd.join(file_name);
+            match fs::copy(&path, &dest_path) {
+                Ok(_) => {
+                    output_text += &format!(
+                        "Copied {} to {}\n",
+                        path.to_str().unwrap(),
+                        dest_path.to_str().unwrap()
+                    );
+                }
+                Err(e) => {
+                    output_text += &format!(
+                        "Failed to copy {}: {}\n",
+                        path.to_str().unwrap(),
+                        e.to_string()
+                    );
+                }
+            }
+        }
+        self.set_output(&output_text);
+        self.cmd_output_window_show();
+    }
+
     fn cmd_cmd_vis_toggle(&mut self) {
         self.mode_vis_commands = !self.mode_vis_commands;
         self.update_listing();
@@ -911,7 +960,7 @@ impl<'a> App<'a> {
     }
 
     fn cmd_sec_up(&mut self) {
-        if self.output_window_open {
+        if self.show_output_window {
             if self.scroll_off_output >= 5 {
                 self.scroll_off_output -= 5;
             } else {
@@ -928,7 +977,7 @@ impl<'a> App<'a> {
         log!("Preview scroll offset up: {}", self.scroll_off_preview);
     }
     fn cmd_sec_down(&mut self) {
-        if self.output_window_open {
+        if self.show_output_window {
             let height = self.output_text.split("\n").count() as u16;
             if self.scroll_off_output < height {
                 self.scroll_off_output += 5;
@@ -972,6 +1021,7 @@ impl<'a> App<'a> {
                 self.update_results();
                 // Get selection
                 let selection = self.selection.clone();
+                // NOTE: Handle shortcuts selections
                 match selection.as_str() {
                     sc::EXIT => return LoopReturn::Break,
                     sc::HOME => {
@@ -1005,6 +1055,7 @@ impl<'a> App<'a> {
                     sc::MULTI_SAVE => {
                         self.cmd_multi_save();
                     }
+                    sc::MULTI_COPY => {}
                     sc::LOG => {
                         self.cmd_log_show();
                     }
@@ -1012,6 +1063,7 @@ impl<'a> App<'a> {
                         self.cmd_log_clear();
                     }
                     _ => {
+                        // Selection is a file or directory
                         self.set_cwd(&self.selection.clone().into());
                         self.update_listing();
                         self.update_results();
@@ -1033,6 +1085,7 @@ impl<'a> App<'a> {
             cmd_name::MULTI_CLEAR => self.cmd_multi_clear(),
             cmd_name::MULTI_SHOW => self.cmd_multi_show(),
             cmd_name::MULTI_SAVE => self.cmd_multi_save(),
+            cmd_name::MULTI_COPY => self.cmd_multi_copy(),
             cmd_name::CMD_VIS_TOGGLE => self.cmd_cmd_vis_toggle(),
             cmd_name::CMD_VIS_SHOW => self.cmd_vis_show(),
             cmd_name::MENU_BACK => self.cmd_menu_back(),
@@ -1042,8 +1095,30 @@ impl<'a> App<'a> {
             cmd_name::SEC_UP => self.cmd_sec_up(),
             cmd_name::EXIT => return LoopReturn::Break,
             _ => {
+                // If the cmd starts with `!` treat it as a shell command
+
+                if cmd.starts_with('!') {
+                    let shell_cmd = &cmd[1..];
+                    log!("Running shell command: {}", shell_cmd);
+                    match Command::new("sh").arg("-c").arg(shell_cmd).output() {
+                        Ok(output) => {
+                            let stdout = String::from_utf8_lossy(&output.stdout);
+                            let stderr = String::from_utf8_lossy(&output.stderr);
+                            let combined_output = format!("{}{}", stdout, stderr);
+                            self.set_output(&combined_output);
+                        }
+                        Err(e) => {
+                            self.set_output(&format!("Failed to run command: {}", e));
+                        }
+                    }
+                    self.cmd_output_window_show();
+                    return LoopReturn::Ok;
+                }
+                // If the command isnt empty print the incorrect command
                 if !cmd.is_empty() {
                     log!("No command matched: {}", cmd);
+                    self.set_output(&format!("No command matched: {}", cmd));
+                    self.cmd_output_window_show();
                 }
             }
         }
@@ -1067,12 +1142,12 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
             }) = event::read()?
             {
                 // Output window input handling
-                if app.output_window_open {
+                if app.show_output_window {
                     app.input_out_window(modifiers, code);
                     continue;
                 }
                 // Command window input handling
-                if app.command_window_open {
+                if app.show_command_window {
                     let lr = app.input_cmd_window(modifiers, code);
                     match lr {
                         LoopReturn::Continue => continue,
@@ -1219,7 +1294,7 @@ fn render(frame: &mut Frame, app: &App) {
     frame.render_widget(preview, horizontal_chunks[1]);
 
     // Render command popup if open
-    if app.command_window_open {
+    if app.show_command_window {
         let popup_area = centered_rect(50, 10, area);
         let command_str = format!("> {}|", app.command_input);
         frame.render_widget(Clear, popup_area); // Clears the area first
@@ -1235,7 +1310,7 @@ fn render(frame: &mut Frame, app: &App) {
         frame.render_widget(command_paragraph, popup_area);
     }
 
-    if app.output_window_open {
+    if app.show_output_window {
         let popup_area = centered_rect(50, 90, area);
         frame.render_widget(Clear, popup_area); // Clears the area first
         let command_paragraph = Paragraph::new(app.output_text.clone())
