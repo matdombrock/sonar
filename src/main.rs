@@ -1,11 +1,17 @@
 use color_eyre::eyre::Result;
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent},
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
-use ratatui::{Frame, Terminal, layout::Constraint, prelude::Backend, text::Line, widgets::Wrap};
+use ratatui::{
+    Frame, Terminal,
+    layout::{Constraint, Rect},
+    prelude::Backend,
+    text::Line,
+    widgets::{Clear, Wrap},
+};
 use ratatui::{backend::CrosstermBackend, layout::Layout};
 use ratatui::{
     layout::Direction,
@@ -19,6 +25,9 @@ use ratatui::style::{Color, Style};
 use ratatui::text::{Span, Text};
 use std::os::unix::fs::PermissionsExt;
 
+const DIR_PRETTY_LIMIT: usize = 1000;
+const SEARCH_LIMIT: usize = 1000;
+
 const NF_MAG: &str = "󰍉";
 const NF_LOOK: &str = "";
 const NF_SEL: &str = ""; //➤
@@ -27,13 +36,28 @@ const NF_DIRO: &str = "󰉒";
 const NF_FILE: &str = "";
 const NF_CMD: &str = "";
 const NF_INFO: &str = "";
+const NF_CHECK: &str = "";
 
 // Shortcut strings
-const SC_UP: &str = " .. up";
+const SC_DIR_UP: &str = " .. up";
 const SC_EXIT: &str = " exit";
 const SC_HOME: &str = "~ home";
-const SC_BACK: &str = " back";
+const SC_DIR_BACK: &str = " back";
 const SC_EXP: &str = " explode";
+
+mod cmd_name {
+    pub const EXIT: &str = ":exit";
+    pub const HOME: &str = ":home";
+    pub const SEL_UP: &str = ":sel-up";
+    pub const SEL_DOWN: &str = ":sel-down";
+    pub const DIR_UP: &str = ":dir-up";
+    pub const DIR_BACK: &str = ":dir-back";
+    pub const EXPLODE: &str = ":explode";
+    pub const SELECT: &str = ":select";
+    pub const CMD_TOGGLE: &str = ":cmd-toggle";
+    pub const MULTI_SEL: &str = ":multi-sel";
+    pub const MULTI_CLEAR: &str = ":multi-clear";
+}
 
 #[derive(Clone)]
 struct ItemInfo {
@@ -42,18 +66,26 @@ struct ItemInfo {
     metadata: fs::Metadata,
 }
 
+enum LoopReturn {
+    Continue,
+    Break,
+    Ok,
+}
+
 struct App<'a> {
     input: String,
     dir_listing: Vec<ItemInfo>,
     results: Vec<ItemInfo>,
     selection: String,
     selection_index: i32,
+    multi_selection: Vec<PathBuf>,
     preview_content: Text<'a>,
     cwd: PathBuf,
     lwd: PathBuf,
     mode_explode: bool,
+    command_window_open: bool,
+    command_input: String,
 }
-
 impl<'a> App<'a> {
     fn new() -> Self {
         Self {
@@ -62,10 +94,13 @@ impl<'a> App<'a> {
             results: Vec::new(),
             selection: String::new(),
             selection_index: 0,
+            multi_selection: Vec::new(),
             preview_content: Default::default(),
             cwd: env::current_dir().unwrap(),
             lwd: env::current_dir().unwrap(),
             mode_explode: false,
+            command_window_open: false,
+            command_input: String::new(),
         }
     }
 
@@ -128,83 +163,6 @@ impl<'a> App<'a> {
         entries
     }
 
-    fn update_directory_listing(&mut self) {
-        let mut listing = self.get_directory_listing(&self.cwd.clone());
-        let empty_metadata = fs::metadata(&self.cwd).unwrap();
-        listing.insert(
-            0,
-            ItemInfo {
-                name: SC_HOME.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            },
-        );
-        listing.insert(
-            0,
-            ItemInfo {
-                name: SC_BACK.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            },
-        );
-        listing.insert(
-            0,
-            ItemInfo {
-                name: SC_UP.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            },
-        );
-        listing.insert(
-            0,
-            ItemInfo {
-                name: SC_EXP.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            },
-        );
-        listing.insert(
-            0,
-            ItemInfo {
-                name: SC_EXIT.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            },
-        );
-        self.dir_listing = listing;
-    }
-
-    fn update_results(&mut self) {
-        let matcher = SkimMatcherV2::default();
-        let mut scored: Vec<_> = self
-            .dir_listing
-            .iter()
-            .filter_map(|item| {
-                matcher
-                    .fuzzy_match(&item.name, &self.input)
-                    .map(|score| (score, item.clone()))
-            })
-            .collect();
-        scored.sort_by(|a, b| b.0.cmp(&a.0));
-        self.results = scored.into_iter().map(|(_, item)| item).collect();
-    }
-
-    fn update_selection(&mut self) {
-        if self.selection_index < self.results.len() as i32 {
-            self.selection = self.results[self.selection_index as usize].name.clone();
-        } else if !self.results.is_empty() {
-            self.selection_index = 0;
-            self.selection = String::new();
-        } else {
-            self.selection_index = 0;
-            self.selection = String::new();
-        }
-        // Remove icon prefix from selection
-        if let Some(pos) = self.selection.find("| ") {
-            self.selection = self.selection[(pos + 2)..].to_string();
-        }
-    }
-
     fn fmtln_info(label: &str, value: &str) -> Line<'a> {
         Line::styled(
             format!("{} {}: {}", NF_INFO, label, value),
@@ -226,15 +184,31 @@ impl<'a> App<'a> {
 
     fn dir_list_pretty(&self, list: &Vec<ItemInfo>) -> Text<'a> {
         let mut text = Text::default();
-        for item in list {
+        for item in list.iter().take(DIR_PRETTY_LIMIT) {
+            // Check if this item is part of the multi selection
+            let mut ms = "";
+            let mut is_multi_selected = false;
+            let mut selected_path = self.cwd.clone();
+            selected_path.push(&item.name);
+            for ms_item in self.multi_selection.iter() {
+                if *ms_item == selected_path {
+                    is_multi_selected = true;
+                    break;
+                }
+            }
+            let ms_on = format!("{} ", NF_CHECK);
+            if is_multi_selected {
+                ms = &ms_on;
+            }
+            // Limit for performance
             let line = if item.is_sc {
                 Line::styled(
-                    format!("{} {}", NF_CMD, item.name),
+                    format!("{}{} {}", ms, NF_CMD, item.name),
                     Style::default().fg(Color::Yellow),
                 )
             } else if item.metadata.is_dir() {
                 Line::styled(
-                    format!("{} {}/", NF_DIR, item.name),
+                    format!("{}{} {}/", ms, NF_DIR, item.name),
                     Style::default().fg(Color::Green),
                 )
             } else {
@@ -246,7 +220,7 @@ impl<'a> App<'a> {
                     item.name.clone()
                 };
                 Line::styled(
-                    format!("{} {}", NF_FILE, name),
+                    format!("{}{} {}", ms, NF_FILE, name),
                     Style::default().fg(Color::Cyan),
                 )
             };
@@ -305,6 +279,84 @@ impl<'a> App<'a> {
         }
     }
 
+    fn update_directory_listing(&mut self) {
+        let mut listing = self.get_directory_listing(&self.cwd.clone());
+        let empty_metadata = fs::metadata(&self.cwd).unwrap();
+        listing.insert(
+            0,
+            ItemInfo {
+                name: SC_HOME.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            },
+        );
+        listing.insert(
+            0,
+            ItemInfo {
+                name: SC_DIR_BACK.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            },
+        );
+        listing.insert(
+            0,
+            ItemInfo {
+                name: SC_DIR_UP.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            },
+        );
+        listing.insert(
+            0,
+            ItemInfo {
+                name: SC_EXP.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            },
+        );
+        listing.insert(
+            0,
+            ItemInfo {
+                name: SC_EXIT.to_string(),
+                is_sc: true,
+                metadata: empty_metadata.clone(),
+            },
+        );
+        self.dir_listing = listing;
+    }
+
+    fn update_results(&mut self) {
+        let matcher = SkimMatcherV2::default();
+        let mut scored: Vec<_> = self
+            .dir_listing
+            .iter()
+            .take(SEARCH_LIMIT) // Limit for performance
+            .filter_map(|item| {
+                matcher
+                    .fuzzy_match(&item.name, &self.input)
+                    .map(|score| (score, item.clone()))
+            })
+            .collect();
+        scored.sort_by(|a, b| b.0.cmp(&a.0));
+        self.results = scored.into_iter().map(|(_, item)| item).collect();
+    }
+
+    fn update_selection(&mut self) {
+        if self.selection_index < self.results.len() as i32 {
+            self.selection = self.results[self.selection_index as usize].name.clone();
+        } else if !self.results.is_empty() {
+            self.selection_index = 0;
+            self.selection = String::new();
+        } else {
+            self.selection_index = 0;
+            self.selection = String::new();
+        }
+        // Remove icon prefix from selection
+        if let Some(pos) = self.selection.find("| ") {
+            self.selection = self.selection[(pos + 2)..].to_string();
+        }
+    }
+
     fn update_preview(&mut self) {
         self.preview_content = Default::default();
         match self.selection.as_str() {
@@ -315,13 +367,22 @@ impl<'a> App<'a> {
                 self.preview_content += App::fmtln_path(&dirs::home_dir().unwrap());
                 self.preview_content += App::fmtln_sc("Go to the home directory");
             }
-            SC_UP => {
+            SC_DIR_UP => {
                 self.preview_content += App::fmtln_path(&self.cwd);
                 self.preview_content += App::fmtln_sc("Go up to the parent directory");
             }
-            SC_BACK => {
+            SC_DIR_BACK => {
                 self.preview_content += App::fmtln_path(&self.lwd);
                 self.preview_content += App::fmtln_sc("Go back to the last working directory");
+            }
+            SC_EXP => {
+                self.preview_content += App::fmtln_sc("Toggle explode mode");
+                self.preview_content += Line::styled(
+                    "Shows all files in subdirectories under the current directory.",
+                    Style::default().fg(Color::Green),
+                );
+                let status = if self.mode_explode { "ON" } else { "OFF" };
+                self.preview_content += App::fmtln_info("explode mode", status);
             }
             _ => {
                 // TODO:
@@ -343,6 +404,122 @@ impl<'a> App<'a> {
             }
         }
     }
+
+    fn cmd_home(&mut self) {
+        self.set_cwd(&dirs::home_dir().unwrap());
+        self.update_directory_listing();
+        self.update_results();
+        self.selection_index = 0;
+    }
+
+    fn cmd_dir_up(&mut self) {
+        self.selection = "..".to_string();
+    }
+
+    fn cmd_dir_back(&mut self) {
+        self.selection = self.lwd.to_str().unwrap().to_string();
+    }
+
+    fn cmd_explode(&mut self) {
+        self.mode_explode = !self.mode_explode;
+        // TODO: Not sure why this needs to continue
+        self.update_directory_listing();
+        self.update_results();
+        self.update_selection();
+        self.update_preview();
+        self.selection_index = 0;
+    }
+
+    fn cmd_sel_down(&mut self) {
+        self.selection_index += 1;
+        if self.selection_index >= self.results.len() as i32 {
+            self.selection_index = 0;
+        }
+    }
+
+    fn cmd_sel_up(&mut self) {
+        self.selection_index += -1;
+        if self.selection_index < 0 && !self.results.is_empty() {
+            self.selection_index = self.results.len() as i32 - 1;
+        } else if self.results.is_empty() {
+            self.selection_index = 0;
+        }
+    }
+
+    fn cmd_cmd_window_toggle(&mut self) {
+        self.command_window_open = !self.command_window_open;
+    }
+
+    fn cmd_multi_sel(&mut self) {
+        let mut selected_path = self.cwd.clone();
+        selected_path.push(&self.selection);
+        let is_sc = self
+            .results
+            .get(self.selection_index as usize)
+            .map_or(false, |item| item.is_sc);
+        if is_sc {
+            return;
+        }
+        // Check if already in multi selection
+        if let Some(pos) = self
+            .multi_selection
+            .iter()
+            .position(|x| *x == selected_path)
+        {
+            self.multi_selection.remove(pos);
+        } else {
+            self.multi_selection.push(selected_path);
+        }
+    }
+
+    fn cmd_multi_clear(&mut self) {
+        self.multi_selection.clear();
+    }
+
+    fn handle_command(&mut self, cmd: &str) -> LoopReturn {
+        match cmd {
+            cmd_name::SELECT => {
+                self.input = String::new();
+                let selection = self.selection.clone();
+                match selection.as_str() {
+                    SC_EXIT => return LoopReturn::Break,
+                    SC_HOME => {
+                        self.cmd_home();
+                        return LoopReturn::Continue;
+                    }
+                    SC_DIR_UP => {
+                        self.cmd_dir_up();
+                    }
+                    SC_DIR_BACK => {
+                        self.cmd_dir_back();
+                    }
+                    SC_EXP => {
+                        self.cmd_explode();
+                        return LoopReturn::Continue;
+                    }
+                    _ => {}
+                }
+                self.set_cwd(&self.selection.clone().into());
+                self.update_directory_listing();
+                self.update_results();
+                self.selection_index = 0;
+            }
+            cmd_name::SEL_DOWN => self.cmd_sel_down(),
+            cmd_name::SEL_UP => self.cmd_sel_up(),
+            cmd_name::DIR_UP => self.cmd_dir_up(),
+            cmd_name::DIR_BACK => self.cmd_dir_back(),
+            cmd_name::EXPLODE => self.cmd_explode(),
+            cmd_name::HOME => self.cmd_home(),
+            cmd_name::CMD_TOGGLE => self.cmd_cmd_window_toggle(),
+            cmd_name::MULTI_SEL => self.cmd_multi_sel(),
+            cmd_name::MULTI_CLEAR => self.cmd_multi_clear(),
+            cmd_name::EXIT => return LoopReturn::Break,
+            _ => {
+                dbg!("No command matched: {}", cmd);
+            }
+        }
+        LoopReturn::Ok
+    }
 }
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
@@ -355,74 +532,80 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
     loop {
         terminal.draw(|f| render(f, &app))?;
         if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(KeyEvent { code, .. }) = event::read()? {
+            if let Event::Key(KeyEvent {
+                code, modifiers, ..
+            }) = event::read()?
+            {
+                // Command window input handling
+                if app.command_window_open {
+                    match (modifiers, code) {
+                        (KeyModifiers::NONE, KeyCode::Char(c)) => {
+                            app.command_input.push(c);
+                        }
+                        (KeyModifiers::NONE, KeyCode::Backspace) => {
+                            app.command_input.pop();
+                        }
+                        (KeyModifiers::NONE, KeyCode::Enter) => {
+                            // Handle commands
+                            let cmd = app.command_input.clone();
+                            let lr = app.handle_command(&cmd);
+                            match lr {
+                                LoopReturn::Continue => continue,
+                                LoopReturn::Break => break,
+                                LoopReturn::Ok => {}
+                            }
+                            app.command_input = String::new();
+                        }
+                        (KeyModifiers::NONE, KeyCode::Esc) => {
+                            app.command_window_open = false;
+                        }
+                        _ => {}
+                    }
+                    continue;
+                }
                 // Before key press handling
                 app.update_selection();
                 let mut input_changed = false;
-                match code {
-                    KeyCode::Char(c) => {
+                // Some things are not bindable
+                match (modifiers, code) {
+                    (KeyModifiers::NONE, KeyCode::Char(c)) => {
                         app.input.push(c);
                         input_changed = true;
                     }
-                    KeyCode::Backspace => {
+                    (KeyModifiers::NONE, KeyCode::Backspace) => {
                         app.input.pop();
                         input_changed = true;
                     }
-                    KeyCode::Enter => {
-                        app.input = String::new();
-                        let mut selection = app.selection.clone();
-                        match selection.as_str() {
-                            SC_EXIT => break,
-                            SC_HOME => {
-                                app.set_cwd(&dirs::home_dir().unwrap());
-                                app.update_directory_listing();
-                                app.update_results();
-                                app.selection_index = 0;
-                                continue;
-                            }
-                            SC_UP => {
-                                selection = "..".to_string();
-                            }
-                            SC_BACK => {
-                                selection = app.lwd.to_str().unwrap().to_string();
-                            }
-                            SC_EXP => {
-                                app.mode_explode = !app.mode_explode;
-                                app.update_directory_listing();
-                                app.update_results();
-                                app.selection_index = 0;
-                                continue;
-                            }
-                            _ => {}
-                        }
-                        app.set_cwd(&selection.into());
-                        app.update_directory_listing();
-                        app.update_results();
-                        app.selection_index = 0;
-                    }
-                    KeyCode::Down => {
-                        app.selection_index += 1;
-                        if app.selection_index >= app.results.len() as i32 {
-                            app.selection_index = 0;
-                        }
-                    }
-                    KeyCode::Up => {
-                        app.selection_index += -1;
-                        if app.selection_index < 0 && !app.results.is_empty() {
-                            app.selection_index = app.results.len() as i32 - 1;
-                        } else if app.results.is_empty() {
-                            app.selection_index = 0;
-                        }
-                    }
-                    KeyCode::Esc => break,
+                    (KeyModifiers::NONE, KeyCode::Esc) => break,
                     _ => {}
                 }
-
-                // After key press handling
-
                 if input_changed {
                     app.update_results();
                 }
+                // Process key to command mapping
+                let cmd = match (modifiers, code) {
+                    (KeyModifiers::CONTROL, KeyCode::Char('t')) => cmd_name::CMD_TOGGLE,
+                    (KeyModifiers::CONTROL, KeyCode::Char('s')) => cmd_name::MULTI_SEL,
+                    (KeyModifiers::NONE, KeyCode::Enter) => cmd_name::SELECT,
+                    (KeyModifiers::NONE, KeyCode::Right) => cmd_name::SELECT,
+                    (KeyModifiers::NONE, KeyCode::Up) => cmd_name::SEL_UP,
+                    (KeyModifiers::NONE, KeyCode::Down) => cmd_name::SEL_DOWN,
+                    (KeyModifiers::NONE, KeyCode::Left) => cmd_name::DIR_BACK,
+                    (KeyModifiers::CONTROL, KeyCode::Char('h')) => cmd_name::DIR_BACK,
+                    (KeyModifiers::CONTROL, KeyCode::Char('j')) => cmd_name::SEL_DOWN,
+                    (KeyModifiers::CONTROL, KeyCode::Char('k')) => cmd_name::SEL_UP,
+                    (KeyModifiers::CONTROL, KeyCode::Char('l')) => cmd_name::SELECT,
+                    _ => "",
+                };
+                dbg!(&cmd);
+                // Handle commands
+                let lr = app.handle_command(&cmd);
+                match lr {
+                    LoopReturn::Continue => continue,
+                    LoopReturn::Break => break,
+                    LoopReturn::Ok => {}
+                }
+                // After key press handling
 
                 app.update_selection();
                 app.update_preview();
@@ -431,6 +614,32 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage((100 - percent_y) / 2),
+                Constraint::Percentage(percent_y),
+                Constraint::Percentage((100 - percent_y) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(area);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage((100 - percent_x) / 2),
+                Constraint::Percentage(percent_x),
+                Constraint::Percentage((100 - percent_x) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(popup_layout[1])[1]
 }
 
 fn render(frame: &mut Frame, app: &App) {
@@ -450,7 +659,7 @@ fn render(frame: &mut Frame, app: &App) {
         .split(horizontal_chunks[0]);
 
     // Input box
-    let mut input_color = Color::White;
+    let mut input_color;
     let input_str: String;
     if app.input.is_empty() {
         input_str = "Type to search...".to_string();
@@ -486,9 +695,10 @@ fn render(frame: &mut Frame, app: &App) {
             *line = new_line;
         }
     }
+    let list_title = format!("(SONA)))[{}]", app.results.len());
     let list = List::new(results_pretty).block(
         Block::default()
-            .title("(SONAR)))")
+            .title(list_title)
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Blue)),
     );
@@ -513,6 +723,23 @@ fn render(frame: &mut Frame, app: &App) {
     frame.render_widget(input, left_vertical_chunks[0]);
     frame.render_stateful_widget(list, left_vertical_chunks[1], &mut state);
     frame.render_widget(preview, horizontal_chunks[1]);
+
+    // Render command popup if open
+    if app.command_window_open {
+        let popup_area = centered_rect(50, 10, area);
+        let command_str = format!("> {}|", app.command_input);
+        frame.render_widget(Clear, popup_area); // Clears the area first
+        let command_paragraph = Paragraph::new(command_str)
+            .style(Style::default().bg(Color::Black))
+            .block(
+                Block::default()
+                    .title(format!("{} Command", NF_CMD))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Magenta))
+                    .style(Style::default().bg(Color::Black)),
+            );
+        frame.render_widget(command_paragraph, popup_area);
+    }
 }
 
 fn clear() {
