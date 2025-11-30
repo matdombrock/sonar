@@ -21,9 +21,13 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use ratatui::style::Color as RColor;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Span, Text};
 use std::os::unix::fs::PermissionsExt;
+use syntect::easy::HighlightLines;
+use syntect::highlighting::{Style as SyntectStyle, ThemeSet};
+use syntect::parsing::SyntaxSet;
 
 const DIR_PRETTY_LIMIT: usize = 1000;
 const SEARCH_LIMIT: usize = 1000;
@@ -260,6 +264,10 @@ impl<'a> App<'a> {
     }
 
     fn preview_file(&mut self, selected_path: &PathBuf) {
+        // Helper to convert syntect color to ratatui Color
+        fn syntect_to_ratatui_color(s: SyntectStyle) -> RColor {
+            RColor::Rgb(s.foreground.r, s.foreground.g, s.foreground.b)
+        }
         let path_line = App::fmtln_path(&selected_path);
         self.preview_content += path_line;
         // Get the file metadata
@@ -278,16 +286,30 @@ impl<'a> App<'a> {
             }
         }
         self.preview_content += Line::from("-------");
-        // Read file content (first 100 lines)
+
+        // Syntax highlighting
+        let ss = SyntaxSet::load_defaults_newlines();
+        let ts = ThemeSet::load_defaults();
+        let ext = selected_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
+        let syntax = ss
+            .find_syntax_by_extension(ext)
+            .unwrap_or_else(|| ss.find_syntax_plain_text());
+        let mut h = HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
+
         if let Ok(content) = fs::read_to_string(&selected_path) {
             for line in content.lines().take(100) {
-                // Sanitize line
-                let mut sanitized_line = line.replace("\t", "    ");
-                sanitized_line = sanitized_line
-                    .chars()
-                    .filter(|c| c.is_ascii() && !c.is_control())
-                    .collect::<String>();
-                self.preview_content += Line::from(sanitized_line);
+                let ranges = h.highlight_line(line, &ss).unwrap_or_default();
+                let mut styled_line = Line::default();
+                for (style, text) in ranges {
+                    styled_line.push_span(Span::styled(
+                        text.to_string(),
+                        Style::default().fg(syntect_to_ratatui_color(style)),
+                    ));
+                }
+                self.preview_content += styled_line;
             }
         } else {
             self.preview_content += Line::from("Unable to read file content.");
