@@ -777,7 +777,7 @@ impl<'a> App<'a> {
             sc::MULTI_COPY => {
                 self.preview_content += App::fmtln_sc("Copy multi-selection");
                 self.preview_content += Line::styled(
-                    "Copies the multi-selection to the clipboard.",
+                    "Copies the multi-selection to the current directory",
                     Style::default().fg(Color::Green),
                 );
             }

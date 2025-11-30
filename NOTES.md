@@ -1,19 +1,24 @@
 # Sonar
-## Todo
+## Todo Feat
 - Git integration?
 - Custom keybinds
-- Better input handling (especially for commands)
 - Image previews
+- Tab to use primary up/down on preview?
+- Seer?
+
+## Todo Bug / Incomplete
+- Better input handling (especially for commands)
 - Handle large dirs
 - Fix file read not clearing
 - Beter metadata handling
 - Use primary up/down for scrolling output
-- Tab to use primary up/down on preview?
 - Use users real shell instead of sh
-- Command finder actually runs commands
+- Command finder doesnt actually run commands
 - Vis commands doesnt update selection at fist
-- Seer?
+- Commands dont operate in the correct directory
+- Directories do not refresh after commands change them
 
+## Notes
 It would make sense for command finder to be the main way of launching commands
 But then its not easily possible to run a command on a single selection
 Maybe caching the selection while in command finder could work?
@@ -21,7 +26,7 @@ When a cmd is selected just send it to the cmd popup?
 
 Should use "type" instead of metadat for listing
 
-## fn in cmd struct
+### fn in cmd struct
 Might be able to use functions in the cmd def type. Right now all cmd_* functions just take self. They might need to take some other params in the future but that could just be a space delimited string like a bash command. 
 
 Command functions should never really need to return any values. They cant be piped or redirected really. If they have output they write it to "output".
