@@ -1836,8 +1836,8 @@ fn render(frame: &mut Frame, app: &mut App) {
             Block::default()
                 .title(format!("{} (0)_(0) {} ", nf::LOOK, app.selection.name))
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Yellow))
-                .style(Style::default().bg(Color::Black)),
+                .border_style(Style::default().fg(Color::Yellow)),
+            // .style(Style::default().bg(Color::Back)),
         )
         .wrap(Wrap { trim: false })
         .scroll((app.scroll_off_preview as u16, app.scroll_off_preview as u16));
