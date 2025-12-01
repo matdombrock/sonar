@@ -1409,6 +1409,11 @@ impl<'a> App<'a> {
                         self.cmd_cmd_list();
                     }
                     _ => {
+                        // Check if selection is an internal command
+                        if selection.is_command() {
+                            self.handle_cmd(&selection.name);
+                            return LoopReturn::Continue;
+                        }
                         // Selection is a file or directory
                         self.set_cwd(&self.selection.name.clone().into());
                         self.update_listing();
