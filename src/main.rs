@@ -461,6 +461,106 @@ impl ItemInfo {
     }
 }
 
+struct KeyBind {
+    modifiers: KeyModifiers,
+    code: KeyCode,
+    command: CmdName,
+}
+impl KeyBind {
+    fn new(modifiers: KeyModifiers, code: KeyCode, command: CmdName) -> Self {
+        Self {
+            modifiers,
+            code,
+            command,
+        }
+    }
+}
+type KeyBindList = Vec<KeyBind>;
+fn make_keybind_list() -> KeyBindList {
+    let mut list = KeyBindList::new();
+    list.push(KeyBind::new(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('t'),
+        CmdName::CmdWinToggle,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('f'),
+        CmdName::CmdFinderToggle,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('s'),
+        CmdName::MultiSel,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::NONE,
+        KeyCode::Enter,
+        CmdName::Select,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::NONE,
+        KeyCode::Right,
+        CmdName::Select,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::NONE,
+        KeyCode::Up,
+        CmdName::SelUp,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::NONE,
+        KeyCode::Down,
+        CmdName::SelDown,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::NONE,
+        KeyCode::Left,
+        CmdName::DirBack,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('h'),
+        CmdName::DirBack,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('j'),
+        CmdName::SelDown,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('k'),
+        CmdName::SelUp,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('l'),
+        CmdName::Select,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::NONE,
+        KeyCode::Esc,
+        CmdName::Exit,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('q'),
+        CmdName::Exit,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::ALT,
+        KeyCode::Char('j'),
+        CmdName::SecDown,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::ALT,
+        KeyCode::Char('k'),
+        CmdName::SecUp,
+    ));
+    list
+}
+
 // Return type for loop control
 // TODO: Im still suspicious of this design
 enum LoopReturn {
@@ -1006,26 +1106,14 @@ impl<'a> App<'a> {
         return false;
     }
 
-    fn input_cmd_map(&mut self, modifiers: KeyModifiers, code: KeyCode) -> String {
-        let cmd = match (modifiers, code) {
-            (KeyModifiers::CONTROL, KeyCode::Char('t')) => self.get_cmd(&CmdName::CmdWinToggle),
-            (KeyModifiers::CONTROL, KeyCode::Char('f')) => self.get_cmd(&CmdName::CmdFinderToggle),
-            (KeyModifiers::CONTROL, KeyCode::Char('s')) => self.get_cmd(&CmdName::MultiSel),
-            (KeyModifiers::NONE, KeyCode::Enter) => self.get_cmd(&CmdName::Select),
-            (KeyModifiers::NONE, KeyCode::Right) => self.get_cmd(&CmdName::Select),
-            (KeyModifiers::NONE, KeyCode::Up) => self.get_cmd(&CmdName::SelUp),
-            (KeyModifiers::NONE, KeyCode::Down) => self.get_cmd(&CmdName::SelDown),
-            (KeyModifiers::NONE, KeyCode::Left) => self.get_cmd(&CmdName::DirBack),
-            (KeyModifiers::CONTROL, KeyCode::Char('h')) => self.get_cmd(&CmdName::DirBack),
-            (KeyModifiers::CONTROL, KeyCode::Char('j')) => self.get_cmd(&CmdName::SelDown),
-            (KeyModifiers::CONTROL, KeyCode::Char('k')) => self.get_cmd(&CmdName::SelUp),
-            (KeyModifiers::CONTROL, KeyCode::Char('l')) => self.get_cmd(&CmdName::Select),
-            (KeyModifiers::NONE, KeyCode::Esc) => self.get_cmd(&CmdName::Exit),
-            (KeyModifiers::CONTROL, KeyCode::Char('q')) => self.get_cmd(&CmdName::Exit),
-            (KeyModifiers::ALT, KeyCode::Char('j')) => self.get_cmd(&CmdName::SecDown),
-            (KeyModifiers::ALT, KeyCode::Char('k')) => self.get_cmd(&CmdName::SecUp),
-            _ => "",
-        };
+    fn input_keybinds(&mut self, modifiers: KeyModifiers, code: KeyCode) -> String {
+        let mut cmd = String::new();
+        for kb in make_keybind_list().iter() {
+            if kb.modifiers == modifiers && kb.code == code {
+                cmd = self.get_cmd(&kb.command).to_string();
+                break;
+            }
+        }
         if !cmd.is_empty() {
             log!("cmd from mapping: {}", &cmd);
         }
@@ -1463,7 +1551,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                     app.update_results();
                 }
                 // Process key to command mapping
-                let cmd = app.input_cmd_map(modifiers, code);
+                let cmd = app.input_keybinds(modifiers, code);
                 // Handle commands
                 let lr = app.handle_cmd(&cmd);
                 match lr {
