@@ -883,7 +883,7 @@ impl<'a> App<'a> {
             self.listing.clear();
             // Soft the commands alphabetically
             let mut entries: Vec<_> = self.cmd_list.iter().collect();
-            entries.sort_by(|a, b| a.1.cmd.cmp(b.1.cmd)); // Sort alphabetically by key
+            entries.sort_by(|a, b| a.1.cmd.cmp(b.1.cmd));
             for (_, cmd_data) in entries {
                 self.listing.push(ItemInfo {
                     name: cmd_data.cmd.to_string(),
