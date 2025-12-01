@@ -1,3 +1,4 @@
+use ansi_to_tui::IntoText;
 use color_eyre::eyre::Result;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
@@ -45,14 +46,11 @@ const LOGO: &str = r#"
  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝ ╚═╝ ╚═╝ 
 "#;
 
-const WELCOME_MSG: &str = r#"
-Welcome to Sona!
-Type to search files and directories. Use arrow keys to navigate.
-"#;
-
 // Limit for performance
 const DIR_PRETTY_LIMIT: usize = 1000;
 const SEARCH_LIMIT: usize = 1000;
+
+const SEP: &str = "=======";
 
 // Nerd font icons
 mod nf {
@@ -65,6 +63,7 @@ mod nf {
     pub const CMD: &str = "";
     pub const INFO: &str = "";
     pub const CHECK: &str = "";
+    pub const WARN: &str = "";
     pub const B4: &str = "█";
     pub const B3: &str = "▓";
     pub const B2: &str = "▒";
@@ -740,12 +739,25 @@ struct App<'a> {
     output_text: String,
     cmd_list: cmd_list::CmdList,
     keybinds: KeyBindList,
+    keybinds_found: bool,
+    // Has external tools
+    has_bat: bool,
     // Layout vals - read only
     lay_preview_area: Rect,
 }
 impl<'a> App<'a> {
     fn new() -> Self {
         log!("App initialized");
+        let bat_check = match Command::new("bat").arg("--version").output() {
+            Ok(output) => output.status.success(),
+            Err(_) => false,
+        };
+        // FIXME: THIS IS STUPID
+        let kb_check = match fs::read_to_string(&get_kb_path()) {
+            Ok(_) => true,
+            Err(_) => false,
+        };
+
         Self {
             input: String::new(),
             listing: Vec::new(),
@@ -766,6 +778,8 @@ impl<'a> App<'a> {
             output_text: String::new(),
             cmd_list: cmd_list::make_cmd_list(),
             keybinds: make_keybind_list(),
+            keybinds_found: kb_check,
+            has_bat: bat_check,
             lay_preview_area: Rect::default(),
         }
     }
@@ -922,7 +936,7 @@ impl<'a> App<'a> {
         let listing = self.get_directory_listing(&selected_path);
         let count_line = App::fmtln_info("count", &listing.len().to_string());
         self.preview_content += count_line;
-        self.preview_content += Line::from("-------");
+        self.preview_content += Line::from(SEP);
         let pretty_listing = self.dir_list_pretty(&listing);
         for line in pretty_listing.lines.iter().take(20) {
             self.preview_content += Line::from(line.clone());
@@ -930,9 +944,6 @@ impl<'a> App<'a> {
     }
 
     fn preview_file(&mut self, selected_path: &PathBuf) {
-        fn syntect_to_ratatui_color(s: SyntectStyle) -> RColor {
-            RColor::Rgb(s.foreground.r, s.foreground.g, s.foreground.b)
-        }
         let path_line = App::fmtln_path(&selected_path);
         self.preview_content += path_line;
         // Get the file metadata
@@ -951,7 +962,39 @@ impl<'a> App<'a> {
             }
         }
 
-        // Syntax highlighting
+        // Check if bat is available
+        // Use bat for preview if available
+        if self.has_bat {
+            // Use bat for preview
+            log!("Using bat for file preview");
+            if let Ok(bat_output) = Command::new("bat")
+                .arg("--color=always")
+                .arg("--style=plain")
+                .arg(selected_path.to_str().unwrap())
+                .output()
+            {
+                if bat_output.status.success() {
+                    self.preview_content += Line::from(SEP);
+                    let bat_content = String::from_utf8_lossy(&bat_output.stdout);
+                    let output = match bat_content.as_ref().into_text() {
+                        Ok(text) => text,
+                        Err(_) => {
+                            self.preview_content +=
+                                Line::from("Error: Unable to convert bat output to text.");
+                            return;
+                        }
+                    };
+                    for line in output.lines.iter().take(100) {
+                        self.preview_content += Line::from(line.clone());
+                    }
+                    return;
+                }
+            }
+        }
+        // Fallback to syntect for syntax highlighting
+        fn syntect_to_ratatui_color(s: SyntectStyle) -> RColor {
+            RColor::Rgb(s.foreground.r, s.foreground.g, s.foreground.b)
+        }
         let ss = SyntaxSet::load_defaults_newlines();
         // FIXME: Should only load once
         let ts = ThemeSet::load_defaults();
@@ -964,7 +1007,7 @@ impl<'a> App<'a> {
         // Print syntax name
         self.preview_content += App::fmtln_info("detected", syntax.name.as_str());
 
-        self.preview_content += Line::from("-------");
+        self.preview_content += Line::from(SEP);
 
         if let Ok(content) = fs::read_to_string(&selected_path) {
             for line in content.lines().take(100) {
@@ -998,12 +1041,54 @@ impl<'a> App<'a> {
                     self.preview_content +=
                         Line::styled(format!("{}", line), Style::default().fg(Color::LightGreen));
                 }
-                for line in WELCOME_MSG.lines() {
-                    self.preview_content += Line::from(line);
-                }
                 let kb_exit = kb_find_by_cmd(&self.keybinds, &cmd_list::CmdName::Exit).unwrap();
                 let kb_exit_str = kb_to_string_short(&kb_exit);
-                self.preview_content += Line::from(format!("Press {} to exit", kb_exit_str));
+                self.preview_content += Line::from("");
+                self.preview_content +=
+                    Line::styled("Tips:", Style::default().fg(Color::LightBlue));
+                self.preview_content += Line::from(format!("- Press {} to exit", kb_exit_str));
+                self.preview_content +=
+                    Line::from("- Start typing to fuzzy find files and directories");
+                self.preview_content += Line::from("");
+                self.preview_content +=
+                    Line::styled("System Information:", Style::default().fg(Color::LightBlue));
+                if self.has_bat {
+                    self.preview_content += Line::styled(
+                        format!(
+                            "- {} 'bat' - file previews will use 'bat' for syntax highlighting",
+                            nf::CHECK
+                        ),
+                        Style::default().fg(Color::Green),
+                    );
+                } else {
+                    self.preview_content += Line::styled(
+                        format!(
+                            "- {} 'bat' - file previews will use built-in syntax highlighting",
+                            nf::WARN
+                        ),
+                        Style::default().fg(Color::Yellow),
+                    );
+                }
+                if self.keybinds_found {
+                    self.preview_content += Line::styled(
+                        format!(
+                            "- {} keybinds - loaded from {}",
+                            nf::CHECK,
+                            get_kb_path().to_str().unwrap()
+                        ),
+                        Style::default().fg(Color::Green),
+                    );
+                } else {
+                    self.preview_content += Line::styled(
+                        format!(
+                            "- {} keybinds - no keybinds found at {}",
+                            nf::WARN,
+                            get_kb_path().to_str().unwrap()
+                        ),
+                        Style::default().fg(Color::Yellow),
+                    );
+                }
+                self.preview_content += Line::from("");
             }
             sc::HOME => {
                 self.preview_content += App::fmtln_path(&dirs::home_dir().unwrap());
@@ -1465,7 +1550,8 @@ impl<'a> App<'a> {
     fn cmd_cmd_list(&mut self) {
         let mut text = String::new();
         text += "Available Commands:\n";
-        text += "-------------------\n";
+        text += SEP;
+        text += "\n";
         // Sort by command name
         let mut vec: Vec<_> = self.cmd_list.iter().collect();
         vec.sort_by(|a, b| a.1.cmd.cmp(&b.1.cmd));
@@ -1490,7 +1576,7 @@ impl<'a> App<'a> {
             Ok(content) => {
                 // Reverse the log content to show latest entries first
                 let mut lines: Vec<&str> = content.lines().collect();
-                lines.push("-------");
+                lines.push(SEP);
                 lines.push("Top of log");
                 lines.reverse();
                 let content = lines.join("\n");
@@ -1560,11 +1646,7 @@ impl<'a> App<'a> {
 
     fn cmd_show_keybinds(&mut self) {
         let kb_path = get_kb_path();
-        // FIXME: THIS IS STUPID
-        let found = match fs::read_to_string(&kb_path) {
-            Ok(_) => true,
-            Err(_) => false,
-        };
+        let found = self.keybinds_found;
         let mut out = String::from(format!("Path: {}", kb_path.to_str().unwrap()));
         if !found {
             out += " \n\n(not found, using defaults)";
