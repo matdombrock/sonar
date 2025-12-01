@@ -87,7 +87,7 @@ mod sc {
 mod cmd_list {
     use std::collections::HashMap;
 
-    #[derive(Hash, Eq, PartialEq, Debug, Clone)]
+    #[derive(Hash, Eq, PartialEq, Debug, Clone, PartialOrd, Ord)]
     pub enum CmdName {
         Exit,
         Home,
@@ -881,7 +881,10 @@ impl<'a> App<'a> {
         if self.mode_cmd_finder {
             log!("Updating command listing");
             self.listing.clear();
-            for (_, cmd_data) in self.cmd_list.iter() {
+            // Soft the commands alphabetically
+            let mut entries: Vec<_> = self.cmd_list.iter().collect();
+            entries.sort_by(|a, b| a.1.cmd.cmp(b.1.cmd)); // Sort alphabetically by key
+            for (_, cmd_data) in entries {
                 self.listing.push(ItemInfo {
                     name: cmd_data.cmd.to_string(),
                     node_type: NodeType::Command,
