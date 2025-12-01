@@ -100,7 +100,7 @@ mod cmd_list {
         CmdWinToggle,
         CmdVisToggle,
         CmdVisShow,
-        CmdFinder,
+        CmdFinderToggle,
         CmdList,
         OutputWinToggle,
         OutputWinShow,
@@ -215,9 +215,9 @@ mod cmd_list {
             },
         );
         map.insert(
-            CmdName::CmdFinder,
+            CmdName::CmdFinderToggle,
             CmdData {
-                fname: "Command Finder",
+                fname: "Command Finder Toggle",
                 description: "Toggle the fuzzy command finder",
                 cmd: "cmd-finder",
             },
@@ -464,7 +464,7 @@ struct App<'a> {
     lwd: PathBuf,
     mode_explode: bool,
     mode_vis_commands: bool,
-    mode_cmd: bool,
+    mode_cmd_finder: bool,
     show_command_window: bool,
     command_input: String,
     show_output_window: bool,
@@ -488,7 +488,7 @@ impl<'a> App<'a> {
             lwd: env::current_dir().unwrap(),
             mode_explode: false,
             mode_vis_commands: false,
-            mode_cmd: false,
+            mode_cmd_finder: false,
             show_command_window: false,
             command_input: String::new(),
             show_output_window: false,
@@ -832,15 +832,23 @@ impl<'a> App<'a> {
                 self.preview_content = Default::default();
                 // Check if we have an internal command
                 if self.selection.is_command() {
-                    let cmd_name = self.cmd_name_from_str(&self.selection.name).unwrap();
+                    let cmd_name = match self.cmd_name_from_str(&self.selection.name) {
+                        Some(name) => name,
+                        None => {
+                            self.preview_content += Line::from("Error: Command data not found.");
+                            return;
+                        }
+                    };
                     let data = self.get_cmd_data(&cmd_name).clone();
-                    self.preview_content +=
-                        Line::styled(data.fname, Style::default().fg(Color::Green));
                     self.preview_content += Line::styled(
-                        self.selection.name.clone(),
+                        format!("name: {}", data.fname),
+                        Style::default().fg(Color::Green),
+                    );
+                    self.preview_content += Line::styled(
+                        format!("cmd : {}", data.cmd),
                         Style::default().fg(Color::Yellow),
                     );
-                    self.preview_content += Line::from(data.description);
+                    self.preview_content += Line::from(format!("info: {}", data.description));
                     return;
                 }
                 // We have a file or dir
@@ -869,8 +877,8 @@ impl<'a> App<'a> {
     }
 
     fn update_listing(&mut self) {
-        // Handle cmd search
-        if self.mode_cmd {
+        // Handle cmd finder
+        if self.mode_cmd_finder {
             log!("Updating command listing");
             self.listing.clear();
             for (_, cmd_data) in self.cmd_list.iter() {
@@ -1082,7 +1090,7 @@ impl<'a> App<'a> {
     fn input_cmd_map(&mut self, modifiers: KeyModifiers, code: KeyCode) -> String {
         let cmd = match (modifiers, code) {
             (KeyModifiers::CONTROL, KeyCode::Char('t')) => self.get_cmd(&CmdName::CmdWinToggle),
-            (KeyModifiers::CONTROL, KeyCode::Char('f')) => self.get_cmd(&CmdName::CmdFinder),
+            (KeyModifiers::CONTROL, KeyCode::Char('f')) => self.get_cmd(&CmdName::CmdFinderToggle),
             (KeyModifiers::CONTROL, KeyCode::Char('s')) => self.get_cmd(&CmdName::MultiSel),
             (KeyModifiers::NONE, KeyCode::Enter) => self.get_cmd(&CmdName::Select),
             (KeyModifiers::NONE, KeyCode::Right) => self.get_cmd(&CmdName::Select),
@@ -1279,8 +1287,8 @@ impl<'a> App<'a> {
         self.selection_index = 0;
     }
 
-    fn cmd_cmd_finder(&mut self) {
-        self.mode_cmd = !self.mode_cmd;
+    fn cmd_cmd_finder_toggle(&mut self) {
+        self.mode_cmd_finder = !self.mode_cmd_finder;
         self.update_listing();
         self.update_results();
         self.selection_index = 0;
@@ -1438,6 +1446,7 @@ impl<'a> App<'a> {
                         // Check if selection is an internal command
                         if selection.is_command() {
                             self.handle_cmd(&selection.name);
+                            self.cmd_cmd_finder_toggle();
                             return LoopReturn::Continue;
                         }
                         // Selection is a file or directory
@@ -1465,7 +1474,7 @@ impl<'a> App<'a> {
             _ if cmd == self.get_cmd(&CmdName::MultiCopy) => self.cmd_multi_copy(),
             _ if cmd == self.get_cmd(&CmdName::CmdVisToggle) => self.cmd_cmd_vis_toggle(),
             _ if cmd == self.get_cmd(&CmdName::CmdVisShow) => self.cmd_vis_show(),
-            _ if cmd == self.get_cmd(&CmdName::CmdFinder) => self.cmd_cmd_finder(),
+            _ if cmd == self.get_cmd(&CmdName::CmdFinderToggle) => self.cmd_cmd_finder_toggle(),
             _ if cmd == self.get_cmd(&CmdName::CmdList) => self.cmd_cmd_list(),
             _ if cmd == self.get_cmd(&CmdName::MenuBack) => self.cmd_menu_back(),
             _ if cmd == self.get_cmd(&CmdName::Log) => self.cmd_log_show(),
