@@ -12,3 +12,5 @@ cmd-win  ctrl-w
 cmd-find ctrl-t 
 cmd-list ctrl-i
 mul-sel  ctrl-s
+sec-up   alt-k
+sec-down alt-j
