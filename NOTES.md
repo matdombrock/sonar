@@ -6,6 +6,8 @@
 - Better input handling (especially for commands)
 - Scroll/progress bars
 - Config file
+- Shortcuts / bookmarks
+- Custom native commands
 - Mouse support?
 - Seer?
 
@@ -77,6 +79,10 @@ Command functions should never really need to return any values. They cant be pi
 
 One problem there though is that the commands operate on self (app) so if they move out of the app impl they will need to refer to an instance of app. 
 
+### Config
+- Set border colors
+- Custom welcome message
+
 
 ## Features
 - Fuzzy Find First
@@ -96,3 +102,7 @@ One problem there though is that the commands operate on self (app) so if they m
 - Search first
 - Panes are confusing
 
+
+## About
+X is an ergonomic, friendly, "fuzzy first" file explorer for your terminal.
+EFFFFE
