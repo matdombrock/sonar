@@ -1,28 +1,32 @@
 # Sonar
 ## Todo Feat
-- Custom keybinds
 - Image previews
-- Tab to use primary up/down on preview?
 - Git integration?
 - Select alt, like right click for context (delete, multi, etc)?
 - Better input handling (especially for commands)
+- Scroll/progress bars
+- Config file
+- Mouse support?
 - Seer?
 
 ## Todo Cmd
-- multi-delete
-- multi-move
+- mul-delete
+- mul-move
 - clipboard-file-contents
 - clipboard-file-path
+- keybind-init
 
 ## Todo Bug / Incomplete
 - Handle large dirs
 - Fix file read not clearing (foot only)
-- Beter metadata handling
 - Use primary up/down for scrolling output
 - Vis commands doesnt update selection at fist (same for cmd finder)
 - Use users real shell instead of sh
 - Shell commands dont operate in the correct directory
-- Directories do not refresh after commands change them
+- Directories do not refresh after commands change them (mul-copy)
+- Better keybind file handling
+- Better keybind printing
+- Load default keybinds from embedded text (parse)
 
 ## Notes
 
@@ -34,6 +38,18 @@ When a cmd is selected just send it to the cmd popup?
 
 ### Selection vs multi-selection
 The difference between a selection (current list selection) and multi-select is confusing.
+
+With tab bount to mul-sel it makes sense to not really use `select` for selections at all
+
+But I need to change the verbage around that
+
+Maybe mul-sel becomes checked or hilight or grab or context
+
+I kind of like `ctx` for context but sel is clearer. 
+
+Maybe `select` is what needs to change and `mul-sel` becomes `sel`
+
+`select` could become enter or ok
 
 ### Command props
 is_hidden
@@ -51,8 +67,9 @@ One problem there though is that the commands operate on self (app) so if they m
 ## Features
 - Fuzzy Find First
 - Custom Keybinds
-- Multi-select
-- Responsize design
+- Multi-select operations
+- Responsive layout
+- Optional bat integration
 
 ## Goals
 

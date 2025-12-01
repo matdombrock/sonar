@@ -1,3 +1,4 @@
+# Keybinds support comments
 exit     ctrl-q
 exit     none-esc
 home     alt-h

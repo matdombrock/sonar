@@ -534,6 +534,11 @@ fn make_keybind_defaults() -> KeyBindList {
     ));
     list.push(KeyBind::new(
         KeyModifiers::NONE,
+        KeyCode::Tab,
+        CmdName::MultiSel,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::NONE,
         KeyCode::Enter,
         CmdName::Select,
     ));
@@ -695,6 +700,12 @@ fn make_keybind_list() -> KeyBindList {
             "down" => KeyCode::Down,
             "left" => KeyCode::Left,
             "right" => KeyCode::Right,
+            "tab" => KeyCode::Tab,
+            "backspace" => KeyCode::Backspace,
+            "home" => KeyCode::Home,
+            "end" => KeyCode::End,
+            "pageup" => KeyCode::PageUp,
+            "pagedown" => KeyCode::PageDown,
             c if c.len() == 1 => {
                 let ch = c.chars().next().unwrap();
                 KeyCode::Char(ch)
@@ -736,6 +747,7 @@ struct App<'a> {
     show_command_window: bool,
     command_input: String,
     show_output_window: bool,
+    output_title: String,
     output_text: String,
     cmd_list: cmd_list::CmdList,
     keybinds: KeyBindList,
@@ -775,6 +787,7 @@ impl<'a> App<'a> {
             show_command_window: false,
             command_input: String::new(),
             show_output_window: false,
+            output_title: String::new(),
             output_text: String::new(),
             cmd_list: cmd_list::make_cmd_list(),
             keybinds: make_keybind_list(),
@@ -846,7 +859,12 @@ impl<'a> App<'a> {
         entries
     }
 
-    fn set_output(&mut self, text: &str) {
+    fn set_output(&mut self, title: &str, text: &str) {
+        let title = match title {
+            "" => "Message",
+            _ => title,
+        };
+        self.output_title = title.to_string();
         self.reset_sec_scroll();
         self.output_text = text.to_string();
     }
@@ -896,13 +914,23 @@ impl<'a> App<'a> {
             // Limit for performance
             let line = if item.is_shortcut() {
                 Line::styled(
-                    format!("{}{} {}", ms, nf::CMD, item.name),
+                    format!("{}{}| {}", ms, nf::CMD, item.name),
                     Style::default().fg(Color::Yellow),
                 )
             } else if item.is_dir() {
                 Line::styled(
-                    format!("{}{} {}/", ms, nf::DIR, item.name),
+                    format!("{}{}| {}/", ms, nf::DIR, item.name),
                     Style::default().fg(Color::Green),
+                )
+            } else if item.is_command() {
+                Line::styled(
+                    format!("{}{}| {}", ms, nf::CMD, item.name),
+                    Style::default().fg(Color::Yellow),
+                )
+            } else if item.is_executable() {
+                Line::styled(
+                    format!("{}{}| {}", ms, nf::CMD, item.name),
+                    Style::default().fg(Color::Magenta),
                 )
             } else {
                 // When exploded the item name is the full path
@@ -913,7 +941,7 @@ impl<'a> App<'a> {
                     item.name.clone()
                 };
                 Line::styled(
-                    format!("{}{} {}", ms, nf::FILE, name),
+                    format!("{}{}| {}", ms, nf::FILE, name),
                     Style::default().fg(Color::Cyan),
                 )
             };
@@ -1439,21 +1467,21 @@ impl<'a> App<'a> {
 
     fn cmd_multi_clear(&mut self) {
         self.multi_selection.clear();
-        self.set_output("Multi selection cleared.");
+        self.set_output("", "Multi selection cleared.");
         self.cmd_output_window_show();
     }
 
     fn cmd_multi_show(&mut self) {
         let mut output_text = String::new();
         if self.multi_selection.is_empty() {
-            self.set_output("No items in multi selection.");
+            self.set_output("Multi-select", "No items in multi selection.");
             self.cmd_output_window_show();
             return;
         }
         for path in self.multi_selection.iter() {
             output_text += &format!("{}\n", path.to_str().unwrap());
         }
-        self.set_output(&output_text);
+        self.set_output("Multi-select", &output_text);
         self.cmd_output_window_show();
     }
 
@@ -1470,11 +1498,14 @@ impl<'a> App<'a> {
                 .join("\n"),
         )
         .unwrap_or(());
-        self.set_output(&format!(
-            "Multi selection saved to {} ({} items).",
-            file.to_str().unwrap(),
-            self.multi_selection.len()
-        ));
+        self.set_output(
+            "Saved",
+            &format!(
+                "Multi selection saved to {} ({} items).",
+                file.to_str().unwrap(),
+                self.multi_selection.len()
+            ),
+        );
         self.cmd_output_window_show();
     }
 
@@ -1482,7 +1513,7 @@ impl<'a> App<'a> {
     fn cmd_multi_copy(&mut self) {
         let mut output_text = String::new();
         if self.multi_selection.is_empty() {
-            self.set_output("No items in multi selection to copy.");
+            self.set_output("Multi-select", "No items in multi selection to copy.");
             self.cmd_output_window_show();
             return;
         }
@@ -1509,14 +1540,14 @@ impl<'a> App<'a> {
                 }
             }
         }
-        self.set_output(&output_text);
+        self.set_output("Multi-select", &output_text);
         self.cmd_output_window_show();
     }
 
     fn cmd_multi_delete(&mut self) {
         let mut output_text = String::new();
         if self.multi_selection.is_empty() {
-            self.set_output("No items in multi selection to delete.");
+            self.set_output("Multi-select", "No items in multi selection to delete.");
             self.cmd_output_window_show();
             return;
         }
@@ -1535,7 +1566,7 @@ impl<'a> App<'a> {
             }
         }
         self.multi_selection.clear();
-        self.set_output(&output_text);
+        self.set_output("Multi-select", &output_text);
         self.cmd_output_window_show();
     }
 
@@ -1549,16 +1580,13 @@ impl<'a> App<'a> {
     // Show a list of commands
     fn cmd_cmd_list(&mut self) {
         let mut text = String::new();
-        text += "Available Commands:\n";
-        text += SEP;
-        text += "\n";
         // Sort by command name
         let mut vec: Vec<_> = self.cmd_list.iter().collect();
         vec.sort_by(|a, b| a.1.cmd.cmp(&b.1.cmd));
         for (_name, cmd_data) in vec {
             text += &format!("{} - {}\n", cmd_data.cmd, cmd_data.description);
         }
-        self.set_output(&text);
+        self.set_output("Available Commands", &text);
         self.cmd_output_window_show();
     }
 
@@ -1580,10 +1608,10 @@ impl<'a> App<'a> {
                 lines.push("Top of log");
                 lines.reverse();
                 let content = lines.join("\n");
-                self.set_output(content.as_str());
+                self.set_output("Log", content.as_str());
             }
             Err(_) => {
-                self.set_output("No log file found.");
+                self.set_output("Log", "No log file found.");
             }
         }
         self.cmd_output_window_show();
@@ -1593,10 +1621,10 @@ impl<'a> App<'a> {
         let log_path = log::log_path();
         match fs::remove_file(&log_path) {
             Ok(_) => {
-                self.set_output("Log file cleared.");
+                self.set_output("Log", "Log file cleared.");
             }
             Err(_) => {
-                self.set_output("No log file found to clear.");
+                self.set_output("Log", "No log file found to clear.");
             }
         }
         self.cmd_output_window_show();
@@ -1658,7 +1686,7 @@ impl<'a> App<'a> {
             out += kb_to_string_full(&self.cmd_list, kb).as_str();
         }
 
-        self.set_output(&out);
+        self.set_output("Keybinds", &out);
         self.cmd_output_window_show();
     }
 
@@ -1756,10 +1784,10 @@ impl<'a> App<'a> {
                             let stdout = String::from_utf8_lossy(&output.stdout);
                             let stderr = String::from_utf8_lossy(&output.stderr);
                             let combined_output = format!("{}{}", stdout, stderr);
-                            self.set_output(&combined_output);
+                            self.set_output("Shell", &combined_output);
                         }
                         Err(e) => {
-                            self.set_output(&format!("Failed to run command: {}", e));
+                            self.set_output("Shell", &format!("Failed to run command: {}", e));
                         }
                     }
                     self.cmd_output_window_show();
@@ -1768,7 +1796,7 @@ impl<'a> App<'a> {
                 // If the command isnt empty print the incorrect command
                 if !cmd.is_empty() {
                     log!("No command matched: {}", cmd);
-                    self.set_output(&format!("No command matched: {}", cmd));
+                    self.set_output("Shell", &format!("No command matched: {}", cmd));
                     self.cmd_output_window_show();
                 }
             }
@@ -1891,11 +1919,12 @@ fn render(frame: &mut Frame, app: &mut App) {
 
     // Results list
     let mut results_pretty = app.dir_list_pretty(&app.results);
+    // TODO: This is slow and should be done on dir pretty
     for (idx, line) in results_pretty.lines.iter_mut().enumerate() {
         if idx as i32 == app.selection_index {
             let span = Span::styled(
                 format!("{}", nf::SEL),
-                Style::default().fg(Color::Blue).bg(Color::Black),
+                Style::default().fg(Color::LightBlue).bg(Color::Black),
             );
             let mut new_line = Line::from(span);
             new_line.push_span(Span::raw(format!(" {}", line)));
@@ -1987,7 +2016,7 @@ fn render(frame: &mut Frame, app: &mut App) {
             .style(Style::default().bg(Color::Black))
             .block(
                 Block::default()
-                    .title(format!("{} Output ('esc' to exit)", nf::CMD))
+                    .title(format!("{} {} ('esc' to exit)", nf::CMD, app.output_title))
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::Magenta))
                     .style(Style::default().bg(Color::Black)),
