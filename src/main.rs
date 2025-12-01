@@ -75,13 +75,6 @@ mod sc {
     pub const MENU_BACK: &str = " menu";
     pub const EXP: &str = " explode";
     pub const CMDS: &str = " cmds";
-    pub const MULTI_SHOW: &str = " show multi-selection";
-    pub const MULTI_CLEAR: &str = " clear multi-selection";
-    pub const MULTI_SAVE: &str = " save multi-selection";
-    pub const MULTI_COPY: &str = " copy multi-selection";
-    pub const LOG: &str = " show log";
-    pub const LOG_CLEAR: &str = " clear log";
-    pub const CMDS_LIST: &str = " command list";
 }
 
 mod cmd_list {
@@ -99,7 +92,6 @@ mod cmd_list {
         Select,
         CmdWinToggle,
         CmdVisToggle,
-        CmdVisShow,
         CmdFinderToggle,
         CmdList,
         OutputWinToggle,
@@ -205,14 +197,6 @@ mod cmd_list {
                 fname: "Visual Command Toggle",
                 description: "Toggle a visual command menu in the listing",
                 cmd: "cmd-vis-toggle",
-            },
-        );
-        map.insert(
-            CmdName::CmdVisShow,
-            CmdData {
-                fname: "Show Visual Commands",
-                description: "Show a visual command menu in the listing",
-                cmd: "cmd-vis-show",
             },
         );
         map.insert(
@@ -472,7 +456,6 @@ struct App<'a> {
     cwd: PathBuf,
     lwd: PathBuf,
     mode_explode: bool,
-    mode_vis_commands: bool,
     mode_cmd_finder: bool,
     show_command_window: bool,
     command_input: String,
@@ -496,7 +479,6 @@ impl<'a> App<'a> {
             cwd: env::current_dir().unwrap(),
             lwd: env::current_dir().unwrap(),
             mode_explode: false,
-            mode_vis_commands: false,
             mode_cmd_finder: false,
             show_command_window: false,
             command_input: String::new(),
@@ -738,9 +720,6 @@ impl<'a> App<'a> {
         match self.selection.name.as_str() {
             sc::EXIT => {
                 self.preview_content += App::fmtln_sc("Exit the application");
-                if self.mode_vis_commands {
-                    return;
-                }
                 self.preview_content += Line::from("");
                 for (i, line) in LOGO.lines().enumerate() {
                     if i == 0 {
@@ -785,55 +764,6 @@ impl<'a> App<'a> {
                 self.preview_content += App::fmtln_sc("Go back to the previous menu");
                 self.preview_content += Line::styled(
                     "Exits the current visual command menu.",
-                    Style::default().fg(Color::Green),
-                );
-            }
-            sc::MULTI_SHOW => {
-                self.preview_content += App::fmtln_sc("Show multi-selection");
-                self.preview_content += Line::styled(
-                    "Displays all currently selected items in the output window.",
-                    Style::default().fg(Color::Green),
-                );
-            }
-            sc::MULTI_CLEAR => {
-                self.preview_content += App::fmtln_sc("Clear multi-selection");
-                self.preview_content += Line::styled(
-                    "Clears all items from the multi-selection list.",
-                    Style::default().fg(Color::Green),
-                );
-            }
-            sc::MULTI_SAVE => {
-                self.preview_content += App::fmtln_sc("Save multi-selection");
-                self.preview_content += Line::styled(
-                    "Saves the multi-selection to a file.",
-                    Style::default().fg(Color::Green),
-                );
-            }
-            sc::MULTI_COPY => {
-                self.preview_content += App::fmtln_sc("Copy multi-selection");
-                self.preview_content += Line::styled(
-                    "Copies the multi-selection to the current directory",
-                    Style::default().fg(Color::Green),
-                );
-            }
-            sc::LOG => {
-                self.preview_content += App::fmtln_sc("Show application log");
-                self.preview_content += Line::styled(
-                    "Displays the application log in the output window.",
-                    Style::default().fg(Color::Green),
-                );
-            }
-            sc::LOG_CLEAR => {
-                self.preview_content += App::fmtln_sc("Clear application log");
-                self.preview_content += Line::styled(
-                    "Clear the application log file.",
-                    Style::default().fg(Color::Green),
-                );
-            }
-            sc::CMDS_LIST => {
-                self.preview_content += App::fmtln_sc("Command list");
-                self.preview_content += Line::styled(
-                    "Show a list of all available commands",
                     Style::default().fg(Color::Green),
                 );
             }
@@ -899,59 +829,6 @@ impl<'a> App<'a> {
                     node_type: NodeType::Command,
                 });
             }
-            return;
-        }
-        // Handle visual commands
-        if self.mode_vis_commands {
-            self.listing.clear();
-            self.listing.push(ItemInfo {
-                name: sc::MENU_BACK.to_string(),
-                node_type: NodeType::Shortcut,
-            });
-            self.listing.push(ItemInfo {
-                name: sc::EXIT.to_string(),
-                node_type: NodeType::Shortcut,
-            });
-            self.listing.push(ItemInfo {
-                name: sc::HOME.to_string(),
-                node_type: NodeType::Shortcut,
-            });
-            self.listing.push(ItemInfo {
-                name: sc::DIR_UP.to_string(),
-                node_type: NodeType::Shortcut,
-            });
-            self.listing.push(ItemInfo {
-                name: sc::EXP.to_string(),
-                node_type: NodeType::Shortcut,
-            });
-            self.listing.push(ItemInfo {
-                name: sc::MULTI_SHOW.to_string(),
-                node_type: NodeType::Shortcut,
-            });
-            self.listing.push(ItemInfo {
-                name: sc::MULTI_CLEAR.to_string(),
-                node_type: NodeType::Shortcut,
-            });
-            self.listing.push(ItemInfo {
-                name: sc::MULTI_SAVE.to_string(),
-                node_type: NodeType::Shortcut,
-            });
-            self.listing.push(ItemInfo {
-                name: sc::MULTI_COPY.to_string(),
-                node_type: NodeType::Shortcut,
-            });
-            self.listing.push(ItemInfo {
-                name: sc::LOG.to_string(),
-                node_type: NodeType::Shortcut,
-            });
-            self.listing.push(ItemInfo {
-                name: sc::LOG_CLEAR.to_string(),
-                node_type: NodeType::Shortcut,
-            });
-            self.listing.push(ItemInfo {
-                name: sc::CMDS_LIST.to_string(),
-                node_type: NodeType::Shortcut,
-            });
             return;
         }
         // Normal directory listing
@@ -1311,20 +1188,6 @@ impl<'a> App<'a> {
         self.cmd_output_window_show();
     }
 
-    fn cmd_cmd_vis_toggle(&mut self) {
-        self.mode_vis_commands = !self.mode_vis_commands;
-        self.update_listing();
-        self.update_results();
-        self.selection_index = 0;
-    }
-
-    fn cmd_vis_show(&mut self) {
-        self.mode_vis_commands = true;
-        self.update_listing();
-        self.update_results();
-        self.selection_index = 0;
-    }
-
     fn cmd_cmd_finder_toggle(&mut self) {
         self.mode_cmd_finder = !self.mode_cmd_finder;
         self.update_listing();
@@ -1347,11 +1210,12 @@ impl<'a> App<'a> {
         self.cmd_output_window_show();
     }
 
+    // Deprecated?
     fn cmd_menu_back(&mut self) {
-        self.mode_vis_commands = false;
-        self.update_listing();
-        self.update_results();
-        self.selection_index = 0;
+        // self.mode_vis_commands = false;
+        // self.update_listing();
+        // self.update_results();
+        // self.selection_index = 0;
     }
 
     fn cmd_log_show(&mut self) {
@@ -1453,32 +1317,13 @@ impl<'a> App<'a> {
                         self.cmd_explode();
                         return LoopReturn::Continue;
                     }
-                    sc::CMDS => {
-                        self.cmd_vis_show();
-                        return LoopReturn::Continue;
-                    }
                     sc::MENU_BACK => {
                         self.cmd_menu_back();
                         return LoopReturn::Continue;
                     }
-                    sc::MULTI_SHOW => {
-                        self.cmd_multi_show();
-                    }
-                    sc::MULTI_CLEAR => {
-                        self.cmd_multi_clear();
-                    }
-                    sc::MULTI_SAVE => {
-                        self.cmd_multi_save();
-                    }
-                    sc::MULTI_COPY => {}
-                    sc::LOG => {
-                        self.cmd_log_show();
-                    }
-                    sc::LOG_CLEAR => {
-                        self.cmd_log_clear();
-                    }
-                    sc::CMDS_LIST => {
-                        self.cmd_cmd_list();
+                    sc::CMDS => {
+                        self.cmd_cmd_finder_toggle();
+                        return LoopReturn::Continue;
                     }
                     _ => {
                         // Check if selection is an internal command
@@ -1511,8 +1356,6 @@ impl<'a> App<'a> {
             _ if cmd == self.get_cmd(&CmdName::MultiSave) => self.cmd_multi_save(),
             _ if cmd == self.get_cmd(&CmdName::MultiCopy) => self.cmd_multi_copy(),
             _ if cmd == self.get_cmd(&CmdName::MultiDelete) => self.cmd_multi_delete(),
-            _ if cmd == self.get_cmd(&CmdName::CmdVisToggle) => self.cmd_cmd_vis_toggle(),
-            _ if cmd == self.get_cmd(&CmdName::CmdVisShow) => self.cmd_vis_show(),
             _ if cmd == self.get_cmd(&CmdName::CmdFinderToggle) => self.cmd_cmd_finder_toggle(),
             _ if cmd == self.get_cmd(&CmdName::CmdList) => self.cmd_cmd_list(),
             _ if cmd == self.get_cmd(&CmdName::MenuBack) => self.cmd_menu_back(),
