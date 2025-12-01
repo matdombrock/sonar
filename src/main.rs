@@ -65,6 +65,10 @@ mod nf {
     pub const CMD: &str = "";
     pub const INFO: &str = "";
     pub const CHECK: &str = "";
+    pub const B4: &str = "█";
+    pub const B3: &str = "▓";
+    pub const B2: &str = "▒";
+    pub const B1: &str = "░";
 }
 
 // Shortcut strings
@@ -111,6 +115,7 @@ mod cmd_list {
         SecUp,
         SecDown,
         ShowKeybinds,
+        DbgClearPreview,
     }
 
     #[derive(Debug, Clone)]
@@ -376,6 +381,15 @@ mod cmd_list {
                 fname: "Show Keybinds",
                 description: "Show current keybindings",
                 cmd: "show-keybinds",
+                vis_hidden: false,
+            },
+        );
+        map.insert(
+            CmdName::DbgClearPreview,
+            CmdData {
+                fname: "Debug Clear Preview",
+                description: "Clear preview content. Some terminals may not refresh properly causing artifacts.",
+                cmd: "dbg-prev-clear",
                 vis_hidden: false,
             },
         );
@@ -726,6 +740,8 @@ struct App<'a> {
     output_text: String,
     cmd_list: cmd_list::CmdList,
     keybinds: KeyBindList,
+    // Layout vals - read only
+    lay_preview_area: Rect,
 }
 impl<'a> App<'a> {
     fn new() -> Self {
@@ -750,6 +766,7 @@ impl<'a> App<'a> {
             output_text: String::new(),
             cmd_list: cmd_list::make_cmd_list(),
             keybinds: make_keybind_list(),
+            lay_preview_area: Rect::default(),
         }
     }
 
@@ -913,7 +930,6 @@ impl<'a> App<'a> {
     }
 
     fn preview_file(&mut self, selected_path: &PathBuf) {
-        // Helper to convert syntect color to ratatui Color
         fn syntect_to_ratatui_color(s: SyntectStyle) -> RColor {
             RColor::Rgb(s.foreground.r, s.foreground.g, s.foreground.b)
         }
@@ -1562,6 +1578,14 @@ impl<'a> App<'a> {
         self.cmd_output_window_show();
     }
 
+    fn cmd_dbg_clear_preview(&mut self) {
+        self.preview_content = Default::default();
+        for _ in 0..self.lay_preview_area.height {
+            self.preview_content +=
+                Line::from((nf::B4).repeat(self.lay_preview_area.width as usize - 2));
+        }
+    }
+
     fn handle_cmd(&mut self, cmd: &str) -> LoopReturn {
         match cmd {
             // The main Select command is long because it handles shortcuts
@@ -1636,6 +1660,7 @@ impl<'a> App<'a> {
             _ if cmd == self.get_cmd(&CmdName::SecDown) => self.cmd_sec_down(),
             _ if cmd == self.get_cmd(&CmdName::SecUp) => self.cmd_sec_up(),
             _ if cmd == self.get_cmd(&CmdName::ShowKeybinds) => self.cmd_show_keybinds(),
+            _ if cmd == self.get_cmd(&CmdName::DbgClearPreview) => self.cmd_dbg_clear_preview(),
             _ => {
                 // If the cmd starts with `!` treat it as a shell command
 
@@ -1677,7 +1702,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
     app.update_selection();
     app.update_preview();
     loop {
-        terminal.draw(|f| render(f, &app))?;
+        terminal.draw(|f| render(f, &mut app))?;
         if event::poll(std::time::Duration::from_millis(100))? {
             if let Event::Key(KeyEvent {
                 code, modifiers, ..
@@ -1725,34 +1750,34 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
     Ok(())
 }
 
-fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage((100 - percent_y) / 2),
-                Constraint::Percentage(percent_y),
-                Constraint::Percentage((100 - percent_y) / 2),
-            ]
-            .as_ref(),
-        )
-        .split(area);
+fn render(frame: &mut Frame, app: &mut App) {
+    fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+        let popup_layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(
+                [
+                    Constraint::Percentage((100 - percent_y) / 2),
+                    Constraint::Percentage(percent_y),
+                    Constraint::Percentage((100 - percent_y) / 2),
+                ]
+                .as_ref(),
+            )
+            .split(area);
 
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage((100 - percent_x) / 2),
-                Constraint::Percentage(percent_x),
-                Constraint::Percentage((100 - percent_x) / 2),
-            ]
-            .as_ref(),
-        )
-        .split(popup_layout[1])[1]
-}
-
-fn render(frame: &mut Frame, app: &App) {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(
+                [
+                    Constraint::Percentage((100 - percent_x) / 2),
+                    Constraint::Percentage(percent_x),
+                    Constraint::Percentage((100 - percent_x) / 2),
+                ]
+                .as_ref(),
+            )
+            .split(popup_layout[1])[1]
+    }
     let area = frame.area();
+    // frame.render_widget(Clear, area); // Clear the area
     let threshold = 100;
 
     // --- Widget creation ---
@@ -1835,6 +1860,7 @@ fn render(frame: &mut Frame, app: &App) {
         frame.render_widget(input_widget, vertical_chunks[0]);
         frame.render_stateful_widget(list_widget, vertical_chunks[1], &mut state);
         frame.render_widget(preview_widget, vertical_chunks[2]);
+        app.lay_preview_area = vertical_chunks[2];
     } else {
         // Horizontal layout
         let horizontal_chunks = Layout::default()
@@ -1851,6 +1877,7 @@ fn render(frame: &mut Frame, app: &App) {
         frame.render_widget(input_widget, left_vertical_chunks[0]);
         frame.render_stateful_widget(list_widget, left_vertical_chunks[1], &mut state);
         frame.render_widget(preview_widget, horizontal_chunks[1]);
+        app.lay_preview_area = horizontal_chunks[1];
     }
 
     // --- Popups ---

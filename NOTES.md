@@ -16,7 +16,7 @@
 
 ## Todo Bug / Incomplete
 - Handle large dirs
-- Fix file read not clearing
+- Fix file read not clearing (foot only)
 - Beter metadata handling
 - Use primary up/down for scrolling output
 - Vis commands doesnt update selection at fist (same for cmd finder)
@@ -53,6 +53,8 @@ One problem there though is that the commands operate on self (app) so if they m
 - Custom Keybinds
 - Multi-select
 - Responsize design
+
+## Goals
 
 ## VS FF
 - Multi-select across dirs
