@@ -369,13 +369,13 @@ mod log {
 
 #[derive(Clone, PartialEq)]
 enum NodeType {
-    File,
-    Directory,
-    Shortcut, // Internal shortcut
-    Command,  // Internal command
-    Executable,
-    Image,
-    Unknown,
+    File,       // A regular file
+    Directory,  // A directory
+    Shortcut,   // Internal shortcut
+    Command,    // Internal command, name should always be the command string
+    Executable, // An executable file
+    Image,      // An image file
+    Unknown,    // Unknown, unsupported, etc.
 }
 impl NodeType {
     fn find(metadata: fs::Metadata) -> NodeType {
