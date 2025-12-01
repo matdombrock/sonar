@@ -31,6 +31,7 @@ use syntect::parsing::SyntaxSet;
 // Might want Path
 use std::path::PathBuf;
 
+// INTERNAL MODULES
 use crate::cmd_list::CmdName;
 
 const APP_NAME: &str = "sona";
@@ -80,6 +81,8 @@ mod sc {
 mod cmd_list {
     use std::collections::HashMap;
 
+    use crate::cmd_list;
+
     #[derive(Hash, Eq, PartialEq, Debug, Clone, PartialOrd, Ord)]
     pub enum CmdName {
         Exit,
@@ -91,7 +94,6 @@ mod cmd_list {
         Explode,
         Select,
         CmdWinToggle,
-        CmdVisToggle,
         CmdFinderToggle,
         CmdList,
         OutputWinToggle,
@@ -118,6 +120,17 @@ mod cmd_list {
         pub vis_hidden: bool, // Hidden from visual cmd selection
     }
     pub type CmdList = HashMap<CmdName, CmdData>;
+    pub fn cmd_name_from_str(
+        cmd_list: &HashMap<CmdName, cmd_list::CmdData>,
+        cmd: &str,
+    ) -> Option<cmd_list::CmdName> {
+        for (name, data) in cmd_list.iter() {
+            if data.cmd == cmd {
+                return Some(name.clone());
+            }
+        }
+        None
+    }
     pub fn make_cmd_list() -> CmdList {
         let mut map = HashMap::new();
         map.insert(
@@ -197,16 +210,7 @@ mod cmd_list {
             CmdData {
                 fname: "Command Window Toggle",
                 description: "Toggle command window where you can type commands",
-                cmd: "cmd",
-                vis_hidden: false,
-            },
-        );
-        map.insert(
-            CmdName::CmdVisToggle,
-            CmdData {
-                fname: "Visual Command Toggle",
-                description: "Toggle a visual command menu in the listing",
-                cmd: "cmd-vis-toggle",
+                cmd: "cmd-win",
                 vis_hidden: false,
             },
         );
@@ -215,7 +219,7 @@ mod cmd_list {
             CmdData {
                 fname: "Command Finder Toggle",
                 description: "Toggle the fuzzy command finder",
-                cmd: "cmd-finder",
+                cmd: "cmd-find",
                 vis_hidden: false,
             },
         );
@@ -260,7 +264,7 @@ mod cmd_list {
             CmdData {
                 fname: "Multi-Select Toggle",
                 description: "Toggle multi-selection for current item",
-                cmd: "multi-sel",
+                cmd: "mul-sel",
                 vis_hidden: false,
             },
         );
@@ -269,7 +273,7 @@ mod cmd_list {
             CmdData {
                 fname: "Multi-Select Clear",
                 description: "Clear multi-selection",
-                cmd: "multi-clear",
+                cmd: "mul-clear",
                 vis_hidden: false,
             },
         );
@@ -278,7 +282,7 @@ mod cmd_list {
             CmdData {
                 fname: "Multi-Select Show",
                 description: "Show multi-selection in the output window",
-                cmd: "multi-show",
+                cmd: "mul-show",
                 vis_hidden: false,
             },
         );
@@ -287,7 +291,7 @@ mod cmd_list {
             CmdData {
                 fname: "Multi-Select Save",
                 description: "Save multi-selection to file",
-                cmd: "multi-save",
+                cmd: "mul-save",
                 vis_hidden: false,
             },
         );
@@ -296,7 +300,7 @@ mod cmd_list {
             CmdData {
                 fname: "Multi-Select Copy",
                 description: "Copy multi-selection to the current directory",
-                cmd: "multi-copy",
+                cmd: "mul-copy",
                 vis_hidden: false,
             },
         );
@@ -305,7 +309,7 @@ mod cmd_list {
             CmdData {
                 fname: "Multi-Select Delete",
                 description: "Delete multi-selection files",
-                cmd: "multi-delete",
+                cmd: "mul-delete",
                 vis_hidden: false,
             },
         );
@@ -476,7 +480,7 @@ impl KeyBind {
     }
 }
 type KeyBindList = Vec<KeyBind>;
-fn make_keybind_list() -> KeyBindList {
+fn make_keybind_defaults() -> KeyBindList {
     let mut list = KeyBindList::new();
     list.push(KeyBind::new(
         KeyModifiers::CONTROL,
@@ -560,6 +564,77 @@ fn make_keybind_list() -> KeyBindList {
     ));
     list
 }
+fn make_keybind_list() -> KeyBindList {
+    // Read keybinds.txt
+    let keybinds = match fs::read_to_string("keybinds.txt") {
+        Ok(content) => content,
+        Err(_) => {
+            log!("keybinds.txt not found, using default keybinds");
+            return make_keybind_defaults();
+        }
+    };
+    let mut list = KeyBindList::new();
+    let cmd_list = cmd_list::make_cmd_list();
+    for line in keybinds.lines() {
+        // Ignore comments
+        if line.starts_with('#') || line.trim().is_empty() {
+            continue;
+        }
+        // Trim whitespace
+        let line = line.trim();
+        let split = line.split_whitespace().collect::<Vec<&str>>();
+        if split.len() != 2 {
+            log!("Invalid line in keybinds.txt: {}", line);
+            continue;
+        }
+        let cmd = split[0];
+        let combo = split[1];
+        let mut modifier = "none";
+        let mut code = combo;
+        if combo.contains('-') {
+            let combo_split = combo.split('-').collect::<Vec<&str>>();
+            modifier = combo_split[0];
+            code = combo_split[1];
+        }
+        //
+        let cmd = match cmd_list::cmd_name_from_str(&cmd_list, cmd) {
+            Some(name) => name,
+            None => {
+                log!("Unknown command in keybinds.txt: {}", cmd);
+                continue;
+            }
+        };
+        let modifiers = match modifier.to_lowercase().as_str() {
+            "ctrl" => KeyModifiers::CONTROL,
+            "alt" => KeyModifiers::ALT,
+            "shift" => KeyModifiers::SHIFT,
+            "none" => KeyModifiers::NONE,
+            _ => {
+                log!("Unknown modifier in keybinds.txt: {}", modifier);
+                continue;
+            }
+        };
+        let code = match code.to_lowercase().as_str() {
+            "enter" => KeyCode::Enter,
+            "esc" => KeyCode::Esc,
+            "up" => KeyCode::Up,
+            "down" => KeyCode::Down,
+            "left" => KeyCode::Left,
+            "right" => KeyCode::Right,
+            c if c.len() == 1 => {
+                let ch = c.chars().next().unwrap();
+                KeyCode::Char(ch)
+            }
+            _ => {
+                log!("Unknown key code in keybinds.txt: {}", code);
+                continue;
+            }
+        };
+        let keybind = KeyBind::new(modifiers, code, cmd);
+        list.push(keybind);
+    }
+    list
+}
 
 // Return type for loop control
 // TODO: Im still suspicious of this design
@@ -589,6 +664,7 @@ struct App<'a> {
     show_output_window: bool,
     output_text: String,
     cmd_list: cmd_list::CmdList,
+    keybinds: KeyBindList,
 }
 impl<'a> App<'a> {
     fn new() -> Self {
@@ -612,6 +688,7 @@ impl<'a> App<'a> {
             show_output_window: false,
             output_text: String::new(),
             cmd_list: cmd_list::make_cmd_list(),
+            keybinds: make_keybind_list(),
         }
     }
 
@@ -680,15 +757,6 @@ impl<'a> App<'a> {
     fn set_output(&mut self, text: &str) {
         self.reset_sec_scroll();
         self.output_text = text.to_string();
-    }
-
-    fn cmd_name_from_str(&self, cmd: &str) -> Option<cmd_list::CmdName> {
-        for (name, data) in self.cmd_list.iter() {
-            if data.cmd == cmd {
-                return Some(name.clone());
-            }
-        }
-        None
     }
 
     fn get_cmd_data(&self, name: &cmd_list::CmdName) -> &cmd_list::CmdData {
@@ -898,13 +966,15 @@ impl<'a> App<'a> {
                 self.preview_content = Default::default();
                 // Check if we have an internal command
                 if self.selection.is_command() {
-                    let cmd_name = match self.cmd_name_from_str(&self.selection.name) {
-                        Some(name) => name,
-                        None => {
-                            self.preview_content += Line::from("Error: Command data not found.");
-                            return;
-                        }
-                    };
+                    let cmd_name =
+                        match cmd_list::cmd_name_from_str(&self.cmd_list, &self.selection.name) {
+                            Some(name) => name,
+                            None => {
+                                self.preview_content +=
+                                    Line::from("Error: Command data not found.");
+                                return;
+                            }
+                        };
                     let data = self.get_cmd_data(&cmd_name).clone();
                     self.preview_content += Line::styled(
                         format!("name: {}", data.fname),
@@ -1108,7 +1178,7 @@ impl<'a> App<'a> {
 
     fn input_keybinds(&mut self, modifiers: KeyModifiers, code: KeyCode) -> String {
         let mut cmd = String::new();
-        for kb in make_keybind_list().iter() {
+        for kb in self.keybinds.iter() {
             if kb.modifiers == modifiers && kb.code == code {
                 cmd = self.get_cmd(&kb.command).to_string();
                 break;
