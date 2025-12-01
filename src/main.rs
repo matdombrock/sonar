@@ -64,6 +64,7 @@ mod nf {
     pub const INFO: &str = "";
     pub const CHECK: &str = "";
     pub const WARN: &str = "";
+    pub const BOMB: &str = "";
     pub const B4: &str = "█";
     pub const B3: &str = "▓";
     pub const B2: &str = "▒";
@@ -1123,7 +1124,8 @@ impl<'a> App<'a> {
                 self.preview_content += App::fmtln_sc("Go to the home directory");
             }
             sc::DIR_UP => {
-                self.preview_content += App::fmtln_path(&self.cwd);
+                let up_path = self.cwd.parent().unwrap_or(&self.cwd);
+                self.preview_content += App::fmtln_path(&up_path.to_path_buf());
                 self.preview_content += App::fmtln_sc("Go up to the parent directory");
             }
             sc::DIR_BACK => {
@@ -1912,7 +1914,12 @@ fn render(frame: &mut Frame, app: &mut App) {
     input_line.push_span(suffix);
     let input_widget = Paragraph::new(input_line).block(
         Block::default()
-            .title(format!(" {}", app.cwd.to_str().unwrap()))
+            .title(format!(
+                "( {} ) ) )  [ {} / {} ] ",
+                APP_NAME.to_uppercase(),
+                app.results.len(),
+                app.listing.len(),
+            ))
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Green)),
     );
@@ -1931,7 +1938,12 @@ fn render(frame: &mut Frame, app: &mut App) {
             *line = new_line;
         }
     }
-    let list_title = format!("({})))[{}]", APP_NAME.to_uppercase(), app.results.len());
+    let explode_str = if app.mode_explode {
+        format!(" [{} exp]", nf::BOMB)
+    } else {
+        "".to_string()
+    };
+    let list_title = format!("|{}{} ", app.cwd.to_str().unwrap(), explode_str);
     let list_widget = List::new(results_pretty).block(
         Block::default()
             .title(list_title)
@@ -1947,7 +1959,7 @@ fn render(frame: &mut Frame, app: &mut App) {
     let preview_widget = Paragraph::new(app.preview_content.clone())
         .block(
             Block::default()
-                .title(format!("{} (0)_(0) {} ", nf::LOOK, app.selection.name))
+                .title(format!("{} m(0)_(0)m | {} ", nf::LOOK, app.selection.name))
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Yellow)),
             // .style(Style::default().bg(Color::Back)),
