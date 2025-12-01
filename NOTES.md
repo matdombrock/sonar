@@ -5,6 +5,7 @@
 - Tab to use primary up/down on preview?
 - Git integration?
 - Select alt, like right click for context (delete, multi, etc)?
+- Better input handling (especially for commands)
 - Seer?
 
 ## Todo Cmd
@@ -14,7 +15,6 @@
 - clipboard-file-path
 
 ## Todo Bug / Incomplete
-- Better input handling (especially for commands)
 - Handle large dirs
 - Fix file read not clearing
 - Beter metadata handling
@@ -25,10 +25,15 @@
 - Directories do not refresh after commands change them
 
 ## Notes
+
+### Finder as default
 It would make sense for command finder to be the main way of launching commands
 But then its not easily possible to run a command on a single selection
 Maybe caching the selection while in command finder could work?
 When a cmd is selected just send it to the cmd popup?
+
+### Selection vs multi-selection
+The difference between a selection (current list selection) and multi-select is confusing.
 
 ### Command props
 is_hidden

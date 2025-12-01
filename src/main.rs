@@ -110,6 +110,7 @@ mod cmd_list {
         MultiShow,
         MultiSave,
         MultiCopy,
+        MultiDelete,
         MenuBack,
         Log,
         LogClear,
@@ -292,6 +293,14 @@ mod cmd_list {
                 fname: "Multi-Select Copy",
                 description: "Copy multi-selection to the current directory",
                 cmd: "multi-copy",
+            },
+        );
+        map.insert(
+            CmdName::MultiDelete,
+            CmdData {
+                fname: "Multi-Select Delete",
+                description: "Delete multi-selection files",
+                cmd: "multi-delete",
             },
         );
         map.insert(
@@ -1276,6 +1285,32 @@ impl<'a> App<'a> {
         self.cmd_output_window_show();
     }
 
+    fn cmd_multi_delete(&mut self) {
+        let mut output_text = String::new();
+        if self.multi_selection.is_empty() {
+            self.set_output("No items in multi selection to delete.");
+            self.cmd_output_window_show();
+            return;
+        }
+        for path in self.multi_selection.iter() {
+            match fs::remove_file(&path) {
+                Ok(_) => {
+                    output_text += &format!("Deleted {}\n", path.to_str().unwrap());
+                }
+                Err(e) => {
+                    output_text += &format!(
+                        "Failed to delete {}: {}\n",
+                        path.to_str().unwrap(),
+                        e.to_string()
+                    );
+                }
+            }
+        }
+        self.multi_selection.clear();
+        self.set_output(&output_text);
+        self.cmd_output_window_show();
+    }
+
     fn cmd_cmd_vis_toggle(&mut self) {
         self.mode_vis_commands = !self.mode_vis_commands;
         self.update_listing();
@@ -1475,6 +1510,7 @@ impl<'a> App<'a> {
             _ if cmd == self.get_cmd(&CmdName::MultiShow) => self.cmd_multi_show(),
             _ if cmd == self.get_cmd(&CmdName::MultiSave) => self.cmd_multi_save(),
             _ if cmd == self.get_cmd(&CmdName::MultiCopy) => self.cmd_multi_copy(),
+            _ if cmd == self.get_cmd(&CmdName::MultiDelete) => self.cmd_multi_delete(),
             _ if cmd == self.get_cmd(&CmdName::CmdVisToggle) => self.cmd_cmd_vis_toggle(),
             _ if cmd == self.get_cmd(&CmdName::CmdVisShow) => self.cmd_vis_show(),
             _ if cmd == self.get_cmd(&CmdName::CmdFinderToggle) => self.cmd_cmd_finder_toggle(),
