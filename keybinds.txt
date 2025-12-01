@@ -1,0 +1,16 @@
+exit     ctrl-q
+exit     none-esc
+home     alt-h
+sel-up   none-up
+sel-down none-down
+dir-up   ctrl-u
+dir-back ctrl-h
+explode  ctrl-x
+select   none-enter
+select   ctrl-l
+cmd-win  ctrl-w
+cmd-find ctrl-t 
+cmd-list ctrl-i
+mul-sel  ctrl-s
+sec-up   alt-k
+sec-down alt-j

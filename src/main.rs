@@ -31,6 +31,7 @@ use syntect::parsing::SyntaxSet;
 // Might want Path
 use std::path::PathBuf;
 
+// INTERNAL MODULES
 use crate::cmd_list::CmdName;
 
 const APP_NAME: &str = "sona";
@@ -75,19 +76,14 @@ mod sc {
     pub const MENU_BACK: &str = " menu";
     pub const EXP: &str = " explode";
     pub const CMDS: &str = " cmds";
-    pub const MULTI_SHOW: &str = " show multi-selection";
-    pub const MULTI_CLEAR: &str = " clear multi-selection";
-    pub const MULTI_SAVE: &str = " save multi-selection";
-    pub const MULTI_COPY: &str = " copy multi-selection";
-    pub const LOG: &str = " show log";
-    pub const LOG_CLEAR: &str = " clear log";
-    pub const CMDS_LIST: &str = " command list";
 }
 
 mod cmd_list {
     use std::collections::HashMap;
 
-    #[derive(Hash, Eq, PartialEq, Debug, Clone)]
+    use crate::cmd_list;
+
+    #[derive(Hash, Eq, PartialEq, Debug, Clone, PartialOrd, Ord)]
     pub enum CmdName {
         Exit,
         Home,
@@ -98,9 +94,7 @@ mod cmd_list {
         Explode,
         Select,
         CmdWinToggle,
-        CmdVisToggle,
-        CmdVisShow,
-        CmdFinder,
+        CmdFinderToggle,
         CmdList,
         OutputWinToggle,
         OutputWinShow,
@@ -110,11 +104,13 @@ mod cmd_list {
         MultiShow,
         MultiSave,
         MultiCopy,
+        MultiDelete,
         MenuBack,
         Log,
         LogClear,
         SecUp,
         SecDown,
+        ShowKeybinds,
     }
 
     #[derive(Debug, Clone)]
@@ -122,216 +118,265 @@ mod cmd_list {
         pub fname: &'static str,
         pub description: &'static str,
         pub cmd: &'static str,
+        pub vis_hidden: bool, // Hidden from visual cmd selection
     }
     pub type CmdList = HashMap<CmdName, CmdData>;
+    pub fn cmd_name_from_str(
+        cmd_list: &HashMap<CmdName, cmd_list::CmdData>,
+        cmd: &str,
+    ) -> Option<cmd_list::CmdName> {
+        for (name, data) in cmd_list.iter() {
+            if data.cmd == cmd {
+                return Some(name.clone());
+            }
+        }
+        None
+    }
+    pub fn get_cmd_data(
+        cmd_list: &cmd_list::CmdList,
+        name: &cmd_list::CmdName,
+    ) -> cmd_list::CmdData {
+        cmd_list.get(name).unwrap().clone()
+    }
+
+    // Helper to get command string from CmdName
+    pub fn get_cmd(cmd_list: &cmd_list::CmdList, name: &cmd_list::CmdName) -> String {
+        get_cmd_data(cmd_list, name).cmd.to_string()
+    }
     pub fn make_cmd_list() -> CmdList {
         let mut map = HashMap::new();
         map.insert(
             CmdName::Exit,
             CmdData {
-                fname: "cmd_exit",
+                fname: "Exit",
                 description: "Exit the application",
                 cmd: "exit",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::Home,
             CmdData {
-                fname: "cmd_home",
-                description: "Go to the home directory",
+                fname: "Home",
+                description: "Go to your home directory",
                 cmd: "home",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::SelUp,
             CmdData {
-                fname: "cmd_sel_up",
+                fname: "Selection Up",
                 description: "Move selection up",
                 cmd: "sel-up",
+                vis_hidden: true,
             },
         );
         map.insert(
             CmdName::SelDown,
             CmdData {
-                fname: "cmd_sel_down",
+                fname: "Selection Down",
                 description: "Move selection down",
                 cmd: "sel-down",
+                vis_hidden: true,
             },
         );
         map.insert(
             CmdName::DirUp,
             CmdData {
-                fname: "cmd_dir_up",
+                fname: "Directory Up (cd ..)",
                 description: "Go up to the parent directory",
                 cmd: "dir-up",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::DirBack,
             CmdData {
-                fname: "cmd_dir_back",
+                fname: "Directory Back (cd -)",
                 description: "Go back to the last working directory",
                 cmd: "dir-back",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::Explode,
             CmdData {
-                fname: "cmd_explode",
-                description: "Toggle explode mode",
+                fname: "Explode Mode Toggle",
+                description: "Find all files in subdirectories",
                 cmd: "explode",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::Select,
             CmdData {
-                fname: "cmd_select",
+                fname: "Select Current Item",
                 description: "Select the current item",
                 cmd: "select",
+                vis_hidden: true,
             },
         );
         map.insert(
             CmdName::CmdWinToggle,
             CmdData {
-                fname: "cmd_cmd_window_toggle",
-                description: "Toggle command window",
-                cmd: "cmd",
+                fname: "Command Window Toggle",
+                description: "Toggle command window where you can type commands",
+                cmd: "cmd-win",
+                vis_hidden: false,
             },
         );
         map.insert(
-            CmdName::CmdVisToggle,
+            CmdName::CmdFinderToggle,
             CmdData {
-                fname: "cmd_cmd_vis_toggle",
-                description: "Toggle visual commands",
-                cmd: "cmd-vis-toggle",
-            },
-        );
-        map.insert(
-            CmdName::CmdVisShow,
-            CmdData {
-                fname: "cmd_cmd_vis_show",
-                description: "Show visual commands",
-                cmd: "cmd-vis-show",
-            },
-        );
-        map.insert(
-            CmdName::CmdFinder,
-            CmdData {
-                fname: "cmd_cmd_finder",
-                description: "Toggle command finder",
-                cmd: "cmd-finder",
+                fname: "Command Finder Toggle",
+                description: "Toggle the fuzzy command finder",
+                cmd: "cmd-find",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::CmdList,
             CmdData {
-                fname: "cmd_cmd_list",
+                fname: "Command List",
                 description: "List all commands",
                 cmd: "cmd-list",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::OutputWinToggle,
             CmdData {
-                fname: "cmd_output_window_toggle",
+                fname: "Output Window Toggle",
                 description: "Toggle output window",
                 cmd: "output-toggle",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::OutputWinShow,
             CmdData {
-                fname: "cmd_output_window_show",
+                fname: "Output Window Show",
                 description: "Show output window",
                 cmd: "output-show",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::OutputWinHide,
             CmdData {
-                fname: "cmd_output_window_hide",
+                fname: "Output Window Hide",
                 description: "Hide output window",
                 cmd: "output-hide",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::MultiSel,
             CmdData {
-                fname: "cmd_multi_sel",
+                fname: "Multi-Select Toggle",
                 description: "Toggle multi-selection for current item",
-                cmd: "multi-sel",
+                cmd: "mul-sel",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::MultiClear,
             CmdData {
-                fname: "cmd_multi_clear",
+                fname: "Multi-Select Clear",
                 description: "Clear multi-selection",
-                cmd: "multi-clear",
+                cmd: "mul-clear",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::MultiShow,
             CmdData {
-                fname: "cmd_multi_show",
-                description: "Show multi-selection",
-                cmd: "multi-show",
+                fname: "Multi-Select Show",
+                description: "Show multi-selection in the output window",
+                cmd: "mul-show",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::MultiSave,
             CmdData {
-                fname: "cmd_multi_save",
+                fname: "Multi-Select Save",
                 description: "Save multi-selection to file",
-                cmd: "multi-save",
+                cmd: "mul-save",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::MultiCopy,
             CmdData {
-                fname: "cmd_multi_copy",
-                description: "Copy multi-selection to clipboard",
-                cmd: "multi-copy",
+                fname: "Multi-Select Copy",
+                description: "Copy multi-selection to the current directory",
+                cmd: "mul-copy",
+                vis_hidden: false,
+            },
+        );
+        map.insert(
+            CmdName::MultiDelete,
+            CmdData {
+                fname: "Multi-Select Delete",
+                description: "Delete multi-selection files",
+                cmd: "mul-delete",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::MenuBack,
             CmdData {
-                fname: "cmd_menu_back",
+                fname: "Menu Back",
                 description: "Go back to previous menu",
                 cmd: "menu-back",
+                vis_hidden: true,
             },
         );
         map.insert(
             CmdName::Log,
             CmdData {
-                fname: "cmd_log",
+                fname: "Low Viewer",
                 description: "Show application log",
                 cmd: "log",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::LogClear,
             CmdData {
-                fname: "cmd_log_clear",
+                fname: "Log Clear",
                 description: "Clear application log",
                 cmd: "log-clear",
+                vis_hidden: false,
             },
         );
         map.insert(
             CmdName::SecUp,
             CmdData {
-                fname: "cmd_sec_up",
+                fname: "Secondary Scroll Up",
                 description: "Scroll secondary window up",
                 cmd: "sec-up",
+                vis_hidden: true,
             },
         );
         map.insert(
             CmdName::SecDown,
             CmdData {
-                fname: "cmd_sec_down",
+                fname: "Secondary Scroll Down",
                 description: "Scroll secondary window down",
                 cmd: "sec-down",
+                vis_hidden: true,
+            },
+        );
+        map.insert(
+            CmdName::ShowKeybinds,
+            CmdData {
+                fname: "Show Keybinds",
+                description: "Show current keybindings",
+                cmd: "show-keybinds",
+                vis_hidden: false,
             },
         );
 
@@ -367,15 +412,293 @@ mod log {
     }
 }
 
+#[derive(Clone, PartialEq)]
+enum NodeType {
+    File,       // A regular file
+    Directory,  // A directory
+    Shortcut,   // Internal shortcut
+    Command,    // Internal command, name should always be the command string
+    Executable, // An executable file
+    Image,      // An image file
+    Unknown,    // Unknown, unsupported, etc.
+}
+impl NodeType {
+    fn find(metadata: fs::Metadata) -> NodeType {
+        if metadata.is_dir() {
+            NodeType::Directory
+        } else if metadata.is_file() {
+            // Check if executable
+            #[cfg(unix)]
+            {
+                if metadata.permissions().mode() & 0o111 != 0 {
+                    return NodeType::Executable;
+                }
+            }
+            NodeType::File
+        } else {
+            NodeType::Unknown
+        }
+    }
+}
+
 // Information about a file or directory
 #[derive(Clone)]
 struct ItemInfo {
     name: String,
-    is_sc: bool,
-    metadata: fs::Metadata,
+    node_type: NodeType,
+}
+impl ItemInfo {
+    fn new(name: &str, node_type: NodeType) -> Self {
+        Self {
+            name: name.to_string(),
+            node_type,
+        }
+    }
+    fn empty() -> Self {
+        Self {
+            name: String::new(),
+            node_type: NodeType::Unknown,
+        }
+    }
+    fn is(&self, _is: NodeType) -> bool {
+        return self.node_type == _is;
+    }
+    fn is_file(&self) -> bool {
+        return self.node_type == NodeType::File;
+    }
+    fn is_dir(&self) -> bool {
+        return self.node_type == NodeType::Directory;
+    }
+    fn is_shortcut(&self) -> bool {
+        return self.node_type == NodeType::Shortcut;
+    }
+    fn is_command(&self) -> bool {
+        return self.node_type == NodeType::Command;
+    }
+    fn is_executable(&self) -> bool {
+        return self.node_type == NodeType::Executable;
+    }
+    fn is_image(&self) -> bool {
+        return self.node_type == NodeType::Image;
+    }
+    fn is_unknown(&self) -> bool {
+        return self.node_type == NodeType::Unknown;
+    }
+}
+
+#[derive(Clone)]
+struct KeyBind {
+    modifiers: KeyModifiers,
+    code: KeyCode,
+    command: CmdName,
+}
+impl KeyBind {
+    fn new(modifiers: KeyModifiers, code: KeyCode, command: CmdName) -> Self {
+        Self {
+            modifiers,
+            code,
+            command,
+        }
+    }
+}
+type KeyBindList = Vec<KeyBind>;
+fn make_keybind_defaults() -> KeyBindList {
+    let mut list = KeyBindList::new();
+    list.push(KeyBind::new(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('t'),
+        CmdName::CmdWinToggle,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('f'),
+        CmdName::CmdFinderToggle,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('s'),
+        CmdName::MultiSel,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::NONE,
+        KeyCode::Enter,
+        CmdName::Select,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::NONE,
+        KeyCode::Right,
+        CmdName::Select,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::NONE,
+        KeyCode::Up,
+        CmdName::SelUp,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::NONE,
+        KeyCode::Down,
+        CmdName::SelDown,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::NONE,
+        KeyCode::Left,
+        CmdName::DirBack,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('h'),
+        CmdName::DirBack,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('j'),
+        CmdName::SelDown,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('k'),
+        CmdName::SelUp,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('l'),
+        CmdName::Select,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::NONE,
+        KeyCode::Esc,
+        CmdName::Exit,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('q'),
+        CmdName::Exit,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::ALT,
+        KeyCode::Char('j'),
+        CmdName::SecDown,
+    ));
+    list.push(KeyBind::new(
+        KeyModifiers::ALT,
+        KeyCode::Char('k'),
+        CmdName::SecUp,
+    ));
+    list
+}
+
+fn kb_to_string_short(kb: &KeyBind) -> String {
+    let modifier = match kb.modifiers {
+        KeyModifiers::ALT => "alt",
+        KeyModifiers::CONTROL => "ctrl",
+        KeyModifiers::SHIFT => "shift",
+        KeyModifiers::NONE => "none",
+        _ => "UNKNOWN",
+    };
+    return format!("{}-{}", modifier, kb.code.to_string().to_lowercase());
+}
+
+// Needs the command list before KeyBind only points to enum
+fn kb_to_string_full(cmd_list: &cmd_list::CmdList, kb: &KeyBind) -> String {
+    return format!(
+        "{:<12} {}\n",
+        cmd_list::get_cmd(cmd_list, &kb.command),
+        kb_to_string_short(kb)
+    );
+}
+
+fn kb_find_by_cmd(keybinds: &KeyBindList, cmd: &cmd_list::CmdName) -> Option<KeyBind> {
+    for kb in keybinds.iter() {
+        if &kb.command == cmd {
+            return Some(kb.clone());
+        }
+    }
+    None
+}
+
+fn get_kb_path() -> PathBuf {
+    let kb_path = dirs::config_dir()
+        .unwrap_or(env::current_dir().unwrap())
+        .join(APP_NAME)
+        .join("keybinds.txt");
+    kb_path
+}
+
+fn make_keybind_list() -> KeyBindList {
+    // Read keybinds.txt
+    let keybinds = match fs::read_to_string(get_kb_path()) {
+        Ok(content) => content,
+        Err(_) => {
+            log!("keybinds.txt not found, using default keybinds");
+            // Try to create default keybinds.txt
+            return make_keybind_defaults();
+        }
+    };
+    let mut list = KeyBindList::new();
+    let cmd_list = cmd_list::make_cmd_list();
+    for line in keybinds.lines() {
+        // Ignore comments
+        if line.starts_with('#') || line.trim().is_empty() {
+            continue;
+        }
+        // Trim whitespace
+        let line = line.trim();
+        let split = line.split_whitespace().collect::<Vec<&str>>();
+        if split.len() != 2 {
+            log!("Invalid line in keybinds.txt: {}", line);
+            continue;
+        }
+        let cmd = split[0];
+        let combo = split[1];
+        let mut modifier = "none";
+        let mut code = combo;
+        if combo.contains('-') {
+            let combo_split = combo.split('-').collect::<Vec<&str>>();
+            modifier = combo_split[0];
+            code = combo_split[1];
+        }
+        //
+        let cmd = match cmd_list::cmd_name_from_str(&cmd_list, cmd) {
+            Some(name) => name,
+            None => {
+                log!("Unknown command in keybinds.txt: {}", cmd);
+                continue;
+            }
+        };
+        let modifiers = match modifier.to_lowercase().as_str() {
+            "ctrl" => KeyModifiers::CONTROL,
+            "alt" => KeyModifiers::ALT,
+            "shift" => KeyModifiers::SHIFT,
+            "none" => KeyModifiers::NONE,
+            _ => {
+                log!("Unknown modifier in keybinds.txt: {}", modifier);
+                continue;
+            }
+        };
+        let code = match code.to_lowercase().as_str() {
+            "enter" => KeyCode::Enter,
+            "esc" => KeyCode::Esc,
+            "up" => KeyCode::Up,
+            "down" => KeyCode::Down,
+            "left" => KeyCode::Left,
+            "right" => KeyCode::Right,
+            c if c.len() == 1 => {
+                let ch = c.chars().next().unwrap();
+                KeyCode::Char(ch)
+            }
+            _ => {
+                log!("Unknown key code in keybinds.txt: {}", code);
+                continue;
+            }
+        };
+        let keybind = KeyBind::new(modifiers, code, cmd);
+        list.push(keybind);
+    }
+    list
 }
 
 // Return type for loop control
+// TODO: Im still suspicious of this design
 enum LoopReturn {
     Continue,
     Break,
@@ -387,7 +710,7 @@ struct App<'a> {
     input: String,
     listing: Vec<ItemInfo>,
     results: Vec<ItemInfo>,
-    selection: String,
+    selection: ItemInfo,
     selection_index: i32,
     multi_selection: Vec<PathBuf>,
     preview_content: Text<'a>,
@@ -396,13 +719,13 @@ struct App<'a> {
     cwd: PathBuf,
     lwd: PathBuf,
     mode_explode: bool,
-    mode_vis_commands: bool,
-    mode_cmd: bool,
+    mode_cmd_finder: bool,
     show_command_window: bool,
     command_input: String,
     show_output_window: bool,
     output_text: String,
     cmd_list: cmd_list::CmdList,
+    keybinds: KeyBindList,
 }
 impl<'a> App<'a> {
     fn new() -> Self {
@@ -411,7 +734,7 @@ impl<'a> App<'a> {
             input: String::new(),
             listing: Vec::new(),
             results: Vec::new(),
-            selection: String::new(),
+            selection: ItemInfo::empty(),
             selection_index: 0,
             multi_selection: Vec::new(),
             preview_content: Default::default(),
@@ -420,13 +743,13 @@ impl<'a> App<'a> {
             cwd: env::current_dir().unwrap(),
             lwd: env::current_dir().unwrap(),
             mode_explode: false,
-            mode_vis_commands: false,
-            mode_cmd: false,
+            mode_cmd_finder: false,
             show_command_window: false,
             command_input: String::new(),
             show_output_window: false,
             output_text: String::new(),
             cmd_list: cmd_list::make_cmd_list(),
+            keybinds: make_keybind_list(),
         }
     }
 
@@ -455,11 +778,11 @@ impl<'a> App<'a> {
                         let file_name_str = file_name.to_string_lossy();
                         match entry.metadata() {
                             Ok(metadata) => {
+                                let node_type = NodeType::find(metadata.clone());
                                 if !self.mode_explode {
                                     entries.push(ItemInfo {
                                         name: file_name_str.to_string(),
-                                        is_sc: false,
-                                        metadata,
+                                        node_type,
                                     });
                                 } else {
                                     let sub_path = entry.path();
@@ -470,8 +793,7 @@ impl<'a> App<'a> {
                                     } else {
                                         entries.push(ItemInfo {
                                             name: sub_path.to_str().unwrap().to_string(),
-                                            is_sc: false,
-                                            metadata,
+                                            node_type,
                                         });
                                     }
                                 }
@@ -498,8 +820,9 @@ impl<'a> App<'a> {
         self.output_text = text.to_string();
     }
 
-    fn get_cmd(&self, name: &cmd_list::CmdName) -> &'static str {
-        self.cmd_list.get(name).unwrap().cmd
+    // A simple helper which avoids needing to pass cmd_list everywhere
+    fn get_cmd(&self, name: &cmd_list::CmdName) -> String {
+        cmd_list::get_cmd(&self.cmd_list, name)
     }
 
     fn fmtln_info(label: &str, value: &str) -> Line<'a> {
@@ -540,12 +863,12 @@ impl<'a> App<'a> {
                 ms = &ms_on;
             }
             // Limit for performance
-            let line = if item.is_sc {
+            let line = if item.is_shortcut() {
                 Line::styled(
                     format!("{}{} {}", ms, nf::CMD, item.name),
                     Style::default().fg(Color::Yellow),
                 )
-            } else if item.metadata.is_dir() {
+            } else if item.is_dir() {
                 Line::styled(
                     format!("{}{} {}/", ms, nf::DIR, item.name),
                     Style::default().fg(Color::Green),
@@ -643,15 +966,12 @@ impl<'a> App<'a> {
     }
 
     fn update_preview(&mut self) {
-        log!("Updating preview for selection: {}", self.selection);
+        log!("Updating preview for selection: {}", self.selection.name);
         self.preview_content = Default::default();
         self.reset_sec_scroll();
-        match self.selection.as_str() {
+        match self.selection.name.as_str() {
             sc::EXIT => {
                 self.preview_content += App::fmtln_sc("Exit the application");
-                if self.mode_vis_commands {
-                    return;
-                }
                 self.preview_content += Line::from("");
                 for (i, line) in LOGO.lines().enumerate() {
                     if i == 0 {
@@ -663,6 +983,9 @@ impl<'a> App<'a> {
                 for line in WELCOME_MSG.lines() {
                     self.preview_content += Line::from(line);
                 }
+                let kb_exit = kb_find_by_cmd(&self.keybinds, &cmd_list::CmdName::Exit).unwrap();
+                let kb_exit_str = kb_to_string_short(&kb_exit);
+                self.preview_content += Line::from(format!("Press {} to exit", kb_exit_str));
             }
             sc::HOME => {
                 self.preview_content += App::fmtln_path(&dirs::home_dir().unwrap());
@@ -699,61 +1022,34 @@ impl<'a> App<'a> {
                     Style::default().fg(Color::Green),
                 );
             }
-            sc::MULTI_SHOW => {
-                self.preview_content += App::fmtln_sc("Show multi-selection");
-                self.preview_content += Line::styled(
-                    "Displays all currently selected items in the output window.",
-                    Style::default().fg(Color::Green),
-                );
-            }
-            sc::MULTI_CLEAR => {
-                self.preview_content += App::fmtln_sc("Clear multi-selection");
-                self.preview_content += Line::styled(
-                    "Clears all items from the multi-selection list.",
-                    Style::default().fg(Color::Green),
-                );
-            }
-            sc::MULTI_SAVE => {
-                self.preview_content += App::fmtln_sc("Save multi-selection");
-                self.preview_content += Line::styled(
-                    "Saves the multi-selection to a file.",
-                    Style::default().fg(Color::Green),
-                );
-            }
-            sc::MULTI_COPY => {
-                self.preview_content += App::fmtln_sc("Copy multi-selection");
-                self.preview_content += Line::styled(
-                    "Copies the multi-selection to the clipboard.",
-                    Style::default().fg(Color::Green),
-                );
-            }
-            sc::LOG => {
-                self.preview_content += App::fmtln_sc("Show application log");
-                self.preview_content += Line::styled(
-                    "Displays the application log in the output window.",
-                    Style::default().fg(Color::Green),
-                );
-            }
-            sc::LOG_CLEAR => {
-                self.preview_content += App::fmtln_sc("Clear application log");
-                self.preview_content += Line::styled(
-                    "Clear the application log file.",
-                    Style::default().fg(Color::Green),
-                );
-            }
-            sc::CMDS_LIST => {
-                self.preview_content += App::fmtln_sc("Command list");
-                self.preview_content += Line::styled(
-                    "Show a list of all available commands",
-                    Style::default().fg(Color::Green),
-                );
-            }
             _ => {
-                // TODO:
-                // Metadata is not coming from item its being re-fetched here
                 self.preview_content = Default::default();
+                // Check if we have an internal command
+                if self.selection.is_command() {
+                    let cmd_name =
+                        match cmd_list::cmd_name_from_str(&self.cmd_list, &self.selection.name) {
+                            Some(name) => name,
+                            None => {
+                                self.preview_content +=
+                                    Line::from("Error: Command data not found.");
+                                return;
+                            }
+                        };
+                    let data = cmd_list::get_cmd_data(&self.cmd_list, &cmd_name).clone();
+                    self.preview_content += Line::styled(
+                        format!("name: {}", data.fname),
+                        Style::default().fg(Color::Green),
+                    );
+                    self.preview_content += Line::styled(
+                        format!("cmd : {}", data.cmd),
+                        Style::default().fg(Color::Yellow),
+                    );
+                    self.preview_content += Line::from(format!("info: {}", data.description));
+                    return;
+                }
+                // We have a file or dir
                 let mut selected_path = self.cwd.clone();
-                selected_path.push(&self.selection);
+                selected_path.push(&self.selection.name);
 
                 if selected_path.is_dir() {
                     self.preview_dir(&selected_path);
@@ -777,86 +1073,22 @@ impl<'a> App<'a> {
     }
 
     fn update_listing(&mut self) {
-        let empty_metadata = match fs::metadata(&self.cwd) {
-            Ok(meta) => meta,
-            Err(_) => fs::metadata(".").unwrap(),
-        };
-        // Handle cmd search
-        if self.mode_cmd {
+        // Handle cmd finder
+        if self.mode_cmd_finder {
             log!("Updating command listing");
             self.listing.clear();
-            for (_, cmd_data) in self.cmd_list.iter() {
+            // Soft the commands alphabetically
+            let mut entries: Vec<_> = self.cmd_list.iter().collect();
+            entries.sort_by(|a, b| a.1.cmd.cmp(b.1.cmd));
+            for (_, cmd_data) in entries {
+                if cmd_data.vis_hidden {
+                    continue;
+                }
                 self.listing.push(ItemInfo {
                     name: cmd_data.cmd.to_string(),
-                    is_sc: true,
-                    metadata: empty_metadata.clone(),
+                    node_type: NodeType::Command,
                 });
             }
-            return;
-        }
-        // Handle visual commands
-        if self.mode_vis_commands {
-            self.listing.clear();
-            self.listing.push(ItemInfo {
-                name: sc::MENU_BACK.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            });
-            self.listing.push(ItemInfo {
-                name: sc::EXIT.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            });
-            self.listing.push(ItemInfo {
-                name: sc::HOME.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            });
-            self.listing.push(ItemInfo {
-                name: sc::DIR_UP.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            });
-            self.listing.push(ItemInfo {
-                name: sc::EXP.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            });
-            self.listing.push(ItemInfo {
-                name: sc::MULTI_SHOW.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            });
-            self.listing.push(ItemInfo {
-                name: sc::MULTI_CLEAR.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            });
-            self.listing.push(ItemInfo {
-                name: sc::MULTI_SAVE.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            });
-            self.listing.push(ItemInfo {
-                name: sc::MULTI_COPY.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            });
-            self.listing.push(ItemInfo {
-                name: sc::LOG.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            });
-            self.listing.push(ItemInfo {
-                name: sc::LOG_CLEAR.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            });
-            self.listing.push(ItemInfo {
-                name: sc::CMDS_LIST.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
-            });
             return;
         }
         // Normal directory listing
@@ -870,40 +1102,35 @@ impl<'a> App<'a> {
             0,
             ItemInfo {
                 name: sc::DIR_BACK.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             },
         );
         listing.insert(
             0,
             ItemInfo {
                 name: sc::DIR_UP.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             },
         );
         listing.insert(
             0,
             ItemInfo {
                 name: sc::CMDS.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             },
         );
         listing.insert(
             0,
             ItemInfo {
                 name: sc::EXP.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             },
         );
         listing.insert(
             0,
             ItemInfo {
                 name: sc::EXIT.to_string(),
-                is_sc: true,
-                metadata: empty_metadata.clone(),
+                node_type: NodeType::Shortcut,
             },
         );
         self.listing = listing;
@@ -933,19 +1160,20 @@ impl<'a> App<'a> {
     fn update_selection(&mut self) -> bool {
         let old = self.selection.clone();
         if self.selection_index < self.results.len() as i32 {
-            self.selection = self.results[self.selection_index as usize].name.clone();
+            self.selection = self.results[self.selection_index as usize].clone();
         } else if !self.results.is_empty() {
             self.selection_index = 0;
-            self.selection = String::new();
+            self.selection = ItemInfo::empty();
         } else {
             self.selection_index = 0;
-            self.selection = String::new();
+            self.selection = ItemInfo::empty();
         }
         // Remove icon prefix from selection
-        if let Some(pos) = self.selection.find("| ") {
-            self.selection = self.selection[(pos + 2)..].to_string();
+        // NOTE: This should be safe since file name should not contain pipe
+        if let Some(pos) = self.selection.name.find("| ") {
+            self.selection.name = self.selection.name[(pos + 2)..].to_string();
         }
-        return old != self.selection;
+        return old.name != self.selection.name;
     }
 
     fn input_out_window(&mut self, modifiers: KeyModifiers, code: KeyCode) {
@@ -964,9 +1192,9 @@ impl<'a> App<'a> {
         let cmd = match (modifiers, code) {
             (KeyModifiers::ALT, KeyCode::Char('j')) => self.get_cmd(&cmd_list::CmdName::SecDown),
             (KeyModifiers::ALT, KeyCode::Char('k')) => self.get_cmd(&cmd_list::CmdName::SecUp),
-            _ => "",
+            _ => "".to_string(),
         };
-        self.handle_cmd(&cmd);
+        self.handle_cmd(&cmd.to_string());
     }
 
     fn input_cmd_window(&mut self, modifiers: KeyModifiers, code: KeyCode) -> LoopReturn {
@@ -1008,26 +1236,14 @@ impl<'a> App<'a> {
         return false;
     }
 
-    fn input_cmd_map(&mut self, modifiers: KeyModifiers, code: KeyCode) -> String {
-        let cmd = match (modifiers, code) {
-            (KeyModifiers::CONTROL, KeyCode::Char('t')) => self.get_cmd(&CmdName::CmdWinToggle),
-            (KeyModifiers::CONTROL, KeyCode::Char('f')) => self.get_cmd(&CmdName::CmdFinder),
-            (KeyModifiers::CONTROL, KeyCode::Char('s')) => self.get_cmd(&CmdName::MultiSel),
-            (KeyModifiers::NONE, KeyCode::Enter) => self.get_cmd(&CmdName::Select),
-            (KeyModifiers::NONE, KeyCode::Right) => self.get_cmd(&CmdName::Select),
-            (KeyModifiers::NONE, KeyCode::Up) => self.get_cmd(&CmdName::SelUp),
-            (KeyModifiers::NONE, KeyCode::Down) => self.get_cmd(&CmdName::SelDown),
-            (KeyModifiers::NONE, KeyCode::Left) => self.get_cmd(&CmdName::DirBack),
-            (KeyModifiers::CONTROL, KeyCode::Char('h')) => self.get_cmd(&CmdName::DirBack),
-            (KeyModifiers::CONTROL, KeyCode::Char('j')) => self.get_cmd(&CmdName::SelDown),
-            (KeyModifiers::CONTROL, KeyCode::Char('k')) => self.get_cmd(&CmdName::SelUp),
-            (KeyModifiers::CONTROL, KeyCode::Char('l')) => self.get_cmd(&CmdName::Select),
-            (KeyModifiers::NONE, KeyCode::Esc) => self.get_cmd(&CmdName::Exit),
-            (KeyModifiers::CONTROL, KeyCode::Char('q')) => self.get_cmd(&CmdName::Exit),
-            (KeyModifiers::ALT, KeyCode::Char('j')) => self.get_cmd(&CmdName::SecDown),
-            (KeyModifiers::ALT, KeyCode::Char('k')) => self.get_cmd(&CmdName::SecUp),
-            _ => "",
-        };
+    fn input_keybinds(&mut self, modifiers: KeyModifiers, code: KeyCode) -> String {
+        let mut cmd = String::new();
+        for kb in self.keybinds.iter() {
+            if kb.modifiers == modifiers && kb.code == code {
+                cmd = self.get_cmd(&kb.command).to_string();
+                break;
+            }
+        }
         if !cmd.is_empty() {
             log!("cmd from mapping: {}", &cmd);
         }
@@ -1042,16 +1258,14 @@ impl<'a> App<'a> {
     }
 
     fn cmd_dir_up(&mut self) {
-        self.selection = "..".to_string();
-        self.set_cwd(&self.selection.clone().into());
+        self.set_cwd(&"..".into());
         self.update_listing();
         self.update_results();
         self.selection_index = 0;
     }
 
     fn cmd_dir_back(&mut self) {
-        self.selection = self.lwd.to_str().unwrap().to_string();
-        self.set_cwd(&self.selection.clone().into());
+        self.set_cwd(&self.lwd.clone());
         self.update_listing();
         self.update_results();
         self.selection_index = 0;
@@ -1100,11 +1314,11 @@ impl<'a> App<'a> {
 
     fn cmd_multi_sel(&mut self) {
         let mut selected_path = self.cwd.clone();
-        selected_path.push(&self.selection);
+        selected_path.push(&self.selection.name);
         let is_sc = self
             .results
             .get(self.selection_index as usize)
-            .map_or(false, |item| item.is_sc);
+            .map_or(false, |item| item.is_shortcut());
         if is_sc {
             return;
         }
@@ -1196,22 +1410,34 @@ impl<'a> App<'a> {
         self.cmd_output_window_show();
     }
 
-    fn cmd_cmd_vis_toggle(&mut self) {
-        self.mode_vis_commands = !self.mode_vis_commands;
-        self.update_listing();
-        self.update_results();
-        self.selection_index = 0;
+    fn cmd_multi_delete(&mut self) {
+        let mut output_text = String::new();
+        if self.multi_selection.is_empty() {
+            self.set_output("No items in multi selection to delete.");
+            self.cmd_output_window_show();
+            return;
+        }
+        for path in self.multi_selection.iter() {
+            match fs::remove_file(&path) {
+                Ok(_) => {
+                    output_text += &format!("Deleted {}\n", path.to_str().unwrap());
+                }
+                Err(e) => {
+                    output_text += &format!(
+                        "Failed to delete {}: {}\n",
+                        path.to_str().unwrap(),
+                        e.to_string()
+                    );
+                }
+            }
+        }
+        self.multi_selection.clear();
+        self.set_output(&output_text);
+        self.cmd_output_window_show();
     }
 
-    fn cmd_vis_show(&mut self) {
-        self.mode_vis_commands = true;
-        self.update_listing();
-        self.update_results();
-        self.selection_index = 0;
-    }
-
-    fn cmd_cmd_finder(&mut self) {
-        self.mode_cmd = !self.mode_cmd;
+    fn cmd_cmd_finder_toggle(&mut self) {
+        self.mode_cmd_finder = !self.mode_cmd_finder;
         self.update_listing();
         self.update_results();
         self.selection_index = 0;
@@ -1232,11 +1458,12 @@ impl<'a> App<'a> {
         self.cmd_output_window_show();
     }
 
+    // Deprecated?
     fn cmd_menu_back(&mut self) {
-        self.mode_vis_commands = false;
-        self.update_listing();
-        self.update_results();
-        self.selection_index = 0;
+        // self.mode_vis_commands = false;
+        // self.update_listing();
+        // self.update_results();
+        // self.selection_index = 0;
     }
 
     fn cmd_log_show(&mut self) {
@@ -1253,6 +1480,19 @@ impl<'a> App<'a> {
             }
             Err(_) => {
                 self.set_output("No log file found.");
+            }
+        }
+        self.cmd_output_window_show();
+    }
+
+    fn cmd_log_clear(&mut self) {
+        let log_path = log::log_path();
+        match fs::remove_file(&log_path) {
+            Ok(_) => {
+                self.set_output("Log file cleared.");
+            }
+            Err(_) => {
+                self.set_output("No log file found to clear.");
             }
         }
         self.cmd_output_window_show();
@@ -1275,6 +1515,7 @@ impl<'a> App<'a> {
         }
         log!("Preview scroll offset up: {}", self.scroll_off_preview);
     }
+
     fn cmd_sec_down(&mut self) {
         if self.show_output_window {
             let height = self.output_text.split("\n").count() as u16;
@@ -1299,16 +1540,25 @@ impl<'a> App<'a> {
         );
     }
 
-    fn cmd_log_clear(&mut self) {
-        let log_path = log::log_path();
-        match fs::remove_file(&log_path) {
-            Ok(_) => {
-                self.set_output("Log file cleared.");
-            }
-            Err(_) => {
-                self.set_output("No log file found to clear.");
-            }
+    fn cmd_show_keybinds(&mut self) {
+        let kb_path = get_kb_path();
+        // FIXME: THIS IS STUPID
+        let found = match fs::read_to_string(&kb_path) {
+            Ok(_) => true,
+            Err(_) => false,
+        };
+        let mut out = String::from(format!("Path: {}", kb_path.to_str().unwrap()));
+        if !found {
+            out += " \n\n(not found, using defaults)";
         }
+
+        out += "\n\nKeybinds:\n";
+
+        for kb in self.keybinds.iter() {
+            out += kb_to_string_full(&self.cmd_list, kb).as_str();
+        }
+
+        self.set_output(&out);
         self.cmd_output_window_show();
     }
 
@@ -1322,7 +1572,7 @@ impl<'a> App<'a> {
                 // Get selection
                 let selection = self.selection.clone();
                 // NOTE: Handle shortcuts selections
-                match selection.as_str() {
+                match selection.name.as_str() {
                     sc::EXIT => return LoopReturn::Break,
                     sc::HOME => {
                         self.cmd_home();
@@ -1338,42 +1588,30 @@ impl<'a> App<'a> {
                         self.cmd_explode();
                         return LoopReturn::Continue;
                     }
-                    sc::CMDS => {
-                        self.cmd_vis_show();
-                        return LoopReturn::Continue;
-                    }
                     sc::MENU_BACK => {
                         self.cmd_menu_back();
                         return LoopReturn::Continue;
                     }
-                    sc::MULTI_SHOW => {
-                        self.cmd_multi_show();
-                    }
-                    sc::MULTI_CLEAR => {
-                        self.cmd_multi_clear();
-                    }
-                    sc::MULTI_SAVE => {
-                        self.cmd_multi_save();
-                    }
-                    sc::MULTI_COPY => {}
-                    sc::LOG => {
-                        self.cmd_log_show();
-                    }
-                    sc::LOG_CLEAR => {
-                        self.cmd_log_clear();
-                    }
-                    sc::CMDS_LIST => {
-                        self.cmd_cmd_list();
+                    sc::CMDS => {
+                        self.cmd_cmd_finder_toggle();
+                        return LoopReturn::Continue;
                     }
                     _ => {
+                        // Check if selection is an internal command
+                        if selection.is_command() {
+                            self.handle_cmd(&selection.name);
+                            self.cmd_cmd_finder_toggle();
+                            return LoopReturn::Continue;
+                        }
                         // Selection is a file or directory
-                        self.set_cwd(&self.selection.clone().into());
+                        self.set_cwd(&self.selection.name.clone().into());
                         self.update_listing();
                         self.update_results();
                         self.selection_index = 0;
                     }
                 }
             }
+            _ if cmd == self.get_cmd(&CmdName::Exit) => return LoopReturn::Break,
             _ if cmd == self.get_cmd(&CmdName::SelDown) => self.cmd_sel_down(),
             _ if cmd == self.get_cmd(&CmdName::SelUp) => self.cmd_sel_up(),
             _ if cmd == self.get_cmd(&CmdName::DirUp) => self.cmd_dir_up(),
@@ -1389,16 +1627,15 @@ impl<'a> App<'a> {
             _ if cmd == self.get_cmd(&CmdName::MultiShow) => self.cmd_multi_show(),
             _ if cmd == self.get_cmd(&CmdName::MultiSave) => self.cmd_multi_save(),
             _ if cmd == self.get_cmd(&CmdName::MultiCopy) => self.cmd_multi_copy(),
-            _ if cmd == self.get_cmd(&CmdName::CmdVisToggle) => self.cmd_cmd_vis_toggle(),
-            _ if cmd == self.get_cmd(&CmdName::CmdVisShow) => self.cmd_vis_show(),
-            _ if cmd == self.get_cmd(&CmdName::CmdFinder) => self.cmd_cmd_finder(),
+            _ if cmd == self.get_cmd(&CmdName::MultiDelete) => self.cmd_multi_delete(),
+            _ if cmd == self.get_cmd(&CmdName::CmdFinderToggle) => self.cmd_cmd_finder_toggle(),
             _ if cmd == self.get_cmd(&CmdName::CmdList) => self.cmd_cmd_list(),
             _ if cmd == self.get_cmd(&CmdName::MenuBack) => self.cmd_menu_back(),
             _ if cmd == self.get_cmd(&CmdName::Log) => self.cmd_log_show(),
             _ if cmd == self.get_cmd(&CmdName::LogClear) => self.cmd_log_clear(),
             _ if cmd == self.get_cmd(&CmdName::SecDown) => self.cmd_sec_down(),
             _ if cmd == self.get_cmd(&CmdName::SecUp) => self.cmd_sec_up(),
-            _ if cmd == self.get_cmd(&CmdName::Exit) => return LoopReturn::Break,
+            _ if cmd == self.get_cmd(&CmdName::ShowKeybinds) => self.cmd_show_keybinds(),
             _ => {
                 // If the cmd starts with `!` treat it as a shell command
 
@@ -1468,7 +1705,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
                     app.update_results();
                 }
                 // Process key to command mapping
-                let cmd = app.input_cmd_map(modifiers, code);
+                let cmd = app.input_keybinds(modifiers, code);
                 // Handle commands
                 let lr = app.handle_cmd(&cmd);
                 match lr {
@@ -1572,7 +1809,7 @@ fn render(frame: &mut Frame, app: &App) {
     let preview_widget = Paragraph::new(app.preview_content.clone())
         .block(
             Block::default()
-                .title(format!("{} (0)_(0) {} ", nf::LOOK, app.selection))
+                .title(format!("{} (0)_(0) {} ", nf::LOOK, app.selection.name))
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Yellow))
                 .style(Style::default().bg(Color::Black)),
