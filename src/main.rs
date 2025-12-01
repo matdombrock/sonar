@@ -115,6 +115,7 @@ mod cmd_list {
         pub fname: &'static str,
         pub description: &'static str,
         pub cmd: &'static str,
+        pub vis_hidden: bool, // Hidden from visual cmd selection
     }
     pub type CmdList = HashMap<CmdName, CmdData>;
     pub fn make_cmd_list() -> CmdList {
@@ -125,6 +126,7 @@ mod cmd_list {
                 fname: "Exit",
                 description: "Exit the application",
                 cmd: "exit",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -133,6 +135,7 @@ mod cmd_list {
                 fname: "Home",
                 description: "Go to your home directory",
                 cmd: "home",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -141,6 +144,7 @@ mod cmd_list {
                 fname: "Selection Up",
                 description: "Move selection up",
                 cmd: "sel-up",
+                vis_hidden: true,
             },
         );
         map.insert(
@@ -149,6 +153,7 @@ mod cmd_list {
                 fname: "Selection Down",
                 description: "Move selection down",
                 cmd: "sel-down",
+                vis_hidden: true,
             },
         );
         map.insert(
@@ -157,6 +162,7 @@ mod cmd_list {
                 fname: "Directory Up (cd ..)",
                 description: "Go up to the parent directory",
                 cmd: "dir-up",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -165,6 +171,7 @@ mod cmd_list {
                 fname: "Directory Back (cd -)",
                 description: "Go back to the last working directory",
                 cmd: "dir-back",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -173,6 +180,7 @@ mod cmd_list {
                 fname: "Explode Mode Toggle",
                 description: "Find all files in subdirectories",
                 cmd: "explode",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -181,6 +189,7 @@ mod cmd_list {
                 fname: "Select Current Item",
                 description: "Select the current item",
                 cmd: "select",
+                vis_hidden: true,
             },
         );
         map.insert(
@@ -189,6 +198,7 @@ mod cmd_list {
                 fname: "Command Window Toggle",
                 description: "Toggle command window where you can type commands",
                 cmd: "cmd",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -197,6 +207,7 @@ mod cmd_list {
                 fname: "Visual Command Toggle",
                 description: "Toggle a visual command menu in the listing",
                 cmd: "cmd-vis-toggle",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -205,6 +216,7 @@ mod cmd_list {
                 fname: "Command Finder Toggle",
                 description: "Toggle the fuzzy command finder",
                 cmd: "cmd-finder",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -213,6 +225,7 @@ mod cmd_list {
                 fname: "Command List",
                 description: "List all commands",
                 cmd: "cmd-list",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -221,6 +234,7 @@ mod cmd_list {
                 fname: "Output Window Toggle",
                 description: "Toggle output window",
                 cmd: "output-toggle",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -229,6 +243,7 @@ mod cmd_list {
                 fname: "Output Window Show",
                 description: "Show output window",
                 cmd: "output-show",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -237,6 +252,7 @@ mod cmd_list {
                 fname: "Output Window Hide",
                 description: "Hide output window",
                 cmd: "output-hide",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -245,6 +261,7 @@ mod cmd_list {
                 fname: "Multi-Select Toggle",
                 description: "Toggle multi-selection for current item",
                 cmd: "multi-sel",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -253,6 +270,7 @@ mod cmd_list {
                 fname: "Multi-Select Clear",
                 description: "Clear multi-selection",
                 cmd: "multi-clear",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -261,6 +279,7 @@ mod cmd_list {
                 fname: "Multi-Select Show",
                 description: "Show multi-selection in the output window",
                 cmd: "multi-show",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -269,6 +288,7 @@ mod cmd_list {
                 fname: "Multi-Select Save",
                 description: "Save multi-selection to file",
                 cmd: "multi-save",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -277,6 +297,7 @@ mod cmd_list {
                 fname: "Multi-Select Copy",
                 description: "Copy multi-selection to the current directory",
                 cmd: "multi-copy",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -285,6 +306,7 @@ mod cmd_list {
                 fname: "Multi-Select Delete",
                 description: "Delete multi-selection files",
                 cmd: "multi-delete",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -293,6 +315,7 @@ mod cmd_list {
                 fname: "Menu Back",
                 description: "Go back to previous menu",
                 cmd: "menu-back",
+                vis_hidden: true,
             },
         );
         map.insert(
@@ -301,6 +324,7 @@ mod cmd_list {
                 fname: "Low Viewer",
                 description: "Show application log",
                 cmd: "log",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -309,6 +333,7 @@ mod cmd_list {
                 fname: "Log Clear",
                 description: "Clear application log",
                 cmd: "log-clear",
+                vis_hidden: false,
             },
         );
         map.insert(
@@ -317,6 +342,7 @@ mod cmd_list {
                 fname: "Secondary Scroll Up",
                 description: "Scroll secondary window up",
                 cmd: "sec-up",
+                vis_hidden: true,
             },
         );
         map.insert(
@@ -325,6 +351,7 @@ mod cmd_list {
                 fname: "Secondary Scroll Down",
                 description: "Scroll secondary window down",
                 cmd: "sec-down",
+                vis_hidden: true,
             },
         );
 
@@ -824,6 +851,9 @@ impl<'a> App<'a> {
             let mut entries: Vec<_> = self.cmd_list.iter().collect();
             entries.sort_by(|a, b| a.1.cmd.cmp(b.1.cmd));
             for (_, cmd_data) in entries {
+                if cmd_data.vis_hidden {
+                    continue;
+                }
                 self.listing.push(ItemInfo {
                     name: cmd_data.cmd.to_string(),
                     node_type: NodeType::Command,
