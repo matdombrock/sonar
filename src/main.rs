@@ -129,7 +129,7 @@ mod cmd_list {
         map.insert(
             CmdName::Exit,
             CmdData {
-                fname: "cmd_exit",
+                fname: "Exit",
                 description: "Exit the application",
                 cmd: "exit",
             },
@@ -137,15 +137,15 @@ mod cmd_list {
         map.insert(
             CmdName::Home,
             CmdData {
-                fname: "cmd_home",
-                description: "Go to the home directory",
+                fname: "Home",
+                description: "Go to your home directory",
                 cmd: "home",
             },
         );
         map.insert(
             CmdName::SelUp,
             CmdData {
-                fname: "cmd_sel_up",
+                fname: "Selection Up",
                 description: "Move selection up",
                 cmd: "sel-up",
             },
@@ -153,7 +153,7 @@ mod cmd_list {
         map.insert(
             CmdName::SelDown,
             CmdData {
-                fname: "cmd_sel_down",
+                fname: "Selection Down",
                 description: "Move selection down",
                 cmd: "sel-down",
             },
@@ -161,7 +161,7 @@ mod cmd_list {
         map.insert(
             CmdName::DirUp,
             CmdData {
-                fname: "cmd_dir_up",
+                fname: "Directory Up (cd ..)",
                 description: "Go up to the parent directory",
                 cmd: "dir-up",
             },
@@ -169,7 +169,7 @@ mod cmd_list {
         map.insert(
             CmdName::DirBack,
             CmdData {
-                fname: "cmd_dir_back",
+                fname: "Directory Back (cd -)",
                 description: "Go back to the last working directory",
                 cmd: "dir-back",
             },
@@ -177,15 +177,15 @@ mod cmd_list {
         map.insert(
             CmdName::Explode,
             CmdData {
-                fname: "cmd_explode",
-                description: "Toggle explode mode",
+                fname: "Explode Mode Toggle",
+                description: "Find all files in subdirectories",
                 cmd: "explode",
             },
         );
         map.insert(
             CmdName::Select,
             CmdData {
-                fname: "cmd_select",
+                fname: "Select Current Item",
                 description: "Select the current item",
                 cmd: "select",
             },
@@ -193,39 +193,39 @@ mod cmd_list {
         map.insert(
             CmdName::CmdWinToggle,
             CmdData {
-                fname: "cmd_cmd_window_toggle",
-                description: "Toggle command window",
+                fname: "Command Window Toggle",
+                description: "Toggle command window where you can type commands",
                 cmd: "cmd",
             },
         );
         map.insert(
             CmdName::CmdVisToggle,
             CmdData {
-                fname: "cmd_cmd_vis_toggle",
-                description: "Toggle visual commands",
+                fname: "Visual Command Toggle",
+                description: "Toggle a visual command menu in the listing",
                 cmd: "cmd-vis-toggle",
             },
         );
         map.insert(
             CmdName::CmdVisShow,
             CmdData {
-                fname: "cmd_cmd_vis_show",
-                description: "Show visual commands",
+                fname: "Show Visual Commands",
+                description: "Show a visual command menu in the listing",
                 cmd: "cmd-vis-show",
             },
         );
         map.insert(
             CmdName::CmdFinder,
             CmdData {
-                fname: "cmd_cmd_finder",
-                description: "Toggle command finder",
+                fname: "Command Finder",
+                description: "Toggle the fuzzy command finder",
                 cmd: "cmd-finder",
             },
         );
         map.insert(
             CmdName::CmdList,
             CmdData {
-                fname: "cmd_cmd_list",
+                fname: "Command List",
                 description: "List all commands",
                 cmd: "cmd-list",
             },
@@ -233,7 +233,7 @@ mod cmd_list {
         map.insert(
             CmdName::OutputWinToggle,
             CmdData {
-                fname: "cmd_output_window_toggle",
+                fname: "Output Window Toggle",
                 description: "Toggle output window",
                 cmd: "output-toggle",
             },
@@ -241,7 +241,7 @@ mod cmd_list {
         map.insert(
             CmdName::OutputWinShow,
             CmdData {
-                fname: "cmd_output_window_show",
+                fname: "Output Window Show",
                 description: "Show output window",
                 cmd: "output-show",
             },
@@ -249,7 +249,7 @@ mod cmd_list {
         map.insert(
             CmdName::OutputWinHide,
             CmdData {
-                fname: "cmd_output_window_hide",
+                fname: "Output Window Hide",
                 description: "Hide output window",
                 cmd: "output-hide",
             },
@@ -257,7 +257,7 @@ mod cmd_list {
         map.insert(
             CmdName::MultiSel,
             CmdData {
-                fname: "cmd_multi_sel",
+                fname: "Multi-Select Toggle",
                 description: "Toggle multi-selection for current item",
                 cmd: "multi-sel",
             },
@@ -265,7 +265,7 @@ mod cmd_list {
         map.insert(
             CmdName::MultiClear,
             CmdData {
-                fname: "cmd_multi_clear",
+                fname: "Multi-Select Clear",
                 description: "Clear multi-selection",
                 cmd: "multi-clear",
             },
@@ -273,15 +273,15 @@ mod cmd_list {
         map.insert(
             CmdName::MultiShow,
             CmdData {
-                fname: "cmd_multi_show",
-                description: "Show multi-selection",
+                fname: "Multi-Select Show",
+                description: "Show multi-selection in the output window",
                 cmd: "multi-show",
             },
         );
         map.insert(
             CmdName::MultiSave,
             CmdData {
-                fname: "cmd_multi_save",
+                fname: "Multi-Select Save",
                 description: "Save multi-selection to file",
                 cmd: "multi-save",
             },
@@ -289,15 +289,15 @@ mod cmd_list {
         map.insert(
             CmdName::MultiCopy,
             CmdData {
-                fname: "cmd_multi_copy",
-                description: "Copy multi-selection to clipboard",
+                fname: "Multi-Select Copy",
+                description: "Copy multi-selection to the current directory",
                 cmd: "multi-copy",
             },
         );
         map.insert(
             CmdName::MenuBack,
             CmdData {
-                fname: "cmd_menu_back",
+                fname: "Menu Back",
                 description: "Go back to previous menu",
                 cmd: "menu-back",
             },
@@ -305,7 +305,7 @@ mod cmd_list {
         map.insert(
             CmdName::Log,
             CmdData {
-                fname: "cmd_log",
+                fname: "Low Viewer",
                 description: "Show application log",
                 cmd: "log",
             },
@@ -313,7 +313,7 @@ mod cmd_list {
         map.insert(
             CmdName::LogClear,
             CmdData {
-                fname: "cmd_log_clear",
+                fname: "Log Clear",
                 description: "Clear application log",
                 cmd: "log-clear",
             },
@@ -321,7 +321,7 @@ mod cmd_list {
         map.insert(
             CmdName::SecUp,
             CmdData {
-                fname: "cmd_sec_up",
+                fname: "Secondary Scroll Up",
                 description: "Scroll secondary window up",
                 cmd: "sec-up",
             },
@@ -329,7 +329,7 @@ mod cmd_list {
         map.insert(
             CmdName::SecDown,
             CmdData {
-                fname: "cmd_sec_down",
+                fname: "Secondary Scroll Down",
                 description: "Scroll secondary window down",
                 cmd: "sec-down",
             },
@@ -564,8 +564,22 @@ impl<'a> App<'a> {
         self.output_text = text.to_string();
     }
 
-    fn get_cmd(&self, name: &cmd_list::CmdName) -> &'static str {
-        self.cmd_list.get(name).unwrap().cmd
+    fn cmd_name_from_str(&self, cmd: &str) -> Option<cmd_list::CmdName> {
+        for (name, data) in self.cmd_list.iter() {
+            if data.cmd == cmd {
+                return Some(name.clone());
+            }
+        }
+        None
+    }
+
+    fn get_cmd_data(&self, name: &cmd_list::CmdName) -> &cmd_list::CmdData {
+        self.cmd_list.get(name).unwrap()
+    }
+
+    // Helper to get command string from CmdName
+    fn get_cmd(&self, name: &cmd_list::CmdName) -> &str {
+        self.get_cmd_data(name).cmd
     }
 
     fn fmtln_info(label: &str, value: &str) -> Line<'a> {
@@ -815,9 +829,21 @@ impl<'a> App<'a> {
                 );
             }
             _ => {
-                // TODO:
-                // Metadata is not coming from item its being re-fetched here
                 self.preview_content = Default::default();
+                // Check if we have an internal command
+                if self.selection.is_command() {
+                    let cmd_name = self.cmd_name_from_str(&self.selection.name).unwrap();
+                    let data = self.get_cmd_data(&cmd_name).clone();
+                    self.preview_content +=
+                        Line::styled(data.fname, Style::default().fg(Color::Green));
+                    self.preview_content += Line::styled(
+                        self.selection.name.clone(),
+                        Style::default().fg(Color::Yellow),
+                    );
+                    self.preview_content += Line::from(data.description);
+                    return;
+                }
+                // We have a file or dir
                 let mut selected_path = self.cwd.clone();
                 selected_path.push(&self.selection.name);
 
@@ -1011,7 +1037,7 @@ impl<'a> App<'a> {
             (KeyModifiers::ALT, KeyCode::Char('k')) => self.get_cmd(&cmd_list::CmdName::SecUp),
             _ => "",
         };
-        self.handle_cmd(&cmd);
+        self.handle_cmd(&cmd.to_string());
     }
 
     fn input_cmd_window(&mut self, modifiers: KeyModifiers, code: KeyCode) -> LoopReturn {
