@@ -33,7 +33,7 @@ use syntect::parsing::SyntaxSet;
 use std::path::PathBuf;
 
 // INTERNAL MODULES
-use crate::cmd_list::CmdName;
+use crate::{cmd_list::CmdName, item_info::ItemInfo, node_type::NodeType};
 
 const APP_NAME: &str = "sona";
 
@@ -116,6 +116,7 @@ mod cmd_list {
         SecDown,
         ShowKeybinds,
         DbgClearPreview,
+        Shell,
     }
 
     #[derive(Debug, Clone)]
@@ -393,6 +394,15 @@ mod cmd_list {
                 vis_hidden: false,
             },
         );
+        map.insert(
+            CmdName::Shell,
+            CmdData {
+                fname: "Shell",
+                description: "Demo shell command",
+                cmd: "!ls",
+                vis_hidden: false,
+            },
+        );
 
         map
     }
@@ -426,300 +436,315 @@ mod log {
     }
 }
 
-#[derive(Clone, PartialEq)]
-enum NodeType {
-    File,       // A regular file
-    Directory,  // A directory
-    Shortcut,   // Internal shortcut
-    Command,    // Internal command, name should always be the command string
-    Executable, // An executable file
-    Image,      // An image file
-    Unknown,    // Unknown, unsupported, etc.
-}
-impl NodeType {
-    fn find(metadata: fs::Metadata) -> NodeType {
-        if metadata.is_dir() {
-            NodeType::Directory
-        } else if metadata.is_file() {
-            // Check if executable
-            #[cfg(unix)]
-            {
-                if metadata.permissions().mode() & 0o111 != 0 {
-                    return NodeType::Executable;
+mod node_type {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    #[derive(Clone, PartialEq)]
+    pub enum NodeType {
+        File,       // A regular file
+        Directory,  // A directory
+        Shortcut,   // Internal shortcut
+        Command,    // Internal command, name should always be the command string
+        Executable, // An executable file
+        Image,      // An image file
+        Unknown,    // Unknown, unsupported, etc.
+    }
+    impl NodeType {
+        pub fn find(metadata: fs::Metadata) -> NodeType {
+            if metadata.is_dir() {
+                NodeType::Directory
+            } else if metadata.is_file() {
+                // Check if executable
+                #[cfg(unix)]
+                {
+                    if metadata.permissions().mode() & 0o111 != 0 {
+                        return NodeType::Executable;
+                    }
                 }
+                NodeType::File
+            } else {
+                NodeType::Unknown
             }
-            NodeType::File
-        } else {
-            NodeType::Unknown
         }
     }
 }
 
-// Information about a file or directory
-#[derive(Clone)]
-struct ItemInfo {
-    name: String,
-    node_type: NodeType,
-}
-impl ItemInfo {
-    fn new(name: &str, node_type: NodeType) -> Self {
-        Self {
-            name: name.to_string(),
-            node_type,
+mod item_info {
+    use super::node_type::NodeType;
+    // Information about a file or directory
+    #[derive(Clone)]
+    pub struct ItemInfo {
+        pub name: String,
+        pub node_type: NodeType,
+    }
+    impl ItemInfo {
+        pub fn new(name: &str, node_type: NodeType) -> Self {
+            Self {
+                name: name.to_string(),
+                node_type,
+            }
         }
-    }
-    fn empty() -> Self {
-        Self {
-            name: String::new(),
-            node_type: NodeType::Unknown,
+        pub fn empty() -> Self {
+            Self {
+                name: String::new(),
+                node_type: NodeType::Unknown,
+            }
         }
-    }
-    fn is(&self, _is: NodeType) -> bool {
-        return self.node_type == _is;
-    }
-    fn is_file(&self) -> bool {
-        return self.node_type == NodeType::File;
-    }
-    fn is_dir(&self) -> bool {
-        return self.node_type == NodeType::Directory;
-    }
-    fn is_shortcut(&self) -> bool {
-        return self.node_type == NodeType::Shortcut;
-    }
-    fn is_command(&self) -> bool {
-        return self.node_type == NodeType::Command;
-    }
-    fn is_executable(&self) -> bool {
-        return self.node_type == NodeType::Executable;
-    }
-    fn is_image(&self) -> bool {
-        return self.node_type == NodeType::Image;
-    }
-    fn is_unknown(&self) -> bool {
-        return self.node_type == NodeType::Unknown;
+        pub fn is(&self, _is: NodeType) -> bool {
+            return self.node_type == _is;
+        }
+        pub fn is_file(&self) -> bool {
+            return self.node_type == NodeType::File;
+        }
+        pub fn is_dir(&self) -> bool {
+            return self.node_type == NodeType::Directory;
+        }
+        pub fn is_shortcut(&self) -> bool {
+            return self.node_type == NodeType::Shortcut;
+        }
+        pub fn is_command(&self) -> bool {
+            return self.node_type == NodeType::Command;
+        }
+        pub fn is_executable(&self) -> bool {
+            return self.node_type == NodeType::Executable;
+        }
+        pub fn is_image(&self) -> bool {
+            return self.node_type == NodeType::Image;
+        }
+        pub fn is_unknown(&self) -> bool {
+            return self.node_type == NodeType::Unknown;
+        }
     }
 }
 
-#[derive(Clone)]
-struct KeyBind {
-    modifiers: KeyModifiers,
-    code: KeyCode,
-    command: CmdName,
-}
-impl KeyBind {
-    fn new(modifiers: KeyModifiers, code: KeyCode, command: CmdName) -> Self {
-        Self {
-            modifiers,
-            code,
-            command,
+mod kb {
+    use super::cmd_list;
+    use super::cmd_list::CmdName;
+    use crate::{APP_NAME, log};
+    use crossterm::event::{KeyCode, KeyModifiers};
+    use std::{env, fs, path::PathBuf};
+
+    #[derive(Clone)]
+    pub struct KeyBind {
+        pub modifiers: KeyModifiers,
+        pub code: KeyCode,
+        pub command: CmdName,
+    }
+    impl KeyBind {
+        fn new(modifiers: KeyModifiers, code: KeyCode, command: CmdName) -> Self {
+            Self {
+                modifiers,
+                code,
+                command,
+            }
         }
     }
-}
-type KeyBindList = Vec<KeyBind>;
-fn make_keybind_defaults() -> KeyBindList {
-    let mut list = KeyBindList::new();
-    list.push(KeyBind::new(
-        KeyModifiers::CONTROL,
-        KeyCode::Char('t'),
-        CmdName::CmdWinToggle,
-    ));
-    list.push(KeyBind::new(
-        KeyModifiers::CONTROL,
-        KeyCode::Char('f'),
-        CmdName::CmdFinderToggle,
-    ));
-    list.push(KeyBind::new(
-        KeyModifiers::CONTROL,
-        KeyCode::Char('s'),
-        CmdName::MultiSel,
-    ));
-    list.push(KeyBind::new(
-        KeyModifiers::NONE,
-        KeyCode::Tab,
-        CmdName::MultiSel,
-    ));
-    list.push(KeyBind::new(
-        KeyModifiers::NONE,
-        KeyCode::Enter,
-        CmdName::Select,
-    ));
-    list.push(KeyBind::new(
-        KeyModifiers::NONE,
-        KeyCode::Right,
-        CmdName::Select,
-    ));
-    list.push(KeyBind::new(
-        KeyModifiers::NONE,
-        KeyCode::Up,
-        CmdName::SelUp,
-    ));
-    list.push(KeyBind::new(
-        KeyModifiers::NONE,
-        KeyCode::Down,
-        CmdName::SelDown,
-    ));
-    list.push(KeyBind::new(
-        KeyModifiers::NONE,
-        KeyCode::Left,
-        CmdName::DirBack,
-    ));
-    list.push(KeyBind::new(
-        KeyModifiers::CONTROL,
-        KeyCode::Char('h'),
-        CmdName::DirBack,
-    ));
-    list.push(KeyBind::new(
-        KeyModifiers::CONTROL,
-        KeyCode::Char('j'),
-        CmdName::SelDown,
-    ));
-    list.push(KeyBind::new(
-        KeyModifiers::CONTROL,
-        KeyCode::Char('k'),
-        CmdName::SelUp,
-    ));
-    list.push(KeyBind::new(
-        KeyModifiers::CONTROL,
-        KeyCode::Char('l'),
-        CmdName::Select,
-    ));
-    list.push(KeyBind::new(
-        KeyModifiers::NONE,
-        KeyCode::Esc,
-        CmdName::Exit,
-    ));
-    list.push(KeyBind::new(
-        KeyModifiers::CONTROL,
-        KeyCode::Char('q'),
-        CmdName::Exit,
-    ));
-    list.push(KeyBind::new(
-        KeyModifiers::ALT,
-        KeyCode::Char('j'),
-        CmdName::SecDown,
-    ));
-    list.push(KeyBind::new(
-        KeyModifiers::ALT,
-        KeyCode::Char('k'),
-        CmdName::SecUp,
-    ));
-    list
-}
-
-fn kb_to_string_short(kb: &KeyBind) -> String {
-    let modifier = match kb.modifiers {
-        KeyModifiers::ALT => "alt",
-        KeyModifiers::CONTROL => "ctrl",
-        KeyModifiers::SHIFT => "shift",
-        KeyModifiers::NONE => "none",
-        _ => "UNKNOWN",
-    };
-    return format!("{}-{}", modifier, kb.code.to_string().to_lowercase());
-}
-
-// Needs the command list before KeyBind only points to enum
-fn kb_to_string_full(cmd_list: &cmd_list::CmdList, kb: &KeyBind) -> String {
-    return format!(
-        "{:<12} {}\n",
-        cmd_list::get_cmd(cmd_list, &kb.command),
-        kb_to_string_short(kb)
-    );
-}
-
-fn kb_find_by_cmd(keybinds: &KeyBindList, cmd: &cmd_list::CmdName) -> Option<KeyBind> {
-    for kb in keybinds.iter() {
-        if &kb.command == cmd {
-            return Some(kb.clone());
-        }
+    pub type KeyBindList = Vec<KeyBind>;
+    fn make_defaults() -> KeyBindList {
+        let mut list = KeyBindList::new();
+        list.push(KeyBind::new(
+            KeyModifiers::CONTROL,
+            KeyCode::Char('t'),
+            CmdName::CmdWinToggle,
+        ));
+        list.push(KeyBind::new(
+            KeyModifiers::CONTROL,
+            KeyCode::Char('f'),
+            CmdName::CmdFinderToggle,
+        ));
+        list.push(KeyBind::new(
+            KeyModifiers::CONTROL,
+            KeyCode::Char('s'),
+            CmdName::MultiSel,
+        ));
+        list.push(KeyBind::new(
+            KeyModifiers::NONE,
+            KeyCode::Tab,
+            CmdName::MultiSel,
+        ));
+        list.push(KeyBind::new(
+            KeyModifiers::NONE,
+            KeyCode::Enter,
+            CmdName::Select,
+        ));
+        list.push(KeyBind::new(
+            KeyModifiers::NONE,
+            KeyCode::Right,
+            CmdName::Select,
+        ));
+        list.push(KeyBind::new(
+            KeyModifiers::NONE,
+            KeyCode::Up,
+            CmdName::SelUp,
+        ));
+        list.push(KeyBind::new(
+            KeyModifiers::NONE,
+            KeyCode::Down,
+            CmdName::SelDown,
+        ));
+        list.push(KeyBind::new(
+            KeyModifiers::NONE,
+            KeyCode::Left,
+            CmdName::DirBack,
+        ));
+        list.push(KeyBind::new(
+            KeyModifiers::CONTROL,
+            KeyCode::Char('h'),
+            CmdName::DirBack,
+        ));
+        list.push(KeyBind::new(
+            KeyModifiers::CONTROL,
+            KeyCode::Char('j'),
+            CmdName::SelDown,
+        ));
+        list.push(KeyBind::new(
+            KeyModifiers::CONTROL,
+            KeyCode::Char('k'),
+            CmdName::SelUp,
+        ));
+        list.push(KeyBind::new(
+            KeyModifiers::CONTROL,
+            KeyCode::Char('l'),
+            CmdName::Select,
+        ));
+        list.push(KeyBind::new(
+            KeyModifiers::NONE,
+            KeyCode::Esc,
+            CmdName::Exit,
+        ));
+        list.push(KeyBind::new(
+            KeyModifiers::CONTROL,
+            KeyCode::Char('q'),
+            CmdName::Exit,
+        ));
+        list.push(KeyBind::new(
+            KeyModifiers::ALT,
+            KeyCode::Char('j'),
+            CmdName::SecDown,
+        ));
+        list.push(KeyBind::new(
+            KeyModifiers::ALT,
+            KeyCode::Char('k'),
+            CmdName::SecUp,
+        ));
+        list
     }
-    None
-}
 
-fn get_kb_path() -> PathBuf {
-    let kb_path = dirs::config_dir()
-        .unwrap_or(env::current_dir().unwrap())
-        .join(APP_NAME)
-        .join("keybinds.txt");
-    kb_path
-}
+    pub fn to_string_short(kb: &KeyBind) -> String {
+        let modifier = match kb.modifiers {
+            KeyModifiers::ALT => "alt",
+            KeyModifiers::CONTROL => "ctrl",
+            KeyModifiers::SHIFT => "shift",
+            KeyModifiers::NONE => "none",
+            _ => "UNKNOWN",
+        };
+        return format!("{}-{}", modifier, kb.code.to_string().to_lowercase());
+    }
 
-fn make_keybind_list() -> KeyBindList {
-    // Read keybinds.txt
-    let keybinds = match fs::read_to_string(get_kb_path()) {
-        Ok(content) => content,
-        Err(_) => {
-            log!("keybinds.txt not found, using default keybinds");
-            // Try to create default keybinds.txt
-            return make_keybind_defaults();
+    // Needs the command list before KeyBind only points to enum
+    pub fn to_string_full(cmd_list: &cmd_list::CmdList, kb: &KeyBind) -> String {
+        return format!(
+            "{:<12} {}\n",
+            cmd_list::get_cmd(cmd_list, &kb.command),
+            to_string_short(kb)
+        );
+    }
+
+    pub fn find_by_cmd(keybinds: &KeyBindList, cmd: &cmd_list::CmdName) -> Option<KeyBind> {
+        for kb in keybinds.iter() {
+            if &kb.command == cmd {
+                return Some(kb.clone());
+            }
         }
-    };
-    let mut list = KeyBindList::new();
-    let cmd_list = cmd_list::make_cmd_list();
-    for line in keybinds.lines() {
-        // Ignore comments
-        if line.starts_with('#') || line.trim().is_empty() {
-            continue;
-        }
-        // Trim whitespace
-        let line = line.trim();
-        let split = line.split_whitespace().collect::<Vec<&str>>();
-        if split.len() != 2 {
-            log!("Invalid line in keybinds.txt: {}", line);
-            continue;
-        }
-        let cmd = split[0];
-        let combo = split[1];
-        let mut modifier = "none";
-        let mut code = combo;
-        if combo.contains('-') {
-            let combo_split = combo.split('-').collect::<Vec<&str>>();
-            modifier = combo_split[0];
-            code = combo_split[1];
-        }
-        //
-        let cmd = match cmd_list::cmd_name_from_str(&cmd_list, cmd) {
-            Some(name) => name,
-            None => {
-                log!("Unknown command in keybinds.txt: {}", cmd);
-                continue;
+        None
+    }
+
+    pub fn get_path() -> PathBuf {
+        let kb_path = dirs::config_dir()
+            .unwrap_or(env::current_dir().unwrap())
+            .join(APP_NAME)
+            .join("keybinds.txt");
+        kb_path
+    }
+
+    pub fn make_list() -> KeyBindList {
+        // Read keybinds.txt
+        let keybinds = match fs::read_to_string(get_path()) {
+            Ok(content) => content,
+            Err(_) => {
+                log!("keybinds.txt not found, using default keybinds");
+                // Try to create default keybinds.txt
+                return make_defaults();
             }
         };
-        let modifiers = match modifier.to_lowercase().as_str() {
-            "ctrl" => KeyModifiers::CONTROL,
-            "alt" => KeyModifiers::ALT,
-            "shift" => KeyModifiers::SHIFT,
-            "none" => KeyModifiers::NONE,
-            _ => {
-                log!("Unknown modifier in keybinds.txt: {}", modifier);
+        let mut list = KeyBindList::new();
+        let cmd_list = cmd_list::make_cmd_list();
+        for line in keybinds.lines() {
+            // Ignore comments
+            if line.starts_with('#') || line.trim().is_empty() {
                 continue;
             }
-        };
-        let code = match code.to_lowercase().as_str() {
-            "enter" => KeyCode::Enter,
-            "esc" => KeyCode::Esc,
-            "up" => KeyCode::Up,
-            "down" => KeyCode::Down,
-            "left" => KeyCode::Left,
-            "right" => KeyCode::Right,
-            "tab" => KeyCode::Tab,
-            "backspace" => KeyCode::Backspace,
-            "home" => KeyCode::Home,
-            "end" => KeyCode::End,
-            "pageup" => KeyCode::PageUp,
-            "pagedown" => KeyCode::PageDown,
-            c if c.len() == 1 => {
-                let ch = c.chars().next().unwrap();
-                KeyCode::Char(ch)
-            }
-            _ => {
-                log!("Unknown key code in keybinds.txt: {}", code);
+            // Trim whitespace
+            let line = line.trim();
+            let split = line.split_whitespace().collect::<Vec<&str>>();
+            if split.len() != 2 {
+                log!("Invalid line in keybinds.txt: {}", line);
                 continue;
             }
-        };
-        let keybind = KeyBind::new(modifiers, code, cmd);
-        list.push(keybind);
+            let cmd = split[0];
+            let combo = split[1];
+            let mut modifier = "none";
+            let mut code = combo;
+            if combo.contains('-') {
+                let combo_split = combo.split('-').collect::<Vec<&str>>();
+                modifier = combo_split[0];
+                code = combo_split[1];
+            }
+            //
+            let cmd = match cmd_list::cmd_name_from_str(&cmd_list, cmd) {
+                Some(name) => name,
+                None => {
+                    log!("Unknown command in keybinds.txt: {}", cmd);
+                    continue;
+                }
+            };
+            let modifiers = match modifier.to_lowercase().as_str() {
+                "ctrl" => KeyModifiers::CONTROL,
+                "alt" => KeyModifiers::ALT,
+                "shift" => KeyModifiers::SHIFT,
+                "none" => KeyModifiers::NONE,
+                _ => {
+                    log!("Unknown modifier in keybinds.txt: {}", modifier);
+                    continue;
+                }
+            };
+            let code = match code.to_lowercase().as_str() {
+                "enter" => KeyCode::Enter,
+                "esc" => KeyCode::Esc,
+                "up" => KeyCode::Up,
+                "down" => KeyCode::Down,
+                "left" => KeyCode::Left,
+                "right" => KeyCode::Right,
+                "tab" => KeyCode::Tab,
+                "backspace" => KeyCode::Backspace,
+                "home" => KeyCode::Home,
+                "end" => KeyCode::End,
+                "pageup" => KeyCode::PageUp,
+                "pagedown" => KeyCode::PageDown,
+                c if c.len() == 1 => {
+                    let ch = c.chars().next().unwrap();
+                    KeyCode::Char(ch)
+                }
+                _ => {
+                    log!("Unknown key code in keybinds.txt: {}", code);
+                    continue;
+                }
+            };
+            let keybind = KeyBind::new(modifiers, code, cmd);
+            list.push(keybind);
+        }
+        list
     }
-    list
 }
 
 // Return type for loop control
@@ -751,7 +776,7 @@ struct App<'a> {
     output_title: String,
     output_text: String,
     cmd_list: cmd_list::CmdList,
-    keybinds: KeyBindList,
+    keybinds: kb::KeyBindList,
     keybinds_found: bool,
     // Has external tools
     has_bat: bool,
@@ -766,7 +791,7 @@ impl<'a> App<'a> {
             Err(_) => false,
         };
         // FIXME: THIS IS STUPID
-        let kb_check = match fs::read_to_string(&get_kb_path()) {
+        let kb_check = match fs::read_to_string(&kb::get_path()) {
             Ok(_) => true,
             Err(_) => false,
         };
@@ -791,7 +816,7 @@ impl<'a> App<'a> {
             output_title: String::new(),
             output_text: String::new(),
             cmd_list: cmd_list::make_cmd_list(),
-            keybinds: make_keybind_list(),
+            keybinds: kb::make_list(),
             keybinds_found: kb_check,
             has_bat: bat_check,
             lay_preview_area: Rect::default(),
@@ -1070,8 +1095,8 @@ impl<'a> App<'a> {
                     self.preview_content +=
                         Line::styled(format!("{}", line), Style::default().fg(Color::LightGreen));
                 }
-                let kb_exit = kb_find_by_cmd(&self.keybinds, &cmd_list::CmdName::Exit).unwrap();
-                let kb_exit_str = kb_to_string_short(&kb_exit);
+                let kb_exit = kb::find_by_cmd(&self.keybinds, &cmd_list::CmdName::Exit).unwrap();
+                let kb_exit_str = kb::to_string_short(&kb_exit);
                 self.preview_content += Line::from("");
                 self.preview_content +=
                     Line::styled("Tips:", Style::default().fg(Color::LightBlue));
@@ -1103,7 +1128,7 @@ impl<'a> App<'a> {
                         format!(
                             "- {} keybinds - loaded from {}",
                             nf::CHECK,
-                            get_kb_path().to_str().unwrap()
+                            kb::get_path().to_str().unwrap()
                         ),
                         Style::default().fg(Color::Green),
                     );
@@ -1112,7 +1137,7 @@ impl<'a> App<'a> {
                         format!(
                             "- {} keybinds - no keybinds found at {}",
                             nf::WARN,
-                            get_kb_path().to_str().unwrap()
+                            kb::get_path().to_str().unwrap()
                         ),
                         Style::default().fg(Color::Yellow),
                     );
@@ -1675,7 +1700,7 @@ impl<'a> App<'a> {
     }
 
     fn cmd_show_keybinds(&mut self) {
-        let kb_path = get_kb_path();
+        let kb_path = kb::get_path();
         let found = self.keybinds_found;
         let mut out = String::from(format!("Path: {}", kb_path.to_str().unwrap()));
         if !found {
@@ -1685,7 +1710,7 @@ impl<'a> App<'a> {
         out += "\n\nKeybinds:\n";
 
         for kb in self.keybinds.iter() {
-            out += kb_to_string_full(&self.cmd_list, kb).as_str();
+            out += kb::to_string_full(&self.cmd_list, kb).as_str();
         }
 
         self.set_output("Keybinds", &out);

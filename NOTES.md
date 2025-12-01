@@ -30,6 +30,20 @@
 
 ## Notes
 
+### Custom commands
+Custom commands can be loaded from a file. 
+
+They are set up like normal commands but the cmd starts with `!`
+
+These should pass in the selection list somehow. 
+
+```
+!ls $1
+!ls $...
+```
+
+Neither of these are valid variables names. Which is good. 
+
 ### Finder as default
 It would make sense for command finder to be the main way of launching commands
 But then its not easily possible to run a command on a single selection
@@ -77,3 +91,8 @@ One problem there though is that the commands operate on self (app) so if they m
 - Multi-select across dirs
 - Floating/extra windows
 - Resume location
+
+## VS Yazi
+- Search first
+- Panes are confusing
+
