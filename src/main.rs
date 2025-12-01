@@ -110,6 +110,7 @@ mod cmd_list {
         LogClear,
         SecUp,
         SecDown,
+        ShowKeybinds,
     }
 
     #[derive(Debug, Clone)]
@@ -130,6 +131,17 @@ mod cmd_list {
             }
         }
         None
+    }
+    pub fn get_cmd_data(
+        cmd_list: &cmd_list::CmdList,
+        name: &cmd_list::CmdName,
+    ) -> cmd_list::CmdData {
+        cmd_list.get(name).unwrap().clone()
+    }
+
+    // Helper to get command string from CmdName
+    pub fn get_cmd(cmd_list: &cmd_list::CmdList, name: &cmd_list::CmdName) -> String {
+        get_cmd_data(cmd_list, name).cmd.to_string()
     }
     pub fn make_cmd_list() -> CmdList {
         let mut map = HashMap::new();
@@ -358,6 +370,15 @@ mod cmd_list {
                 vis_hidden: true,
             },
         );
+        map.insert(
+            CmdName::ShowKeybinds,
+            CmdData {
+                fname: "Show Keybinds",
+                description: "Show current keybindings",
+                cmd: "show-keybinds",
+                vis_hidden: false,
+            },
+        );
 
         map
     }
@@ -465,6 +486,7 @@ impl ItemInfo {
     }
 }
 
+#[derive(Clone)]
 struct KeyBind {
     modifiers: KeyModifiers,
     code: KeyCode,
@@ -564,12 +586,51 @@ fn make_keybind_defaults() -> KeyBindList {
     ));
     list
 }
+
+fn kb_to_string_short(kb: &KeyBind) -> String {
+    let modifier = match kb.modifiers {
+        KeyModifiers::ALT => "alt",
+        KeyModifiers::CONTROL => "ctrl",
+        KeyModifiers::SHIFT => "shift",
+        KeyModifiers::NONE => "none",
+        _ => "UNKNOWN",
+    };
+    return format!("{}-{}", modifier, kb.code.to_string().to_lowercase());
+}
+
+// Needs the command list before KeyBind only points to enum
+fn kb_to_string_full(cmd_list: &cmd_list::CmdList, kb: &KeyBind) -> String {
+    return format!(
+        "{:<12} {}\n",
+        cmd_list::get_cmd(cmd_list, &kb.command),
+        kb_to_string_short(kb)
+    );
+}
+
+fn kb_find_by_cmd(keybinds: &KeyBindList, cmd: &cmd_list::CmdName) -> Option<KeyBind> {
+    for kb in keybinds.iter() {
+        if &kb.command == cmd {
+            return Some(kb.clone());
+        }
+    }
+    None
+}
+
+fn get_kb_path() -> PathBuf {
+    let kb_path = dirs::config_dir()
+        .unwrap_or(env::current_dir().unwrap())
+        .join(APP_NAME)
+        .join("keybinds.txt");
+    kb_path
+}
+
 fn make_keybind_list() -> KeyBindList {
     // Read keybinds.txt
-    let keybinds = match fs::read_to_string("keybinds.txt") {
+    let keybinds = match fs::read_to_string(get_kb_path()) {
         Ok(content) => content,
         Err(_) => {
             log!("keybinds.txt not found, using default keybinds");
+            // Try to create default keybinds.txt
             return make_keybind_defaults();
         }
     };
@@ -759,13 +820,9 @@ impl<'a> App<'a> {
         self.output_text = text.to_string();
     }
 
-    fn get_cmd_data(&self, name: &cmd_list::CmdName) -> &cmd_list::CmdData {
-        self.cmd_list.get(name).unwrap()
-    }
-
-    // Helper to get command string from CmdName
-    fn get_cmd(&self, name: &cmd_list::CmdName) -> &str {
-        self.get_cmd_data(name).cmd
+    // A simple helper which avoids needing to pass cmd_list everywhere
+    fn get_cmd(&self, name: &cmd_list::CmdName) -> String {
+        cmd_list::get_cmd(&self.cmd_list, name)
     }
 
     fn fmtln_info(label: &str, value: &str) -> Line<'a> {
@@ -926,6 +983,9 @@ impl<'a> App<'a> {
                 for line in WELCOME_MSG.lines() {
                     self.preview_content += Line::from(line);
                 }
+                let kb_exit = kb_find_by_cmd(&self.keybinds, &cmd_list::CmdName::Exit).unwrap();
+                let kb_exit_str = kb_to_string_short(&kb_exit);
+                self.preview_content += Line::from(format!("Press {} to exit", kb_exit_str));
             }
             sc::HOME => {
                 self.preview_content += App::fmtln_path(&dirs::home_dir().unwrap());
@@ -975,7 +1035,7 @@ impl<'a> App<'a> {
                                 return;
                             }
                         };
-                    let data = self.get_cmd_data(&cmd_name).clone();
+                    let data = cmd_list::get_cmd_data(&self.cmd_list, &cmd_name).clone();
                     self.preview_content += Line::styled(
                         format!("name: {}", data.fname),
                         Style::default().fg(Color::Green),
@@ -1132,7 +1192,7 @@ impl<'a> App<'a> {
         let cmd = match (modifiers, code) {
             (KeyModifiers::ALT, KeyCode::Char('j')) => self.get_cmd(&cmd_list::CmdName::SecDown),
             (KeyModifiers::ALT, KeyCode::Char('k')) => self.get_cmd(&cmd_list::CmdName::SecUp),
-            _ => "",
+            _ => "".to_string(),
         };
         self.handle_cmd(&cmd.to_string());
     }
@@ -1425,6 +1485,19 @@ impl<'a> App<'a> {
         self.cmd_output_window_show();
     }
 
+    fn cmd_log_clear(&mut self) {
+        let log_path = log::log_path();
+        match fs::remove_file(&log_path) {
+            Ok(_) => {
+                self.set_output("Log file cleared.");
+            }
+            Err(_) => {
+                self.set_output("No log file found to clear.");
+            }
+        }
+        self.cmd_output_window_show();
+    }
+
     fn cmd_sec_up(&mut self) {
         if self.show_output_window {
             if self.scroll_off_output >= 5 {
@@ -1442,6 +1515,7 @@ impl<'a> App<'a> {
         }
         log!("Preview scroll offset up: {}", self.scroll_off_preview);
     }
+
     fn cmd_sec_down(&mut self) {
         if self.show_output_window {
             let height = self.output_text.split("\n").count() as u16;
@@ -1466,16 +1540,25 @@ impl<'a> App<'a> {
         );
     }
 
-    fn cmd_log_clear(&mut self) {
-        let log_path = log::log_path();
-        match fs::remove_file(&log_path) {
-            Ok(_) => {
-                self.set_output("Log file cleared.");
-            }
-            Err(_) => {
-                self.set_output("No log file found to clear.");
-            }
+    fn cmd_show_keybinds(&mut self) {
+        let kb_path = get_kb_path();
+        // FIXME: THIS IS STUPID
+        let found = match fs::read_to_string(&kb_path) {
+            Ok(_) => true,
+            Err(_) => false,
+        };
+        let mut out = String::from(format!("Path: {}", kb_path.to_str().unwrap()));
+        if !found {
+            out += " \n\n(not found, using defaults)";
         }
+
+        out += "\n\nKeybinds:\n";
+
+        for kb in self.keybinds.iter() {
+            out += kb_to_string_full(&self.cmd_list, kb).as_str();
+        }
+
+        self.set_output(&out);
         self.cmd_output_window_show();
     }
 
@@ -1528,6 +1611,7 @@ impl<'a> App<'a> {
                     }
                 }
             }
+            _ if cmd == self.get_cmd(&CmdName::Exit) => return LoopReturn::Break,
             _ if cmd == self.get_cmd(&CmdName::SelDown) => self.cmd_sel_down(),
             _ if cmd == self.get_cmd(&CmdName::SelUp) => self.cmd_sel_up(),
             _ if cmd == self.get_cmd(&CmdName::DirUp) => self.cmd_dir_up(),
@@ -1551,7 +1635,7 @@ impl<'a> App<'a> {
             _ if cmd == self.get_cmd(&CmdName::LogClear) => self.cmd_log_clear(),
             _ if cmd == self.get_cmd(&CmdName::SecDown) => self.cmd_sec_down(),
             _ if cmd == self.get_cmd(&CmdName::SecUp) => self.cmd_sec_up(),
-            _ if cmd == self.get_cmd(&CmdName::Exit) => return LoopReturn::Break,
+            _ if cmd == self.get_cmd(&CmdName::ShowKeybinds) => self.cmd_show_keybinds(),
             _ => {
                 // If the cmd starts with `!` treat it as a shell command
 
