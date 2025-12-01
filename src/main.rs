@@ -844,7 +844,7 @@ impl<'a> App<'a> {
 
     fn fmtln_info(label: &str, value: &str) -> Line<'a> {
         Line::styled(
-            format!("{} {}: {}", nf::INFO, label, value),
+            format!("{} {:<12}: {}", nf::INFO, label, value),
             Style::default().fg(Color::Yellow),
         )
     }
@@ -950,19 +950,21 @@ impl<'a> App<'a> {
                 self.preview_content += mime_line;
             }
         }
-        self.preview_content += Line::from("-------");
 
         // Syntax highlighting
         let ss = SyntaxSet::load_defaults_newlines();
+        // FIXME: Should only load once
         let ts = ThemeSet::load_defaults();
-        let ext = selected_path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
         let syntax = ss
-            .find_syntax_by_extension(ext)
+            .find_syntax_for_file(&selected_path)
+            .unwrap_or(None)
             .unwrap_or_else(|| ss.find_syntax_plain_text());
-        let mut h = HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
+        let mut h = HighlightLines::new(syntax, &ts.themes["base16-eighties.dark"]);
+
+        // Print syntax name
+        self.preview_content += App::fmtln_info("detected", syntax.name.as_str());
+
+        self.preview_content += Line::from("-------");
 
         if let Ok(content) = fs::read_to_string(&selected_path) {
             for line in content.lines().take(100) {
