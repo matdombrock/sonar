@@ -50,7 +50,7 @@ const LOGO: &str = r#"
 const DIR_PRETTY_LIMIT: usize = 1000;
 const SEARCH_LIMIT: usize = 1000;
 
-const SEP: &str = "=======";
+const SEP: &str = "░░░░░░░░░░░░░░░░░░░░░";
 
 const DEFAULT_KEYBINDS: &str = r#"
 # Default keybinds
@@ -977,11 +977,11 @@ struct App<'a> {
     output_text: String,
     cmd_list: cmd_data::CmdList,
     keybinds: kb::KeyBindList,
-    keybinds_found: bool,
     cs: cs::ColorScheme,
-    cs_found: bool,
     cfg: cfg::Config,
-    cfg_found: bool,
+    found_keybinds: bool,
+    found_cs: bool,
+    found_cfg: bool,
     // Has external tools
     has_bat: bool,
     // Layout vals - read only
@@ -996,6 +996,14 @@ impl<'a> App<'a> {
         };
         // FIXME: THIS IS STUPID
         let kb_check = match fs::read_to_string(&kb::get_path()) {
+            Ok(_) => true,
+            Err(_) => false,
+        };
+        let cs_check = match fs::read_to_string(crate::APP_NAME.to_string() + "/colorscheme.txt") {
+            Ok(_) => true,
+            Err(_) => false,
+        };
+        let cfg_check = match fs::read_to_string(crate::APP_NAME.to_string() + "/config.txt") {
             Ok(_) => true,
             Err(_) => false,
         };
@@ -1021,11 +1029,11 @@ impl<'a> App<'a> {
             output_text: String::new(),
             cmd_list: cmd_data::make_cmd_list(),
             keybinds: kb::make_list_auto(),
-            keybinds_found: kb_check,
             cs: cs::ColorScheme::make_list_auto(),
-            cs_found: false,
             cfg: cfg::Config::make_list_auto(),
-            cfg_found: false,
+            found_keybinds: kb_check,
+            found_cs: cs_check,
+            found_cfg: cfg_check,
             has_bat: bat_check,
             lay_preview_area: Rect::default(),
         }
@@ -1315,11 +1323,11 @@ impl<'a> App<'a> {
                 self.preview_content += Line::from("");
                 self.preview_content += Line::styled("Tips:", Style::default().fg(self.cs.header));
                 self.preview_content += Line::styled(
-                    format!("- Press {} to exit", kb_exit_str),
+                    format!("└ Press {} to exit", kb_exit_str),
                     Style::default().fg(self.cs.tip),
                 );
                 self.preview_content += Line::styled(
-                    "- Start typing to fuzzy find files and directories",
+                    "└ Start typing to fuzzy find files and directories",
                     Style::default().fg(self.cs.tip),
                 );
                 self.preview_content += Line::from("");
@@ -1342,7 +1350,7 @@ impl<'a> App<'a> {
                         Style::default().fg(self.cs.warning),
                     );
                 }
-                if self.keybinds_found {
+                if self.found_keybinds {
                     self.preview_content += Line::styled(
                         format!(
                             "- {} keybinds - loaded from {}",
@@ -1358,6 +1366,31 @@ impl<'a> App<'a> {
                             nf::WARN,
                             kb::get_path().to_str().unwrap()
                         ),
+                        Style::default().fg(self.cs.warning),
+                    );
+                }
+                if self.found_cs {
+                    self.preview_content += Line::styled(
+                        format!("- {} colorscheme - loaded from colorscheme.txt", nf::CHECK),
+                        Style::default().fg(self.cs.ok),
+                    );
+                } else {
+                    self.preview_content += Line::styled(
+                        format!(
+                            "- {} colorscheme - no colorscheme found at colorscheme.txt",
+                            nf::WARN
+                        ),
+                        Style::default().fg(self.cs.warning),
+                    );
+                }
+                if self.found_cfg {
+                    self.preview_content += Line::styled(
+                        format!("- {} config - loaded from config.txt", nf::CHECK),
+                        Style::default().fg(self.cs.ok),
+                    );
+                } else {
+                    self.preview_content += Line::styled(
+                        format!("- {} config - no config found at config.txt", nf::WARN),
                         Style::default().fg(self.cs.warning),
                     );
                 }
@@ -1933,7 +1966,7 @@ impl<'a> App<'a> {
 
     fn cmd_show_keybinds(&mut self) {
         let kb_path = kb::get_path();
-        let found = self.keybinds_found;
+        let found = self.found_keybinds;
         let mut out = String::from(format!("Path: {}", kb_path.to_str().unwrap()));
         if !found {
             out += " \n\n(not found, using defaults)";
