@@ -116,6 +116,7 @@ mod cmd_list {
         SecDown,
         ShowKeybinds,
         DbgClearPreview,
+        Edit,
         Shell,
     }
 
@@ -142,7 +143,10 @@ mod cmd_list {
         cmd_list: &cmd_list::CmdList,
         name: &cmd_list::CmdName,
     ) -> cmd_list::CmdData {
-        cmd_list.get(name).unwrap().clone()
+        match cmd_list.get(name) {
+            Some(data) => data.clone(),
+            None => panic!("Command not found: {:?}", name),
+        }
     }
 
     // Helper to get command string from CmdName
@@ -386,11 +390,29 @@ mod cmd_list {
             },
         );
         map.insert(
+            CmdName::ShowKeybinds,
+            CmdData {
+                fname: "Show Keybinds",
+                description: "Show current keybindings",
+                cmd: "show-keybinds",
+                vis_hidden: false,
+            },
+        );
+        map.insert(
             CmdName::DbgClearPreview,
             CmdData {
                 fname: "Debug Clear Preview",
                 description: "Clear preview content. Some terminals may not refresh properly causing artifacts.",
                 cmd: "dbg-prev-clear",
+                vis_hidden: false,
+            },
+        );
+        map.insert(
+            CmdName::Edit,
+            CmdData {
+                fname: "Edit File",
+                description: "Open selected file in $EDITOR",
+                cmd: "edit",
                 vis_hidden: false,
             },
         );
@@ -1717,6 +1739,30 @@ impl<'a> App<'a> {
         self.cmd_output_window_show();
     }
 
+    // Edit the selected file
+    fn cmd_edit(&mut self) {
+        let mut selected_path = self.cwd.clone();
+        selected_path.push(&self.selection.name);
+        let editor = env::var("EDITOR").unwrap_or("vi".to_string());
+        log!(
+            "Opening editor: {} {}",
+            editor,
+            selected_path.to_str().unwrap()
+        );
+        match Command::new(editor)
+            .arg(selected_path.to_str().unwrap())
+            .status()
+        {
+            Ok(_) => {
+                self.set_output("Editor", "Editor closed.");
+            }
+            Err(e) => {
+                self.set_output("Editor", &format!("Failed to open editor: {}", e));
+            }
+        }
+        self.cmd_output_window_show();
+    }
+
     fn cmd_dbg_clear_preview(&mut self) {
         self.preview_content = Default::default();
         for _ in 0..self.lay_preview_area.height {
@@ -1799,6 +1845,7 @@ impl<'a> App<'a> {
             _ if cmd == self.get_cmd(&CmdName::SecDown) => self.cmd_sec_down(),
             _ if cmd == self.get_cmd(&CmdName::SecUp) => self.cmd_sec_up(),
             _ if cmd == self.get_cmd(&CmdName::ShowKeybinds) => self.cmd_show_keybinds(),
+            _ if cmd == self.get_cmd(&CmdName::Edit) => self.cmd_edit(),
             _ if cmd == self.get_cmd(&CmdName::DbgClearPreview) => self.cmd_dbg_clear_preview(),
             _ => {
                 // If the cmd starts with `!` treat it as a shell command
