@@ -6,7 +6,6 @@ use crossterm::{
 };
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
-use mime_guess::mime;
 use ratatui::style::Color as RColor;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Span, Text};
@@ -46,7 +45,7 @@ const LOGO: &str = r#"
  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝ ╚═╝ ╚═╝ 
 "#;
 
-const SEP: &str = "░░░░░░░░░░░░░░░░░░░░░";
+const SEP: &str = "───────────────────────────────────────────────";
 
 // Nerd font icons
 mod nf {
@@ -607,7 +606,7 @@ warning        yellow
 error          red
 ok             green
 hi             white
-placeholder    gray
+dim            gray
 misc           white
 "#;
     // Color scheme struct
@@ -630,7 +629,7 @@ misc           white
         pub ok: Color,
         pub header: Color,
         pub hi: Color,
-        pub placeholder: Color,
+        pub dim: Color,
         pub misc: Color,
     }
     impl Colors {
@@ -653,7 +652,7 @@ misc           white
                 ok: Color::White,
                 header: Color::White,
                 hi: Color::White,
-                placeholder: Color::White,
+                dim: Color::White,
                 misc: Color::White,
             }
         }
@@ -750,8 +749,8 @@ misc           white
                     "hi" => {
                         colors.hi = Colors::from_str(value);
                     }
-                    "placeholder" => {
-                        colors.placeholder = Colors::from_str(value);
+                    "dim" => {
+                        colors.dim = Colors::from_str(value);
                     }
                     "misc" => {
                         colors.misc = Colors::from_str(value);
@@ -1293,7 +1292,7 @@ impl<'a> App<'a> {
         let listing = self.get_directory_listing(&selected_path);
         let count_line = self.fmtln_info("count", &listing.len().to_string());
         self.preview_content += count_line;
-        self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.misc));
+        self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
         let pretty_listing = self.dir_list_pretty(&listing);
         for line in pretty_listing.lines.iter().take(20) {
             self.preview_content += Line::from(line.clone());
@@ -1331,7 +1330,7 @@ impl<'a> App<'a> {
                 .output()
             {
                 if bat_output.status.success() {
-                    self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.misc));
+                    self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
                     let bat_content = String::from_utf8_lossy(&bat_output.stdout);
                     let output = match bat_content.as_ref().into_text() {
                         Ok(text) => text,
@@ -1366,7 +1365,7 @@ impl<'a> App<'a> {
         // Print syntax name
         self.preview_content += self.fmtln_info("detected", syntax.name.as_str());
 
-        self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.misc));
+        self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
 
         if let Ok(content) = fs::read_to_string(&selected_path) {
             for line in content.lines().take(100) {
@@ -1567,19 +1566,29 @@ impl<'a> App<'a> {
                 if self.selection.is_dir() {
                     self.preview_dir(&selected_path);
                 } else if self.selection.is_file() {
-                    // Check if we have an image
-                    if self.selection.is_image() {
-                        self.preview_content += Line::styled(
-                            "Image file preview not yet supported.",
-                            Style::default().fg(self.cs.error),
-                        );
-                        return;
-                    }
-                    // Preview a text file
                     self.preview_file(&selected_path);
-                } else {
+                } else if self.selection.is_image() {
                     self.preview_content += Line::styled(
-                        "Error: Selected item is neither file nor directory.",
+                        "Image file preview not yet supported.",
+                        Style::default().fg(self.cs.error),
+                    );
+                } else if self.selection.is_executable() {
+                    self.preview_content += Line::styled(
+                        "Executable file preview not yet supported.",
+                        Style::default().fg(self.cs.error),
+                    );
+                } else if self.selection.is_shortcut() {
+                    self.preview_content += Line::styled(
+                        "Shortcut preview not supported.",
+                        Style::default().fg(self.cs.error),
+                    );
+                } else if self.selection.is_unknown() {
+                    self.preview_content +=
+                        Line::styled("Unknown file type.", Style::default().fg(self.cs.error));
+                } else {
+                    // Unknown
+                    self.preview_content += Line::styled(
+                        "Error: Selected node type cant be detected",
                         Style::default().fg(self.cs.error),
                     );
                     // Debug info
@@ -2401,7 +2410,7 @@ impl<'a> App<'a> {
         let input_str: String;
         if self.input.is_empty() {
             input_str = "Type to search...".to_string();
-            input_color = self.cs.placeholder;
+            input_color = self.cs.dim;
         } else {
             input_str = self.input.clone();
             input_color = self.cs.misc;
