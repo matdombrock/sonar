@@ -46,69 +46,7 @@ const LOGO: &str = r#"
  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝ ╚═╝ ╚═╝ 
 "#;
 
-// Limit for performance
-const DIR_PRETTY_LIMIT: usize = 1000;
-const SEARCH_LIMIT: usize = 1000;
-
 const SEP: &str = "░░░░░░░░░░░░░░░░░░░░░";
-
-const KEYBINDS_FILE: &str = "keybinds.txt";
-const COLORS_FILE: &str = "colors.txt";
-const CONFIG_FILE: &str = "config.txt";
-
-mod default {
-    pub const KEYBINDS: &str = r#"
-# Default keybinds
-exit     ctrl-q
-exit     none-esc
-home     alt-h
-sel-up   none-up
-sel-up   ctrl-k
-sel-down none-down
-sel-down ctrl-j
-dir-up   ctrl-h
-dir-back ctrl-u
-explode  ctrl-x
-edit     ctrl-e
-select   none-enter
-select   ctrl-l
-cmd-win  ctrl-w
-cmd-find ctrl-t 
-cmd-list ctrl-i
-mul-sel  ctrl-s
-mul-sel  none-tab
-sec-up   alt-k
-sec-down alt-j
-"#;
-
-    pub const COLORS: &str = r#"
-# Default color
-name           default
-search_border  red
-preview_border red
-listing_border red
-file           red
-dir            red
-command        red
-executable     red
-shortcut       red
-image          red
-header         red
-info           red
-tip            red
-warning        red
-error          red
-ok             red
-hi             red
-placeholder    red
-misc           red
-"#;
-
-    pub const CONFIG: &str = r#"
-# Default configuration
-cmd_on_select edit
-"#;
-}
 
 // Nerd font icons
 mod nf {
@@ -598,12 +536,33 @@ mod node_info {
 }
 
 mod cs {
+    use crate::log;
+    use ratatui::style::Color;
     use std::fs;
 
-    use ratatui::style::Color;
-
-    use crate::{COLORS_FILE, default, log};
-
+    const FILE_NAME: &str = "colors.txt";
+    pub const DEFAULT: &str = r#"
+# Default color
+name           default
+search_border  red
+preview_border red
+listing_border red
+file           red
+dir            red
+command        red
+executable     red
+shortcut       red
+image          red
+header         red
+info           red
+tip            red
+warning        red
+error          red
+ok             red
+hi             red
+placeholder    red
+misc           red
+"#;
     // Color scheme struct
     #[derive(Clone)]
     pub struct Colors {
@@ -676,7 +635,7 @@ mod cs {
             let cs_path = dirs::config_dir()
                 .unwrap_or(std::env::current_dir().unwrap())
                 .join(crate::APP_NAME)
-                .join(COLORS_FILE);
+                .join(FILE_NAME);
             cs_path
         }
         pub fn make_list(colors_str: &str) -> Colors {
@@ -757,11 +716,11 @@ mod cs {
         }
         pub fn make_list_auto() -> Colors {
             // Read colors.txt
-            let colors = match fs::read_to_string(crate::APP_NAME.to_string() + COLORS_FILE) {
+            let colors = match fs::read_to_string(crate::APP_NAME.to_string() + FILE_NAME) {
                 Ok(content) => content,
                 Err(_) => {
                     log!("colors.txt not found, using default colorscheme");
-                    return Colors::make_list(default::COLORS);
+                    return Colors::make_list(DEFAULT);
                 }
             };
             Colors::make_list(&colors)
@@ -772,10 +731,34 @@ mod cs {
 mod kb {
     use super::cmd_data;
     use super::cmd_data::CmdName;
-    use crate::{APP_NAME, KEYBINDS_FILE, default, log};
+    use crate::{APP_NAME, log};
     use crossterm::event::{KeyCode, KeyModifiers};
     use std::{env, fs, path::PathBuf};
 
+    const FILE_NAME: &str = "keybinds.txt";
+    pub const KEYBINDS: &str = r#"
+# Default keybinds
+exit     ctrl-q
+exit     none-esc
+home     alt-h
+sel-up   none-up
+sel-up   ctrl-k
+sel-down none-down
+sel-down ctrl-j
+dir-up   ctrl-h
+dir-back ctrl-u
+explode  ctrl-x
+edit     ctrl-e
+select   none-enter
+select   ctrl-l
+cmd-win  ctrl-w
+cmd-find ctrl-t 
+cmd-list ctrl-i
+mul-sel  ctrl-s
+mul-sel  none-tab
+sec-up   alt-k
+sec-down alt-j
+"#;
     #[derive(Clone)]
     pub struct KeyBind {
         pub modifiers: KeyModifiers,
@@ -826,7 +809,7 @@ mod kb {
         let kb_path = dirs::config_dir()
             .unwrap_or(env::current_dir().unwrap())
             .join(APP_NAME)
-            .join(KEYBINDS_FILE);
+            .join(FILE_NAME);
         kb_path
     }
 
@@ -842,7 +825,7 @@ mod kb {
             let line = line.trim();
             let split = line.split_whitespace().collect::<Vec<&str>>();
             if split.len() != 2 {
-                log!("Invalid line in {}: {}", KEYBINDS_FILE, line);
+                log!("Invalid line in {}: {}", FILE_NAME, line);
                 continue;
             }
             let cmd = split[0];
@@ -858,7 +841,7 @@ mod kb {
             let cmd = match cmd_data::cmd_name_from_str(&cmd_list, cmd) {
                 Some(name) => name,
                 None => {
-                    log!("Unknown command in {}: {}", KEYBINDS_FILE, cmd);
+                    log!("Unknown command in {}: {}", FILE_NAME, cmd);
                     continue;
                 }
             };
@@ -868,7 +851,7 @@ mod kb {
                 "shift" => KeyModifiers::SHIFT,
                 "none" => KeyModifiers::NONE,
                 _ => {
-                    log!("Unknown modifier in {}: {}", KEYBINDS_FILE, modifier);
+                    log!("Unknown modifier in {}: {}", FILE_NAME, modifier);
                     continue;
                 }
             };
@@ -890,7 +873,7 @@ mod kb {
                     KeyCode::Char(ch)
                 }
                 _ => {
-                    log!("Unknown key code in {}: {}", KEYBINDS_FILE, code);
+                    log!("Unknown key code in {}: {}", FILE_NAME, code);
                     continue;
                 }
             };
@@ -905,8 +888,8 @@ mod kb {
         let keybinds = match fs::read_to_string(get_path()) {
             Ok(content) => content,
             Err(_) => {
-                log!("{} not found, using default keybinds", KEYBINDS_FILE);
-                return make_list(default::KEYBINDS);
+                log!("{} not found, using default keybinds", FILE_NAME);
+                return make_list(KEYBINDS);
             }
         };
         make_list(&keybinds)
@@ -916,22 +899,28 @@ mod kb {
 mod cfg {
     use std::fs;
 
-    use crate::{CONFIG_FILE, default};
-
+    const FILE_NAME: &str = "config.txt";
+    pub const DEFAULT: &str = r#"
+# Default configuration
+cmd_on_select edit
+list_limit    100000
+"#;
     pub struct Config {
         pub cmd_on_select: String,
+        pub list_limit: i32,
     }
     impl Config {
         pub fn new() -> Self {
             Self {
                 cmd_on_select: "edit".to_string(),
+                list_limit: 100000,
             }
         }
         pub fn get_path() -> std::path::PathBuf {
             let cfg_path = dirs::config_dir()
                 .unwrap_or(std::env::current_dir().unwrap())
                 .join(crate::APP_NAME)
-                .join(CONFIG_FILE);
+                .join(FILE_NAME);
             cfg_path
         }
         pub fn make_list(cfg_str: &str) -> Config {
@@ -951,6 +940,11 @@ mod cfg {
                 let value = split[1];
                 match key {
                     "cmd_on_select" => config.cmd_on_select = value.to_string(),
+                    "list_limit" => {
+                        if let Ok(limit) = value.parse::<i32>() {
+                            config.list_limit = limit;
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -958,11 +952,11 @@ mod cfg {
         }
         pub fn make_list_auto() -> Config {
             // Read config.txt
-            let config = match fs::read_to_string(crate::APP_NAME.to_string() + "/config.txt") {
+            let config = match fs::read_to_string(crate::APP_NAME.to_string() + FILE_NAME) {
                 Ok(content) => content,
                 Err(_) => {
-                    crate::log!("{} not found, using default configuration", CONFIG_FILE);
-                    return Config::make_list(default::CONFIG);
+                    crate::log!("{} not found, using default configuration", FILE_NAME);
+                    return Config::make_list(DEFAULT);
                 }
             };
             Config::make_list(&config)
@@ -1172,7 +1166,7 @@ impl<'a> App<'a> {
 
     fn dir_list_pretty(&self, list: &Vec<ItemInfo>) -> Text<'a> {
         let mut text = Text::default();
-        for item in list.iter().take(DIR_PRETTY_LIMIT) {
+        for item in list.iter().take(self.cfg.list_limit as usize) {
             // Check if this item is part of the multi selection
             let mut ms = "";
             let mut is_multi_selected = false;
@@ -1610,7 +1604,7 @@ impl<'a> App<'a> {
         let mut scored: Vec<_> = self
             .listing
             .iter()
-            .take(SEARCH_LIMIT) // Limit for performance
+            .take(self.cfg.list_limit as usize) // Limit for performance
             .filter_map(|item| {
                 matcher
                     .fuzzy_match(&item.name, &self.input)
