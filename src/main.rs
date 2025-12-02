@@ -140,7 +140,7 @@ mod cmd_data {
         SecUp,
         SecDown,
         ShowKeybinds,
-        DbgClearPreview,
+        DbgClear,
         Edit,
         ShellQuick,
         ShellFull,
@@ -434,10 +434,10 @@ mod cmd_data {
             },
         );
         map.insert(
-            CmdName::DbgClearPreview,
+            CmdName::DbgClear,
             CmdData {
-                fname: "Debug Clear Preview",
-                description: "Clear preview content. Some terminals may not refresh properly causing artifacts.",
+                fname: "Debug Clear",
+                description: "Clear screen content. Some terminals may not refresh properly causing artifacts.",
                 cmd: "dbg-prev-clear",
                 vis_hidden: false,
             },
@@ -1035,7 +1035,7 @@ struct App<'a> {
     mode_cmd_finder: bool,
     show_command_window: bool,
     command_input: String,
-    term_clear: bool, // Whether to clear terminal on next draw
+    term_clear: bool, // When true the terminal will be cleared on next draw
     show_output_window: bool,
     output_title: String,
     output_text: String,
@@ -2215,11 +2215,7 @@ impl<'a> App<'a> {
     }
 
     fn cmd_dbg_clear_preview(&mut self) {
-        self.preview_content = Default::default();
-        for _ in 0..self.lay_preview_area.height {
-            self.preview_content +=
-                Line::from((nf::B4).repeat(self.lay_preview_area.width as usize - 2));
-        }
+        self.term_clear = true;
     }
 
     fn handle_cmd(&mut self, cmd: &str) -> LoopReturn {
@@ -2300,7 +2296,7 @@ impl<'a> App<'a> {
             _ if cmd == self.get_cmd(&CmdName::SecUp) => self.cmd_sec_up(),
             _ if cmd == self.get_cmd(&CmdName::ShowKeybinds) => self.cmd_show_keybinds(),
             _ if cmd == self.get_cmd(&CmdName::Edit) => self.cmd_edit(),
-            _ if cmd == self.get_cmd(&CmdName::DbgClearPreview) => self.cmd_dbg_clear_preview(),
+            _ if cmd == self.get_cmd(&CmdName::DbgClear) => self.cmd_dbg_clear_preview(),
             _ if cmd == self.get_cmd(&CmdName::ShellQuick) => self.cmd_shell_quick(),
             _ if cmd == self.get_cmd(&CmdName::ShellFull) => self.cmd_shell_full(),
             _ => {
