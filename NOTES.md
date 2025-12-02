@@ -29,6 +29,7 @@
 - Better keybind file handling
 - Better keybind printing
 - Load default keybinds from embedded text (parse)
+- multi select edit should offer to do something
 
 ## Notes
 

@@ -33,7 +33,7 @@ use syntect::parsing::SyntaxSet;
 use std::path::PathBuf;
 
 // INTERNAL MODULES
-use crate::{cmd_list::CmdName, item_info::ItemInfo, node_type::NodeType};
+use crate::{cmd_data::CmdName, node_info::ItemInfo, node_type::NodeType};
 
 const APP_NAME: &str = "sona";
 
@@ -51,6 +51,29 @@ const DIR_PRETTY_LIMIT: usize = 1000;
 const SEARCH_LIMIT: usize = 1000;
 
 const SEP: &str = "=======";
+
+const DEFAULT_KEYBINDS: &str = r#"
+# Keybinds support comments
+exit     ctrl-q
+exit     none-esc
+home     alt-h
+sel-up   none-up
+sel-up   ctrl-k
+sel-down none-down
+sel-down ctrl-j
+dir-up   ctrl-h
+dir-back ctrl-u
+explode  ctrl-x
+edit     ctrl-e
+select   none-enter
+select   ctrl-l
+cmd-win  ctrl-w
+cmd-find ctrl-t 
+cmd-list ctrl-i
+mul-sel  ctrl-s
+sec-up   alt-k
+sec-down alt-j
+"#;
 
 // Nerd font icons
 mod nf {
@@ -82,10 +105,38 @@ mod sc {
     pub const CMDS: &str = " cmds";
 }
 
-mod cmd_list {
+// Logs to temp directory
+mod log {
+    use super::APP_NAME;
+    pub fn log_path() -> std::path::PathBuf {
+        std::env::temp_dir()
+            .join(APP_NAME)
+            .join(format!("{}.log", APP_NAME))
+    }
+    pub fn log_impl(msg: &str) {
+        let log_path = log_path();
+        let _ = std::fs::create_dir_all(log_path.parent().unwrap());
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .unwrap();
+        use std::io::Write;
+        let _ = writeln!(file, "{}", msg);
+    }
+
+    #[macro_export]
+    macro_rules! log {
+        ($($arg:tt)*) => {
+            $crate::log::log_impl(&format!($($arg)*));
+        };
+    }
+}
+
+mod cmd_data {
     use std::collections::HashMap;
 
-    use crate::cmd_list;
+    use crate::cmd_data;
 
     #[derive(Hash, Eq, PartialEq, Debug, Clone, PartialOrd, Ord)]
     pub enum CmdName {
@@ -129,9 +180,9 @@ mod cmd_list {
     }
     pub type CmdList = HashMap<CmdName, CmdData>;
     pub fn cmd_name_from_str(
-        cmd_list: &HashMap<CmdName, cmd_list::CmdData>,
+        cmd_list: &HashMap<CmdName, cmd_data::CmdData>,
         cmd: &str,
-    ) -> Option<cmd_list::CmdName> {
+    ) -> Option<cmd_data::CmdName> {
         for (name, data) in cmd_list.iter() {
             if data.cmd == cmd {
                 return Some(name.clone());
@@ -140,9 +191,9 @@ mod cmd_list {
         None
     }
     pub fn get_cmd_data(
-        cmd_list: &cmd_list::CmdList,
-        name: &cmd_list::CmdName,
-    ) -> cmd_list::CmdData {
+        cmd_list: &cmd_data::CmdList,
+        name: &cmd_data::CmdName,
+    ) -> cmd_data::CmdData {
         match cmd_list.get(name) {
             Some(data) => data.clone(),
             None => panic!("Command not found: {:?}", name),
@@ -150,7 +201,7 @@ mod cmd_list {
     }
 
     // Helper to get command string from CmdName
-    pub fn get_cmd(cmd_list: &cmd_list::CmdList, name: &cmd_list::CmdName) -> String {
+    pub fn get_cmd(cmd_list: &cmd_data::CmdList, name: &cmd_data::CmdName) -> String {
         get_cmd_data(cmd_list, name).cmd.to_string()
     }
     pub fn make_cmd_list() -> CmdList {
@@ -430,34 +481,6 @@ mod cmd_list {
     }
 }
 
-// Logs to temp directory
-mod log {
-    use super::APP_NAME;
-    pub fn log_path() -> std::path::PathBuf {
-        std::env::temp_dir()
-            .join(APP_NAME)
-            .join(format!("{}.log", APP_NAME))
-    }
-    pub fn log_impl(msg: &str) {
-        let log_path = log_path();
-        let _ = std::fs::create_dir_all(log_path.parent().unwrap());
-        let mut file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_path)
-            .unwrap();
-        use std::io::Write;
-        let _ = writeln!(file, "{}", msg);
-    }
-
-    #[macro_export]
-    macro_rules! log {
-        ($($arg:tt)*) => {
-            $crate::log::log_impl(&format!($($arg)*));
-        };
-    }
-}
-
 mod node_type {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
@@ -491,7 +514,7 @@ mod node_type {
     }
 }
 
-mod item_info {
+mod node_info {
     use super::node_type::NodeType;
     // Information about a file or directory
     #[derive(Clone)]
@@ -540,9 +563,9 @@ mod item_info {
 }
 
 mod kb {
-    use super::cmd_list;
-    use super::cmd_list::CmdName;
-    use crate::{APP_NAME, log};
+    use super::cmd_data;
+    use super::cmd_data::CmdName;
+    use crate::{APP_NAME, DEFAULT_KEYBINDS, log};
     use crossterm::event::{KeyCode, KeyModifiers};
     use std::{env, fs, path::PathBuf};
 
@@ -562,95 +585,6 @@ mod kb {
         }
     }
     pub type KeyBindList = Vec<KeyBind>;
-    fn make_defaults() -> KeyBindList {
-        let mut list = KeyBindList::new();
-        list.push(KeyBind::new(
-            KeyModifiers::CONTROL,
-            KeyCode::Char('t'),
-            CmdName::CmdWinToggle,
-        ));
-        list.push(KeyBind::new(
-            KeyModifiers::CONTROL,
-            KeyCode::Char('f'),
-            CmdName::CmdFinderToggle,
-        ));
-        list.push(KeyBind::new(
-            KeyModifiers::CONTROL,
-            KeyCode::Char('s'),
-            CmdName::MultiSel,
-        ));
-        list.push(KeyBind::new(
-            KeyModifiers::NONE,
-            KeyCode::Tab,
-            CmdName::MultiSel,
-        ));
-        list.push(KeyBind::new(
-            KeyModifiers::NONE,
-            KeyCode::Enter,
-            CmdName::Select,
-        ));
-        list.push(KeyBind::new(
-            KeyModifiers::NONE,
-            KeyCode::Right,
-            CmdName::Select,
-        ));
-        list.push(KeyBind::new(
-            KeyModifiers::NONE,
-            KeyCode::Up,
-            CmdName::SelUp,
-        ));
-        list.push(KeyBind::new(
-            KeyModifiers::NONE,
-            KeyCode::Down,
-            CmdName::SelDown,
-        ));
-        list.push(KeyBind::new(
-            KeyModifiers::NONE,
-            KeyCode::Left,
-            CmdName::DirBack,
-        ));
-        list.push(KeyBind::new(
-            KeyModifiers::CONTROL,
-            KeyCode::Char('h'),
-            CmdName::DirBack,
-        ));
-        list.push(KeyBind::new(
-            KeyModifiers::CONTROL,
-            KeyCode::Char('j'),
-            CmdName::SelDown,
-        ));
-        list.push(KeyBind::new(
-            KeyModifiers::CONTROL,
-            KeyCode::Char('k'),
-            CmdName::SelUp,
-        ));
-        list.push(KeyBind::new(
-            KeyModifiers::CONTROL,
-            KeyCode::Char('l'),
-            CmdName::Select,
-        ));
-        list.push(KeyBind::new(
-            KeyModifiers::NONE,
-            KeyCode::Esc,
-            CmdName::Exit,
-        ));
-        list.push(KeyBind::new(
-            KeyModifiers::CONTROL,
-            KeyCode::Char('q'),
-            CmdName::Exit,
-        ));
-        list.push(KeyBind::new(
-            KeyModifiers::ALT,
-            KeyCode::Char('j'),
-            CmdName::SecDown,
-        ));
-        list.push(KeyBind::new(
-            KeyModifiers::ALT,
-            KeyCode::Char('k'),
-            CmdName::SecUp,
-        ));
-        list
-    }
 
     pub fn to_string_short(kb: &KeyBind) -> String {
         let modifier = match kb.modifiers {
@@ -664,15 +598,15 @@ mod kb {
     }
 
     // Needs the command list before KeyBind only points to enum
-    pub fn to_string_full(cmd_list: &cmd_list::CmdList, kb: &KeyBind) -> String {
+    pub fn to_string_full(cmd_list: &cmd_data::CmdList, kb: &KeyBind) -> String {
         return format!(
             "{:<12} {}\n",
-            cmd_list::get_cmd(cmd_list, &kb.command),
+            cmd_data::get_cmd(cmd_list, &kb.command),
             to_string_short(kb)
         );
     }
 
-    pub fn find_by_cmd(keybinds: &KeyBindList, cmd: &cmd_list::CmdName) -> Option<KeyBind> {
+    pub fn find_by_cmd(keybinds: &KeyBindList, cmd: &cmd_data::CmdName) -> Option<KeyBind> {
         for kb in keybinds.iter() {
             if &kb.command == cmd {
                 return Some(kb.clone());
@@ -689,19 +623,10 @@ mod kb {
         kb_path
     }
 
-    pub fn make_list() -> KeyBindList {
-        // Read keybinds.txt
-        let keybinds = match fs::read_to_string(get_path()) {
-            Ok(content) => content,
-            Err(_) => {
-                log!("keybinds.txt not found, using default keybinds");
-                // Try to create default keybinds.txt
-                return make_defaults();
-            }
-        };
+    pub fn make_list(keybinds_str: &str) -> KeyBindList {
         let mut list = KeyBindList::new();
-        let cmd_list = cmd_list::make_cmd_list();
-        for line in keybinds.lines() {
+        let cmd_list = cmd_data::make_cmd_list();
+        for line in keybinds_str.lines() {
             // Ignore comments
             if line.starts_with('#') || line.trim().is_empty() {
                 continue;
@@ -723,7 +648,7 @@ mod kb {
                 code = combo_split[1];
             }
             //
-            let cmd = match cmd_list::cmd_name_from_str(&cmd_list, cmd) {
+            let cmd = match cmd_data::cmd_name_from_str(&cmd_list, cmd) {
                 Some(name) => name,
                 None => {
                     log!("Unknown command in keybinds.txt: {}", cmd);
@@ -767,6 +692,22 @@ mod kb {
         }
         list
     }
+
+    fn make_list_default() -> KeyBindList {
+        make_list(DEFAULT_KEYBINDS)
+    }
+
+    pub fn make_list_auto() -> KeyBindList {
+        // Read keybinds.txt
+        let keybinds = match fs::read_to_string(get_path()) {
+            Ok(content) => content,
+            Err(_) => {
+                log!("keybinds.txt not found, using default keybinds");
+                return make_list_default();
+            }
+        };
+        make_list(&keybinds)
+    }
 }
 
 // Return type for loop control
@@ -797,7 +738,7 @@ struct App<'a> {
     show_output_window: bool,
     output_title: String,
     output_text: String,
-    cmd_list: cmd_list::CmdList,
+    cmd_list: cmd_data::CmdList,
     keybinds: kb::KeyBindList,
     keybinds_found: bool,
     // Has external tools
@@ -837,8 +778,8 @@ impl<'a> App<'a> {
             show_output_window: false,
             output_title: String::new(),
             output_text: String::new(),
-            cmd_list: cmd_list::make_cmd_list(),
-            keybinds: kb::make_list(),
+            cmd_list: cmd_data::make_cmd_list(),
+            keybinds: kb::make_list_auto(),
             keybinds_found: kb_check,
             has_bat: bat_check,
             lay_preview_area: Rect::default(),
@@ -918,8 +859,8 @@ impl<'a> App<'a> {
     }
 
     // A simple helper which avoids needing to pass cmd_list everywhere
-    fn get_cmd(&self, name: &cmd_list::CmdName) -> String {
-        cmd_list::get_cmd(&self.cmd_list, name)
+    fn get_cmd(&self, name: &cmd_data::CmdName) -> String {
+        cmd_data::get_cmd(&self.cmd_list, name)
     }
 
     fn fmtln_info(label: &str, value: &str) -> Line<'a> {
@@ -1117,7 +1058,7 @@ impl<'a> App<'a> {
                     self.preview_content +=
                         Line::styled(format!("{}", line), Style::default().fg(Color::LightGreen));
                 }
-                let kb_exit = kb::find_by_cmd(&self.keybinds, &cmd_list::CmdName::Exit).unwrap();
+                let kb_exit = kb::find_by_cmd(&self.keybinds, &cmd_data::CmdName::Exit).unwrap();
                 let kb_exit_str = kb::to_string_short(&kb_exit);
                 self.preview_content += Line::from("");
                 self.preview_content +=
@@ -1207,7 +1148,7 @@ impl<'a> App<'a> {
                 // Check if we have an internal command
                 if self.selection.is_command() {
                     let cmd_name =
-                        match cmd_list::cmd_name_from_str(&self.cmd_list, &self.selection.name) {
+                        match cmd_data::cmd_name_from_str(&self.cmd_list, &self.selection.name) {
                             Some(name) => name,
                             None => {
                                 self.preview_content +=
@@ -1215,7 +1156,7 @@ impl<'a> App<'a> {
                                 return;
                             }
                         };
-                    let data = cmd_list::get_cmd_data(&self.cmd_list, &cmd_name).clone();
+                    let data = cmd_data::get_cmd_data(&self.cmd_list, &cmd_name).clone();
                     self.preview_content += Line::styled(
                         format!("name: {}", data.fname),
                         Style::default().fg(Color::Green),
@@ -1370,8 +1311,8 @@ impl<'a> App<'a> {
         }
         // Special command matching just for output window
         let cmd = match (modifiers, code) {
-            (KeyModifiers::ALT, KeyCode::Char('j')) => self.get_cmd(&cmd_list::CmdName::SecDown),
-            (KeyModifiers::ALT, KeyCode::Char('k')) => self.get_cmd(&cmd_list::CmdName::SecUp),
+            (KeyModifiers::ALT, KeyCode::Char('j')) => self.get_cmd(&cmd_data::CmdName::SecDown),
+            (KeyModifiers::ALT, KeyCode::Char('k')) => self.get_cmd(&cmd_data::CmdName::SecUp),
             _ => "".to_string(),
         };
         self.handle_cmd(&cmd.to_string());
