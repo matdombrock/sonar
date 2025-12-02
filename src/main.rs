@@ -1004,6 +1004,7 @@ struct App<'a> {
     output_text: String,
     show_yesno_window: bool,
     yesno_text: String,
+    yesno_result: int, // 0 = no, 1 = yes, 2 = unset
     cmd_list: cmd_data::CmdList,
     keybinds: kb::KeyBindList,
     cs: cs::Colors,
@@ -1056,8 +1057,9 @@ impl<'a> App<'a> {
             show_output_window: false,
             output_title: String::new(),
             output_text: String::new(),
-            show_yesno_window: true,
+            show_yesno_window: false,
             yesno_text: String::new(),
+            yesno_result: 2,
             cmd_list: cmd_data::make_cmd_list(),
             keybinds: kb::make_list_auto(),
             cs: cs::Colors::make_list_auto(),
@@ -1697,19 +1699,20 @@ impl<'a> App<'a> {
         LoopReturn::Ok
     }
 
-    fn input_yesno_window(&mut self, modifiers: KeyModifiers, code: KeyCode) -> i32 {
+    // TODO: This doesnt really make sense because command cant wait for it
+    fn input_yesno_window(&mut self, modifiers: KeyModifiers, code: KeyCode) {
+        self.yesno_result = 2; // Reset
         match (modifiers, code) {
             (KeyModifiers::NONE, KeyCode::Char('y')) => {
                 self.show_yesno_window = false;
-                return 0;
+                self.yesno_result = 1;
             }
             (KeyModifiers::NONE, KeyCode::Char('n')) => {
                 self.show_yesno_window = false;
-                return 1;
+                self.yesno_result = 0;
             }
             _ => {}
         }
-        2 // Invalid response
     }
 
     // Returns true if input changed
@@ -2356,17 +2359,15 @@ impl<'a> App<'a> {
         // Results list
         let mut results_pretty = self.dir_list_pretty(&self.results);
         // TODO: This is slow and should be done on dir pretty
-        for (idx, line) in results_pretty.lines.iter_mut().enumerate() {
-            if idx as i32 == self.selection_index {
-                let sel_span = Span::styled(
-                    format!("{}", nf::SEL),
-                    Style::default().fg(self.cs.hi).bg(Color::Black),
-                );
-                let line_span = Span::styled(format!(" {}", line), Style::default().fg(self.cs.hi));
-                let mut new_line = Line::from(sel_span);
-                new_line.push_span(line_span);
-                *line = new_line;
-            }
+        if let Some(line) = results_pretty.lines.get_mut(self.selection_index as usize) {
+            let sel_span = Span::styled(
+                format!("{}", nf::SEL),
+                Style::default().fg(self.cs.hi).bg(Color::Black),
+            );
+            let line_span = Span::styled(format!(" {}", line), Style::default().fg(self.cs.hi));
+            let mut new_line = Line::from(sel_span);
+            new_line.push_span(line_span);
+            *line = new_line;
         }
         let explode_str = if self.mode_explode {
             format!(" [{} exp]", nf::BOMB)
