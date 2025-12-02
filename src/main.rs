@@ -56,6 +56,7 @@ mod nf {
     pub const DIR: &str = "";
     pub const DIRO: &str = "󰉒";
     pub const FILE: &str = "";
+    pub const IMG: &str = "󰋩";
     pub const CMD: &str = "";
     pub const INFO: &str = "";
     pub const CHECK: &str = "";
@@ -474,9 +475,15 @@ mod cmd_data {
     }
 }
 
+// TODO: combine node_type and node_info?
 mod node_type {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
+    use std::path::Path;
+
+    use mime_guess::mime;
+
+    use crate::log;
     #[derive(Clone, PartialEq)]
     pub enum NodeType {
         File,       // A regular file
@@ -485,21 +492,47 @@ mod node_type {
         Command,    // Internal command, name should always be the command string
         Executable, // An executable file
         Image,      // An image file
+        Symlink,    // A symbolic link
         Unknown,    // Unknown, unsupported, etc.
     }
     impl NodeType {
-        pub fn find(metadata: fs::Metadata) -> NodeType {
+        pub fn find(path: &Path, metadata: fs::Metadata) -> NodeType {
             if metadata.is_dir() {
                 NodeType::Directory
             } else if metadata.is_file() {
-                // Check if executable
                 #[cfg(unix)]
                 {
                     if metadata.permissions().mode() & 0o111 != 0 {
                         return NodeType::Executable;
                     }
                 }
+                // Check if image
+                // // SLOW
+                let file_type = mime_guess::from_path(path).first_or_octet_stream();
+                if file_type.type_() == mime::IMAGE {
+                    log!(
+                        "!!!!!!!!!!!Detected image mime type: {}",
+                        file_type.essence_str()
+                    );
+                    return NodeType::Image;
+                }
+
+                // let image_exts = vec![
+                //     "png", "jpg", "jpeg", "gif", "bmp", "tiff", "webp", "svg", "ico", "heic",
+                // ];
+                // let ext = path
+                //     .extension()
+                //     .and_then(std::ffi::OsStr::to_str)
+                //     .unwrap_or("")
+                //     .to_lowercase();
+                //
+                // if image_exts.contains(&ext.as_str()) {
+                //     return NodeType::Image;
+                // }
+
                 NodeType::File
+            } else if metadata.file_type().is_symlink() {
+                NodeType::Symlink
             } else {
                 NodeType::Unknown
             }
@@ -516,13 +549,7 @@ mod node_info {
         pub node_type: NodeType,
     }
     impl NodeInfo {
-        pub fn new(name: &str, node_type: NodeType) -> Self {
-            Self {
-                name: name.to_string(),
-                node_type,
-            }
-        }
-        pub fn empty() -> Self {
+        pub fn new() -> Self {
             Self {
                 name: String::new(),
                 node_type: NodeType::Unknown,
@@ -572,7 +599,7 @@ dir            blue
 command        cyan
 executable     lightred
 shortcut       yellow
-image          green
+image          lightmagenta
 header         lightblue
 info           yellow
 tip            green
@@ -1052,7 +1079,7 @@ impl<'a> App<'a> {
             input: String::new(),
             listing: Vec::new(),
             results: Vec::new(),
-            selection: NodeInfo::empty(),
+            selection: NodeInfo::new(),
             selection_index: 0,
             multi_selection: Vec::new(),
             preview_content: Default::default(),
@@ -1107,13 +1134,8 @@ impl<'a> App<'a> {
                         let file_name_str = file_name.to_string_lossy();
                         match entry.metadata() {
                             Ok(metadata) => {
-                                let node_type = NodeType::find(metadata.clone());
-                                if !self.mode_explode {
-                                    entries.push(NodeInfo {
-                                        name: file_name_str.to_string(),
-                                        node_type,
-                                    });
-                                } else {
+                                let node_type = NodeType::find(&entry.path(), metadata.clone());
+                                if self.mode_explode {
                                     let sub_path = entry.path();
                                     if metadata.is_dir() {
                                         // Recursively collect files from subdirectory
@@ -1125,6 +1147,11 @@ impl<'a> App<'a> {
                                             node_type,
                                         });
                                     }
+                                } else {
+                                    entries.push(NodeInfo {
+                                        name: file_name_str.to_string(),
+                                        node_type,
+                                    });
                                 }
                             }
                             Err(_) => {
@@ -1228,6 +1255,11 @@ impl<'a> App<'a> {
                 Line::styled(
                     format!("{}{}| {}", ms, nf::CMD, item.name),
                     Style::default().fg(self.cs.executable),
+                )
+            } else if item.is_image() {
+                Line::styled(
+                    format!("{}{}| {}", ms, nf::IMG, item.name),
+                    Style::default().fg(self.cs.image),
                 )
             } else {
                 // When exploded the item name is the full path
@@ -1652,10 +1684,10 @@ impl<'a> App<'a> {
             self.selection = self.results[self.selection_index as usize].clone();
         } else if !self.results.is_empty() {
             self.selection_index = 0;
-            self.selection = NodeInfo::empty();
+            self.selection = NodeInfo::new();
         } else {
             self.selection_index = 0;
-            self.selection = NodeInfo::empty();
+            self.selection = NodeInfo::new();
         }
         // Remove icon prefix from selection
         // NOTE: This should be safe since file name should not contain pipe
