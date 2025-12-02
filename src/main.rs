@@ -53,7 +53,7 @@ const SEARCH_LIMIT: usize = 1000;
 const SEP: &str = "=======";
 
 const DEFAULT_KEYBINDS: &str = r#"
-# Keybinds support comments
+# Default keybinds
 exit     ctrl-q
 exit     none-esc
 home     alt-h
@@ -77,7 +77,7 @@ sec-down alt-j
 "#;
 
 const DEFAULT_COLORS: &str = r#"
-# Color scheme for Sona
+# Default colorscheme
 name           default
 search_border  red
 preview_border red
@@ -94,6 +94,11 @@ tip            red
 warning        red
 error          red
 ok             red
+"#;
+
+const DEFAULT_CONFIG: &str = r#"
+# Default configuration
+cmd_on_select edit
 "#;
 
 // Nerd font icons
@@ -863,20 +868,64 @@ mod kb {
         list
     }
 
-    fn make_list_default() -> KeyBindList {
-        make_list(DEFAULT_KEYBINDS)
-    }
-
     pub fn make_list_auto() -> KeyBindList {
         // Read keybinds.txt
         let keybinds = match fs::read_to_string(get_path()) {
             Ok(content) => content,
             Err(_) => {
                 log!("keybinds.txt not found, using default keybinds");
-                return make_list_default();
+                return make_list(DEFAULT_KEYBINDS);
             }
         };
         make_list(&keybinds)
+    }
+}
+
+mod cfg {
+    use std::fs;
+
+    pub struct Config {
+        pub cmd_on_select: String,
+    }
+    impl Config {
+        pub fn new() -> Self {
+            Self {
+                cmd_on_select: "edit".to_string(),
+            }
+        }
+        pub fn make_list(cfg_str: &str) -> Config {
+            let mut config = Config::new();
+            for line in cfg_str.lines() {
+                // Ignore comments
+                if line.starts_with('#') || line.trim().is_empty() {
+                    continue;
+                }
+                // Trim whitespace
+                let line = line.trim();
+                let split = line.split_whitespace().collect::<Vec<&str>>();
+                if split.len() != 2 {
+                    continue;
+                }
+                let key = split[0];
+                let value = split[1];
+                match key {
+                    "cmd_on_select" => config.cmd_on_select = value.to_string(),
+                    _ => {}
+                }
+            }
+            config
+        }
+        pub fn make_list_auto() -> Config {
+            // Read config.txt
+            let config = match fs::read_to_string(crate::APP_NAME.to_string() + "/config.txt") {
+                Ok(content) => content,
+                Err(_) => {
+                    crate::log!("config.txt not found, using default configuration");
+                    return Config::make_list(crate::DEFAULT_CONFIG);
+                }
+            };
+            Config::make_list(&config)
+        }
     }
 }
 
@@ -912,7 +961,9 @@ struct App<'a> {
     keybinds: kb::KeyBindList,
     keybinds_found: bool,
     cs: cs::ColorScheme,
-    colorscheme_found: bool,
+    cs_found: bool,
+    cfg: cfg::Config,
+    cfg_found: bool,
     // Has external tools
     has_bat: bool,
     // Layout vals - read only
@@ -954,7 +1005,9 @@ impl<'a> App<'a> {
             keybinds: kb::make_list_auto(),
             keybinds_found: kb_check,
             cs: cs::ColorScheme::make_list_auto(),
-            colorscheme_found: false,
+            cs_found: false,
+            cfg: cfg::Config::make_list_auto(),
+            cfg_found: false,
             has_bat: bat_check,
             lay_preview_area: Rect::default(),
         }
@@ -1928,7 +1981,9 @@ impl<'a> App<'a> {
                             self.cmd_cmd_finder_toggle();
                             return LoopReturn::Continue;
                         }
-                        // Selection is a file or directory
+                        if selection.is_file() {
+                            self.handle_cmd(self.cfg.cmd_on_select.clone().as_str());
+                        }
                         self.set_cwd(&self.selection.name.clone().into());
                         self.update_listing();
                         self.update_results();
