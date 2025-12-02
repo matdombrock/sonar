@@ -52,7 +52,12 @@ const SEARCH_LIMIT: usize = 1000;
 
 const SEP: &str = "░░░░░░░░░░░░░░░░░░░░░";
 
-const DEFAULT_KEYBINDS: &str = r#"
+const KEYBINDS_FILE: &str = "keybinds.txt";
+const COLORS_FILE: &str = "colors.txt";
+const CONFIG_FILE: &str = "config.txt";
+
+mod default {
+    pub const KEYBINDS: &str = r#"
 # Default keybinds
 exit     ctrl-q
 exit     none-esc
@@ -76,8 +81,8 @@ sec-up   alt-k
 sec-down alt-j
 "#;
 
-const DEFAULT_COLORS: &str = r#"
-# Default colorscheme
+    pub const COLORS: &str = r#"
+# Default color
 name           default
 search_border  red
 preview_border red
@@ -99,10 +104,11 @@ placeholder    red
 misc           red
 "#;
 
-const DEFAULT_CONFIG: &str = r#"
+    pub const CONFIG: &str = r#"
 # Default configuration
 cmd_on_select edit
 "#;
+}
 
 // Nerd font icons
 mod nf {
@@ -596,9 +602,11 @@ mod cs {
 
     use ratatui::style::Color;
 
+    use crate::{COLORS_FILE, default, log};
+
     // Color scheme struct
     #[derive(Clone)]
-    pub struct ColorScheme {
+    pub struct Colors {
         pub name: String,
         pub search_border: Color,
         pub preview_border: Color,
@@ -619,7 +627,7 @@ mod cs {
         pub placeholder: Color,
         pub misc: Color,
     }
-    impl ColorScheme {
+    impl Colors {
         pub fn new() -> Self {
             Self {
                 name: "default".to_string(),
@@ -664,9 +672,16 @@ mod cs {
                 _ => Color::White,
             }
         }
-        pub fn make_list(colorscheme_str: &str) -> ColorScheme {
-            let mut colorscheme = ColorScheme::new();
-            for line in colorscheme_str.lines() {
+        pub fn get_path() -> std::path::PathBuf {
+            let cs_path = dirs::config_dir()
+                .unwrap_or(std::env::current_dir().unwrap())
+                .join(crate::APP_NAME)
+                .join(COLORS_FILE);
+            cs_path
+        }
+        pub fn make_list(colors_str: &str) -> Colors {
+            let mut colors = Colors::new();
+            for line in colors_str.lines() {
                 // Ignore comments
                 if line.starts_with('#') || line.trim().is_empty() {
                     continue;
@@ -680,77 +695,76 @@ mod cs {
                 let key = split[0];
                 let value = split[1];
                 match key {
-                    "name" => colorscheme.name = value.to_string(),
+                    "name" => colors.name = value.to_string(),
                     "search_border" => {
-                        colorscheme.search_border = ColorScheme::from_str(value);
+                        colors.search_border = Colors::from_str(value);
                     }
                     "preview_border" => {
-                        colorscheme.preview_border = ColorScheme::from_str(value);
+                        colors.preview_border = Colors::from_str(value);
                     }
                     "listing_border" => {
-                        colorscheme.listing_border = ColorScheme::from_str(value);
+                        colors.listing_border = Colors::from_str(value);
                     }
                     "file" => {
-                        colorscheme.file = ColorScheme::from_str(value);
+                        colors.file = Colors::from_str(value);
                     }
                     "dir" => {
-                        colorscheme.dir = ColorScheme::from_str(value);
+                        colors.dir = Colors::from_str(value);
                     }
                     "command" => {
-                        colorscheme.command = ColorScheme::from_str(value);
+                        colors.command = Colors::from_str(value);
                     }
                     "executable" => {
-                        colorscheme.executable = ColorScheme::from_str(value);
+                        colors.executable = Colors::from_str(value);
                     }
                     "shortcut" => {
-                        colorscheme.shortcut = ColorScheme::from_str(value);
+                        colors.shortcut = Colors::from_str(value);
                     }
                     "image" => {
-                        colorscheme.image = ColorScheme::from_str(value);
+                        colors.image = Colors::from_str(value);
                     }
                     "info" => {
-                        colorscheme.info = ColorScheme::from_str(value);
+                        colors.info = Colors::from_str(value);
                     }
                     "tip" => {
-                        colorscheme.tip = ColorScheme::from_str(value);
+                        colors.tip = Colors::from_str(value);
                     }
                     "warning" => {
-                        colorscheme.warning = ColorScheme::from_str(value);
+                        colors.warning = Colors::from_str(value);
                     }
                     "error" => {
-                        colorscheme.error = ColorScheme::from_str(value);
+                        colors.error = Colors::from_str(value);
                     }
                     "ok" => {
-                        colorscheme.ok = ColorScheme::from_str(value);
+                        colors.ok = Colors::from_str(value);
                     }
                     "header" => {
-                        colorscheme.header = ColorScheme::from_str(value);
+                        colors.header = Colors::from_str(value);
                     }
                     "hi" => {
-                        colorscheme.hi = ColorScheme::from_str(value);
+                        colors.hi = Colors::from_str(value);
                     }
                     "placeholder" => {
-                        colorscheme.placeholder = ColorScheme::from_str(value);
+                        colors.placeholder = Colors::from_str(value);
                     }
                     "misc" => {
-                        colorscheme.misc = ColorScheme::from_str(value);
+                        colors.misc = Colors::from_str(value);
                     }
                     _ => {}
                 }
             }
-            colorscheme
+            colors
         }
-        pub fn make_list_auto() -> ColorScheme {
-            // Read colorscheme.txt
-            let colorscheme =
-                match fs::read_to_string(crate::APP_NAME.to_string() + "/colorscheme.txt") {
-                    Ok(content) => content,
-                    Err(_) => {
-                        crate::log!("colorscheme.txt not found, using default colorscheme");
-                        return ColorScheme::make_list(crate::DEFAULT_COLORS);
-                    }
-                };
-            ColorScheme::make_list(&colorscheme)
+        pub fn make_list_auto() -> Colors {
+            // Read colors.txt
+            let colors = match fs::read_to_string(crate::APP_NAME.to_string() + COLORS_FILE) {
+                Ok(content) => content,
+                Err(_) => {
+                    log!("colors.txt not found, using default colorscheme");
+                    return Colors::make_list(default::COLORS);
+                }
+            };
+            Colors::make_list(&colors)
         }
     }
 }
@@ -758,7 +772,7 @@ mod cs {
 mod kb {
     use super::cmd_data;
     use super::cmd_data::CmdName;
-    use crate::{APP_NAME, DEFAULT_KEYBINDS, log};
+    use crate::{APP_NAME, KEYBINDS_FILE, default, log};
     use crossterm::event::{KeyCode, KeyModifiers};
     use std::{env, fs, path::PathBuf};
 
@@ -812,7 +826,7 @@ mod kb {
         let kb_path = dirs::config_dir()
             .unwrap_or(env::current_dir().unwrap())
             .join(APP_NAME)
-            .join("keybinds.txt");
+            .join(KEYBINDS_FILE);
         kb_path
     }
 
@@ -828,7 +842,7 @@ mod kb {
             let line = line.trim();
             let split = line.split_whitespace().collect::<Vec<&str>>();
             if split.len() != 2 {
-                log!("Invalid line in keybinds.txt: {}", line);
+                log!("Invalid line in {}: {}", KEYBINDS_FILE, line);
                 continue;
             }
             let cmd = split[0];
@@ -844,7 +858,7 @@ mod kb {
             let cmd = match cmd_data::cmd_name_from_str(&cmd_list, cmd) {
                 Some(name) => name,
                 None => {
-                    log!("Unknown command in keybinds.txt: {}", cmd);
+                    log!("Unknown command in {}: {}", KEYBINDS_FILE, cmd);
                     continue;
                 }
             };
@@ -854,7 +868,7 @@ mod kb {
                 "shift" => KeyModifiers::SHIFT,
                 "none" => KeyModifiers::NONE,
                 _ => {
-                    log!("Unknown modifier in keybinds.txt: {}", modifier);
+                    log!("Unknown modifier in {}: {}", KEYBINDS_FILE, modifier);
                     continue;
                 }
             };
@@ -876,7 +890,7 @@ mod kb {
                     KeyCode::Char(ch)
                 }
                 _ => {
-                    log!("Unknown key code in keybinds.txt: {}", code);
+                    log!("Unknown key code in {}: {}", KEYBINDS_FILE, code);
                     continue;
                 }
             };
@@ -891,8 +905,8 @@ mod kb {
         let keybinds = match fs::read_to_string(get_path()) {
             Ok(content) => content,
             Err(_) => {
-                log!("keybinds.txt not found, using default keybinds");
-                return make_list(DEFAULT_KEYBINDS);
+                log!("{} not found, using default keybinds", KEYBINDS_FILE);
+                return make_list(default::KEYBINDS);
             }
         };
         make_list(&keybinds)
@@ -902,6 +916,8 @@ mod kb {
 mod cfg {
     use std::fs;
 
+    use crate::{CONFIG_FILE, default};
+
     pub struct Config {
         pub cmd_on_select: String,
     }
@@ -910,6 +926,13 @@ mod cfg {
             Self {
                 cmd_on_select: "edit".to_string(),
             }
+        }
+        pub fn get_path() -> std::path::PathBuf {
+            let cfg_path = dirs::config_dir()
+                .unwrap_or(std::env::current_dir().unwrap())
+                .join(crate::APP_NAME)
+                .join(CONFIG_FILE);
+            cfg_path
         }
         pub fn make_list(cfg_str: &str) -> Config {
             let mut config = Config::new();
@@ -938,8 +961,8 @@ mod cfg {
             let config = match fs::read_to_string(crate::APP_NAME.to_string() + "/config.txt") {
                 Ok(content) => content,
                 Err(_) => {
-                    crate::log!("config.txt not found, using default configuration");
-                    return Config::make_list(crate::DEFAULT_CONFIG);
+                    crate::log!("{} not found, using default configuration", CONFIG_FILE);
+                    return Config::make_list(default::CONFIG);
                 }
             };
             Config::make_list(&config)
@@ -977,7 +1000,7 @@ struct App<'a> {
     output_text: String,
     cmd_list: cmd_data::CmdList,
     keybinds: kb::KeyBindList,
-    cs: cs::ColorScheme,
+    cs: cs::Colors,
     cfg: cfg::Config,
     found_keybinds: bool,
     found_cs: bool,
@@ -999,11 +1022,11 @@ impl<'a> App<'a> {
             Ok(_) => true,
             Err(_) => false,
         };
-        let cs_check = match fs::read_to_string(crate::APP_NAME.to_string() + "/colorscheme.txt") {
+        let cs_check = match fs::read_to_string(&cs::Colors::get_path()) {
             Ok(_) => true,
             Err(_) => false,
         };
-        let cfg_check = match fs::read_to_string(crate::APP_NAME.to_string() + "/config.txt") {
+        let cfg_check = match fs::read_to_string(&cfg::Config::get_path()) {
             Ok(_) => true,
             Err(_) => false,
         };
@@ -1029,7 +1052,7 @@ impl<'a> App<'a> {
             output_text: String::new(),
             cmd_list: cmd_data::make_cmd_list(),
             keybinds: kb::make_list_auto(),
-            cs: cs::ColorScheme::make_list_auto(),
+            cs: cs::Colors::make_list_auto(),
             cfg: cfg::Config::make_list_auto(),
             found_keybinds: kb_check,
             found_cs: cs_check,
@@ -1114,6 +1137,16 @@ impl<'a> App<'a> {
     // A simple helper which avoids needing to pass cmd_list everywhere
     fn get_cmd(&self, name: &cmd_data::CmdName) -> String {
         cmd_data::get_cmd(&self.cmd_list, name)
+    }
+
+    fn fpath(&self, path: &PathBuf) -> String {
+        let pstring = path.to_str().unwrap().to_string();
+        let home = dirs::home_dir().unwrap();
+        let home_str = home.to_str().unwrap();
+        if pstring.starts_with(home_str) {
+            return pstring.replacen(home_str, "~", 1);
+        }
+        pstring
     }
 
     fn fmtln_info(&self, label: &str, value: &str) -> Line<'a> {
@@ -1355,42 +1388,55 @@ impl<'a> App<'a> {
                         format!(
                             "- {} keybinds - loaded from {}",
                             nf::CHECK,
-                            kb::get_path().to_str().unwrap()
+                            self.fpath(&kb::get_path())
                         ),
                         Style::default().fg(self.cs.ok),
                     );
                 } else {
                     self.preview_content += Line::styled(
                         format!(
-                            "- {} keybinds - no keybinds found at {}",
+                            "- {} keybinds - no file found at {}",
                             nf::WARN,
-                            kb::get_path().to_str().unwrap()
+                            self.fpath(&kb::get_path())
                         ),
                         Style::default().fg(self.cs.warning),
                     );
                 }
                 if self.found_cs {
                     self.preview_content += Line::styled(
-                        format!("- {} colorscheme - loaded from colorscheme.txt", nf::CHECK),
+                        format!(
+                            "- {} colors - loaded from {}",
+                            nf::CHECK,
+                            self.fpath(&cs::Colors::get_path())
+                        ),
                         Style::default().fg(self.cs.ok),
                     );
                 } else {
                     self.preview_content += Line::styled(
                         format!(
-                            "- {} colorscheme - no colorscheme found at colorscheme.txt",
-                            nf::WARN
+                            "- {} colors - no file found at {}",
+                            nf::WARN,
+                            self.fpath(&cs::Colors::get_path())
                         ),
                         Style::default().fg(self.cs.warning),
                     );
                 }
                 if self.found_cfg {
                     self.preview_content += Line::styled(
-                        format!("- {} config - loaded from config.txt", nf::CHECK),
+                        format!(
+                            "- {} config - loaded from {}",
+                            nf::CHECK,
+                            self.fpath(&cfg::Config::get_path()),
+                        ),
                         Style::default().fg(self.cs.ok),
                     );
                 } else {
                     self.preview_content += Line::styled(
-                        format!("- {} config - no config found at config.txt", nf::WARN),
+                        format!(
+                            "- {} config - no file found at {}",
+                            nf::WARN,
+                            self.fpath(&cfg::Config::get_path()),
+                        ),
                         Style::default().fg(self.cs.warning),
                     );
                 }
@@ -2263,7 +2309,7 @@ impl<'a> App<'a> {
         } else {
             "".to_string()
         };
-        let list_title = format!("|{}{} ", self.cwd.to_str().unwrap(), explode_str);
+        let list_title = format!("|{}{} ", self.fpath(&self.cwd), explode_str);
         let list_widget = List::new(results_pretty).block(
             Block::default()
                 .title(list_title)
