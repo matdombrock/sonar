@@ -1334,7 +1334,23 @@ impl<'a> App<'a> {
             {
                 if bat_output.status.success() {
                     self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
-                    let bat_content = String::from_utf8_lossy(&bat_output.stdout);
+                    let mut bat_content = String::from_utf8_lossy(&bat_output.stdout);
+                    bat_content = bat_content.replace("\r\n", "\n").into();
+                    // Replace tabs with spaces
+                    bat_content = bat_content.replace("\t", "    ").into();
+                    // Replace non-printable characters
+                    // NOTE: THIS SEEMS TO BE THE TRICK
+                    bat_content = bat_content
+                        .chars()
+                        .map(|c| {
+                            if c.is_control() && c != '\n' {
+                                '�'
+                            } else {
+                                c
+                            }
+                        })
+                        .collect::<String>()
+                        .into();
                     let output = match bat_content.as_ref().into_text() {
                         Ok(text) => text,
                         Err(_) => {
@@ -2327,7 +2343,6 @@ impl<'a> App<'a> {
         self.update_preview();
         loop {
             // FIXME: THIS CAUSES FLICKERING
-            // THIS SHOULD ONLY BE USED WHEN NEEDED
             if self.term_clear {
                 terminal.clear()?;
                 self.term_clear = false;
