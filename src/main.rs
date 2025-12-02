@@ -1564,12 +1564,11 @@ impl<'a> App<'a> {
                 let mut selected_path = self.cwd.clone();
                 selected_path.push(&self.selection.name);
 
-                if selected_path.is_dir() {
+                if self.selection.is_dir() {
                     self.preview_dir(&selected_path);
-                } else if selected_path.is_file() {
+                } else if self.selection.is_file() {
                     // Check if we have an image
-                    let mime = mime_guess::from_path(&selected_path).first_or_octet_stream();
-                    if mime.type_() == mime::IMAGE {
+                    if self.selection.is_image() {
                         self.preview_content += Line::styled(
                             "Image file preview not yet supported.",
                             Style::default().fg(self.cs.error),
@@ -1583,6 +1582,7 @@ impl<'a> App<'a> {
                         "Error: Selected item is neither file nor directory.",
                         Style::default().fg(self.cs.error),
                     );
+                    // Debug info
                     let metadata = fs::metadata(&selected_path);
                     self.preview_content += Line::styled(
                         format!("{:?}", metadata),
