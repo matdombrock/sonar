@@ -94,6 +94,9 @@ tip            red
 warning        red
 error          red
 ok             red
+hi             red
+placeholder    red
+misc           red
 "#;
 
 const DEFAULT_CONFIG: &str = r#"
@@ -612,6 +615,9 @@ mod cs {
         pub error: Color,
         pub ok: Color,
         pub header: Color,
+        pub hi: Color,
+        pub placeholder: Color,
+        pub misc: Color,
     }
     impl ColorScheme {
         pub fn new() -> Self {
@@ -632,6 +638,9 @@ mod cs {
                 error: Color::White,
                 ok: Color::White,
                 header: Color::White,
+                hi: Color::White,
+                placeholder: Color::White,
+                misc: Color::White,
             }
         }
         pub fn from_str(s: &str) -> Color {
@@ -716,6 +725,15 @@ mod cs {
                     }
                     "header" => {
                         colorscheme.header = ColorScheme::from_str(value);
+                    }
+                    "hi" => {
+                        colorscheme.hi = ColorScheme::from_str(value);
+                    }
+                    "placeholder" => {
+                        colorscheme.placeholder = ColorScheme::from_str(value);
+                    }
+                    "misc" => {
+                        colorscheme.misc = ColorScheme::from_str(value);
                     }
                     _ => {}
                 }
@@ -1182,7 +1200,7 @@ impl<'a> App<'a> {
         let listing = self.get_directory_listing(&selected_path);
         let count_line = self.fmtln_info("count", &listing.len().to_string());
         self.preview_content += count_line;
-        self.preview_content += Line::from(SEP);
+        self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.misc));
         let pretty_listing = self.dir_list_pretty(&listing);
         for line in pretty_listing.lines.iter().take(20) {
             self.preview_content += Line::from(line.clone());
@@ -1220,13 +1238,15 @@ impl<'a> App<'a> {
                 .output()
             {
                 if bat_output.status.success() {
-                    self.preview_content += Line::from(SEP);
+                    self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.misc));
                     let bat_content = String::from_utf8_lossy(&bat_output.stdout);
                     let output = match bat_content.as_ref().into_text() {
                         Ok(text) => text,
                         Err(_) => {
-                            self.preview_content +=
-                                Line::from("Error: Unable to convert bat output to text.");
+                            self.preview_content += Line::styled(
+                                "Error: Unable to convert bat output to text.",
+                                Style::default().fg(self.cs.error),
+                            );
                             return;
                         }
                     };
@@ -1253,7 +1273,7 @@ impl<'a> App<'a> {
         // Print syntax name
         self.preview_content += self.fmtln_info("detected", syntax.name.as_str());
 
-        self.preview_content += Line::from(SEP);
+        self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.misc));
 
         if let Ok(content) = fs::read_to_string(&selected_path) {
             for line in content.lines().take(100) {
@@ -1268,7 +1288,10 @@ impl<'a> App<'a> {
                 self.preview_content += styled_line;
             }
         } else {
-            self.preview_content += Line::from("Unable to read file content.");
+            self.preview_content += Line::styled(
+                "Err: Unable to read file content.",
+                Style::default().fg(self.cs.error),
+            );
         }
     }
 
@@ -1291,9 +1314,14 @@ impl<'a> App<'a> {
                 let kb_exit_str = kb::to_string_short(&kb_exit);
                 self.preview_content += Line::from("");
                 self.preview_content += Line::styled("Tips:", Style::default().fg(self.cs.header));
-                self.preview_content += Line::from(format!("- Press {} to exit", kb_exit_str));
-                self.preview_content +=
-                    Line::from("- Start typing to fuzzy find files and directories");
+                self.preview_content += Line::styled(
+                    format!("- Press {} to exit", kb_exit_str),
+                    Style::default().fg(self.cs.tip),
+                );
+                self.preview_content += Line::styled(
+                    "- Start typing to fuzzy find files and directories",
+                    Style::default().fg(self.cs.tip),
+                );
                 self.preview_content += Line::from("");
                 self.preview_content +=
                     Line::styled("System Information:", Style::default().fg(self.cs.header));
@@ -1379,8 +1407,10 @@ impl<'a> App<'a> {
                         match cmd_data::cmd_name_from_str(&self.cmd_list, &self.selection.name) {
                             Some(name) => name,
                             None => {
-                                self.preview_content +=
-                                    Line::from("Error: Command data not found.");
+                                self.preview_content += Line::styled(
+                                    "Error: Command data not found.",
+                                    Style::default().fg(self.cs.error),
+                                );
                                 return;
                             }
                         };
@@ -1393,7 +1423,10 @@ impl<'a> App<'a> {
                         format!("cmd : {}", data.cmd),
                         Style::default().fg(self.cs.command),
                     );
-                    self.preview_content += Line::from(format!("info: {}", data.description));
+                    self.preview_content += Line::styled(
+                        format!("info: {}", data.description),
+                        Style::default().fg(self.cs.info),
+                    );
                     return;
                 }
                 // We have a file or dir
@@ -1406,16 +1439,24 @@ impl<'a> App<'a> {
                     // Check if we have an image
                     let mime = mime_guess::from_path(&selected_path).first_or_octet_stream();
                     if mime.type_() == mime::IMAGE {
-                        self.preview_content += Line::from("Image file preview not yet supported.");
+                        self.preview_content += Line::styled(
+                            "Image file preview not yet supported.",
+                            Style::default().fg(self.cs.error),
+                        );
                         return;
                     }
                     // Preview a text file
                     self.preview_file(&selected_path);
                 } else {
-                    self.preview_content +=
-                        Line::from("Selected item is neither file nor directory.");
+                    self.preview_content += Line::styled(
+                        "Error: Selected item is neither file nor directory.",
+                        Style::default().fg(self.cs.error),
+                    );
                     let metadata = fs::metadata(&selected_path);
-                    self.preview_content += Line::from(format!("{:?}", metadata))
+                    self.preview_content += Line::styled(
+                        format!("{:?}", metadata),
+                        Style::default().fg(self.cs.error),
+                    );
                 }
             }
         }
@@ -2141,13 +2182,13 @@ impl<'a> App<'a> {
         let input_str: String;
         if self.input.is_empty() {
             input_str = "Type to search...".to_string();
-            input_color = Color::Gray;
+            input_color = self.cs.placeholder;
         } else {
             input_str = self.input.clone();
-            input_color = Color::White;
+            input_color = self.cs.misc;
         };
         if self.results.is_empty() {
-            input_color = Color::Red;
+            input_color = self.cs.error;
         }
         let input_span: Span =
             Span::styled(format!("{}", input_str), Style::default().fg(input_color));
@@ -2174,12 +2215,13 @@ impl<'a> App<'a> {
         // TODO: This is slow and should be done on dir pretty
         for (idx, line) in results_pretty.lines.iter_mut().enumerate() {
             if idx as i32 == self.selection_index {
-                let span = Span::styled(
+                let sel_span = Span::styled(
                     format!("{}", nf::SEL),
-                    Style::default().fg(Color::LightBlue).bg(Color::Black),
+                    Style::default().fg(self.cs.hi).bg(Color::Black),
                 );
-                let mut new_line = Line::from(span);
-                new_line.push_span(Span::raw(format!(" {}", line)));
+                let line_span = Span::styled(format!(" {}", line), Style::default().fg(self.cs.hi));
+                let mut new_line = Line::from(sel_span);
+                new_line.push_span(line_span);
                 *line = new_line;
             }
         }
