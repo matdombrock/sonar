@@ -142,7 +142,8 @@ mod cmd_data {
         ShowKeybinds,
         DbgClearPreview,
         Edit,
-        Shell,
+        ShellQuick,
+        ShellFull,
     }
 
     #[derive(Debug, Clone)]
@@ -451,11 +452,20 @@ mod cmd_data {
             },
         );
         map.insert(
-            CmdName::Shell,
+            CmdName::ShellQuick,
             CmdData {
-                fname: "Shell",
-                description: "Demo shell command",
-                cmd: "!ls",
+                fname: "Shell Quick",
+                description: "Run a quick shell command in the current directory",
+                cmd: "shell-quick",
+                vis_hidden: false,
+            },
+        );
+        map.insert(
+            CmdName::ShellFull,
+            CmdData {
+                fname: "Shell Full",
+                description: "Run a full shell in the current directory",
+                cmd: "shell-full",
                 vis_hidden: false,
             },
         );
@@ -554,24 +564,24 @@ mod cs {
     pub const DEFAULT: &str = r#"
 # Default color
 name           default
-search_border  red
-preview_border red
-listing_border red
-file           red
-dir            red
-command        red
-executable     red
-shortcut       red
-image          red
-header         red
-info           red
-tip            red
-warning        red
+search_border  green
+preview_border yellow
+listing_border blue
+file           green
+dir            blue
+command        cyan
+executable     lightred
+shortcut       yellow
+image          green
+header         lightblue
+info           yellow
+tip            green
+warning        yellow
 error          red
-ok             red
-hi             red
-placeholder    red
-misc           red
+ok             green
+hi             blue
+placeholder    gray
+misc           white
 "#;
     // Color scheme struct
     #[derive(Clone)]
@@ -748,26 +758,26 @@ mod kb {
     const FILE_NAME: &str = "keybinds.txt";
     pub const KEYBINDS: &str = r#"
 # Default keybinds
-exit     ctrl-q
-exit     none-esc
-home     alt-h
-sel-up   none-up
-sel-up   ctrl-k
-sel-down none-down
-sel-down ctrl-j
-dir-up   ctrl-h
-dir-back ctrl-u
-explode  ctrl-x
-edit     ctrl-e
-select   none-enter
-select   ctrl-l
-cmd-win  ctrl-w
-cmd-find ctrl-t 
-cmd-list ctrl-i
-mul-sel  ctrl-s
-mul-sel  none-tab
-sec-up   alt-k
-sec-down alt-j
+exit        ctrl-q
+exit        none-esc
+home        alt-h
+sel-up      none-up
+sel-up      ctrl-k
+sel-down    none-down
+sel-down    ctrl-j
+dir-up      ctrl-h
+dir-back    ctrl-u
+explode     ctrl-x
+edit        ctrl-e
+select      none-enter
+select      ctrl-l
+cmd-win     ctrl-w
+cmd-find    ctrl-t 
+cmd-list    ctrl-i
+mul-sel     none-tab
+sec-up      alt-k
+sec-down    alt-j
+shell-quick ctrl-s
 "#;
     #[derive(Clone)]
     pub struct KeyBind {
@@ -1004,7 +1014,7 @@ struct App<'a> {
     output_text: String,
     show_yesno_window: bool,
     yesno_text: String,
-    yesno_result: int, // 0 = no, 1 = yes, 2 = unset
+    yesno_result: i32, // 0 = no, 1 = yes, 2 = unset
     cmd_list: cmd_data::CmdList,
     keybinds: kb::KeyBindList,
     cs: cs::Colors,
@@ -1686,9 +1696,18 @@ impl<'a> App<'a> {
             }
             (KeyModifiers::NONE, KeyCode::Enter) => {
                 // Handle commands
-                let cmd = self.command_input.clone();
+                let mut cmd = self.command_input.clone();
                 log!("cmd: {}", &cmd);
+                let mut path_all = String::new();
+                for (i, path) in self.multi_selection.iter().enumerate() {
+                    let var_name = format!("${}", i + 1);
+                    let path_str = path.to_str().unwrap();
+                    cmd = cmd.replace(&var_name, path_str);
+                    path_all += &format!("{} ", path_str);
+                }
+                cmd = cmd.replace("$...", &path_all.trim_end());
                 self.command_input = String::new();
+                self.show_command_window = false;
                 return self.handle_cmd(&cmd);
             }
             (KeyModifiers::NONE, KeyCode::Esc) => {
@@ -2113,6 +2132,27 @@ impl<'a> App<'a> {
         self.cmd_output_window_show();
     }
 
+    fn cmd_shell_quick(&mut self) {
+        self.command_input = "!".to_string();
+        self.show_command_window = true;
+    }
+
+    fn cmd_shell_full(&mut self) {
+        let shell = env::var("SHELL").unwrap_or("/bin/sh".to_string());
+        log!("Opening shell: {}", shell);
+        cls();
+        match Command::new(shell).status() {
+            Ok(_) => {
+                self.set_output("Shell", "Shell closed.");
+            }
+            Err(e) => {
+                self.set_output("Shell", &format!("Failed to open shell: {}", e));
+            }
+        }
+        cls();
+        self.cmd_output_window_show();
+    }
+
     fn cmd_dbg_clear_preview(&mut self) {
         self.preview_content = Default::default();
         for _ in 0..self.lay_preview_area.height {
@@ -2200,9 +2240,10 @@ impl<'a> App<'a> {
             _ if cmd == self.get_cmd(&CmdName::ShowKeybinds) => self.cmd_show_keybinds(),
             _ if cmd == self.get_cmd(&CmdName::Edit) => self.cmd_edit(),
             _ if cmd == self.get_cmd(&CmdName::DbgClearPreview) => self.cmd_dbg_clear_preview(),
+            _ if cmd == self.get_cmd(&CmdName::ShellQuick) => self.cmd_shell_quick(),
+            _ if cmd == self.get_cmd(&CmdName::ShellFull) => self.cmd_shell_full(),
             _ => {
                 // If the cmd starts with `!` treat it as a shell command
-
                 if cmd.starts_with('!') {
                     let shell_cmd = &cmd[1..];
                     log!("Running shell command: {}", shell_cmd);
@@ -2442,7 +2483,7 @@ impl<'a> App<'a> {
         // --- Popups ---
         if self.show_command_window {
             let popup_area = centered_rect(50, 10, area);
-            let command_str = format!("> {}|", self.command_input);
+            let command_str = format!("\n> {}|", self.command_input);
             frame.render_widget(Clear, popup_area);
             let command_paragraph = Paragraph::new(command_str)
                 .style(Style::default().bg(Color::Black))
