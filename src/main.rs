@@ -22,6 +22,7 @@ use ratatui::{
     layout::Direction,
     widgets::{Block, Borders, List, ListState, Paragraph},
 };
+use regex::Regex;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::{env, process::Command};
@@ -1321,6 +1322,37 @@ impl<'a> App<'a> {
             }
         }
 
+        fn sanitize_content(input: &str) -> String {
+            // Regex to match ANSI escape sequences
+            let ansi_regex = Regex::new(r"\x1B\[[0-9;]*[A-Za-z]").unwrap();
+            let mut result = String::new();
+            let mut last = 0;
+
+            for mat in ansi_regex.find_iter(input) {
+                // Process text before the ANSI sequence
+                let before = &input[last..mat.start()];
+                for c in before.chars() {
+                    if c.is_control() && c != '\n' && c != '\x1B' {
+                        result.push('�');
+                    } else {
+                        result.push(c);
+                    }
+                }
+                // Copy the ANSI sequence as-is
+                result.push_str(mat.as_str());
+                last = mat.end();
+            }
+            // Process any remaining text after the last ANSI sequence
+            let after = &input[last..];
+            for c in after.chars() {
+                if c.is_control() && c != '\n' && c != '\x1B' {
+                    result.push('�');
+                } else {
+                    result.push(c);
+                }
+            }
+            result
+        }
         // Check if bat is available
         // Use bat for preview if available
         if self.has_bat {
@@ -1340,17 +1372,7 @@ impl<'a> App<'a> {
                     bat_content = bat_content.replace("\t", "    ").into();
                     // Replace non-printable characters
                     // NOTE: THIS SEEMS TO BE THE TRICK
-                    bat_content = bat_content
-                        .chars()
-                        .map(|c| {
-                            if c.is_control() && c != '\n' {
-                                '�'
-                            } else {
-                                c
-                            }
-                        })
-                        .collect::<String>()
-                        .into();
+                    bat_content = sanitize_content(&bat_content.to_string()).into();
                     let output = match bat_content.as_ref().into_text() {
                         Ok(text) => text,
                         Err(_) => {
