@@ -22,6 +22,7 @@ use ratatui::{
     layout::Direction,
     widgets::{Block, Borders, List, ListState, Paragraph},
 };
+use regex::Regex;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::{env, process::Command};
@@ -2322,6 +2323,9 @@ impl<'a> App<'a> {
         self.update_selection();
         self.update_preview();
         loop {
+            // FIXME: THIS CAUSES FLICKERING
+            // THIS SHOULD ONLY BE USED WHEN NEEDED
+            terminal.clear()?;
             terminal.draw(|f| self.render(f))?;
             if event::poll(std::time::Duration::from_millis(100))? {
                 if let Event::Key(KeyEvent {
