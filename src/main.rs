@@ -76,6 +76,26 @@ sec-up   alt-k
 sec-down alt-j
 "#;
 
+const DEFAULT_COLORS: &str = r#"
+# Color scheme for Sona
+name           default
+search_border  red
+preview_border red
+listing_border red
+file           red
+dir            red
+command        red
+executable     red
+shortcut       red
+image          red
+header         red
+info           red
+tip            red
+warning        red
+error          red
+ok             red
+"#;
+
 // Nerd font icons
 mod nf {
     pub const MAG: &str = "󰍉";
@@ -563,6 +583,155 @@ mod node_info {
     }
 }
 
+mod cs {
+    use std::fs;
+
+    use ratatui::style::Color;
+
+    // Color scheme struct
+    #[derive(Clone)]
+    pub struct ColorScheme {
+        pub name: String,
+        pub search_border: Color,
+        pub preview_border: Color,
+        pub listing_border: Color,
+        pub file: Color,
+        pub dir: Color,
+        pub command: Color,
+        pub executable: Color,
+        pub shortcut: Color,
+        pub image: Color,
+        pub info: Color,
+        pub tip: Color,
+        pub warning: Color,
+        pub error: Color,
+        pub ok: Color,
+        pub header: Color,
+    }
+    impl ColorScheme {
+        pub fn new() -> Self {
+            Self {
+                name: "default".to_string(),
+                search_border: Color::White,
+                preview_border: Color::White,
+                listing_border: Color::White,
+                file: Color::White,
+                dir: Color::White,
+                command: Color::White,
+                executable: Color::White,
+                shortcut: Color::White,
+                image: Color::White,
+                info: Color::White,
+                tip: Color::White,
+                warning: Color::White,
+                error: Color::White,
+                ok: Color::White,
+                header: Color::White,
+            }
+        }
+        pub fn from_str(s: &str) -> Color {
+            match s.to_lowercase().as_str() {
+                "black" => Color::Black,
+                "red" => Color::Red,
+                "green" => Color::Green,
+                "yellow" => Color::Yellow,
+                "blue" => Color::Blue,
+                "magenta" => Color::Magenta,
+                "cyan" => Color::Cyan,
+                "gray" => Color::Gray,
+                "darkgray" => Color::DarkGray,
+                "lightred" => Color::LightRed,
+                "lightgreen" => Color::LightGreen,
+                "lightyellow" => Color::LightYellow,
+                "lightblue" => Color::LightBlue,
+                "lightmagenta" => Color::LightMagenta,
+                "lightcyan" => Color::LightCyan,
+                "white" => Color::White,
+                _ => Color::White,
+            }
+        }
+        pub fn make_list(colorscheme_str: &str) -> ColorScheme {
+            let mut colorscheme = ColorScheme::new();
+            for line in colorscheme_str.lines() {
+                // Ignore comments
+                if line.starts_with('#') || line.trim().is_empty() {
+                    continue;
+                }
+                // Trim whitespace
+                let line = line.trim();
+                let split = line.split_whitespace().collect::<Vec<&str>>();
+                if split.len() != 2 {
+                    continue;
+                }
+                let key = split[0];
+                let value = split[1];
+                match key {
+                    "name" => colorscheme.name = value.to_string(),
+                    "search_border" => {
+                        colorscheme.search_border = ColorScheme::from_str(value);
+                    }
+                    "preview_border" => {
+                        colorscheme.preview_border = ColorScheme::from_str(value);
+                    }
+                    "listing_border" => {
+                        colorscheme.listing_border = ColorScheme::from_str(value);
+                    }
+                    "file" => {
+                        colorscheme.file = ColorScheme::from_str(value);
+                    }
+                    "dir" => {
+                        colorscheme.dir = ColorScheme::from_str(value);
+                    }
+                    "command" => {
+                        colorscheme.command = ColorScheme::from_str(value);
+                    }
+                    "executable" => {
+                        colorscheme.executable = ColorScheme::from_str(value);
+                    }
+                    "shortcut" => {
+                        colorscheme.shortcut = ColorScheme::from_str(value);
+                    }
+                    "image" => {
+                        colorscheme.image = ColorScheme::from_str(value);
+                    }
+                    "info" => {
+                        colorscheme.info = ColorScheme::from_str(value);
+                    }
+                    "tip" => {
+                        colorscheme.tip = ColorScheme::from_str(value);
+                    }
+                    "warning" => {
+                        colorscheme.warning = ColorScheme::from_str(value);
+                    }
+                    "error" => {
+                        colorscheme.error = ColorScheme::from_str(value);
+                    }
+                    "ok" => {
+                        colorscheme.ok = ColorScheme::from_str(value);
+                    }
+                    "header" => {
+                        colorscheme.header = ColorScheme::from_str(value);
+                    }
+                    _ => {}
+                }
+            }
+            colorscheme
+        }
+        pub fn make_list_auto() -> ColorScheme {
+            // Read colorscheme.txt
+            let colorscheme =
+                match fs::read_to_string(crate::APP_NAME.to_string() + "/colorscheme.txt") {
+                    Ok(content) => content,
+                    Err(_) => {
+                        crate::log!("colorscheme.txt not found, using default colorscheme");
+                        return ColorScheme::make_list(crate::DEFAULT_COLORS);
+                    }
+                };
+            ColorScheme::make_list(&colorscheme)
+        }
+    }
+}
+
 mod kb {
     use super::cmd_data;
     use super::cmd_data::CmdName;
@@ -742,6 +911,8 @@ struct App<'a> {
     cmd_list: cmd_data::CmdList,
     keybinds: kb::KeyBindList,
     keybinds_found: bool,
+    cs: cs::ColorScheme,
+    colorscheme_found: bool,
     // Has external tools
     has_bat: bool,
     // Layout vals - read only
@@ -782,6 +953,8 @@ impl<'a> App<'a> {
             cmd_list: cmd_data::make_cmd_list(),
             keybinds: kb::make_list_auto(),
             keybinds_found: kb_check,
+            cs: cs::ColorScheme::make_list_auto(),
+            colorscheme_found: false,
             has_bat: bat_check,
             lay_preview_area: Rect::default(),
         }
@@ -864,22 +1037,24 @@ impl<'a> App<'a> {
         cmd_data::get_cmd(&self.cmd_list, name)
     }
 
-    fn fmtln_info(label: &str, value: &str) -> Line<'a> {
+    fn fmtln_info(&self, label: &str, value: &str) -> Line<'a> {
         Line::styled(
             format!("{} {:<12}: {}", nf::INFO, label, value),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(self.cs.info),
         )
     }
-    fn fmtln_path(path: &PathBuf) -> Line<'a> {
+
+    fn fmtln_path(&self, path: &PathBuf) -> Line<'a> {
         Line::styled(
             format!("{} {}", nf::DIRO, path.to_str().unwrap()),
-            Style::default().fg(Color::Blue),
+            Style::default().fg(self.cs.dir),
         )
     }
-    fn fmtln_sc(description: &str) -> Line<'a> {
+
+    fn fmtln_sc(&self, description: &str) -> Line<'a> {
         Line::styled(
             format!("{} {}", nf::CMD, description),
-            Style::default().fg(Color::Green),
+            Style::default().fg(self.cs.command),
         )
     }
 
@@ -905,22 +1080,22 @@ impl<'a> App<'a> {
             let line = if item.is_shortcut() {
                 Line::styled(
                     format!("{}{}| {}", ms, nf::CMD, item.name),
-                    Style::default().fg(Color::Yellow),
+                    Style::default().fg(self.cs.shortcut),
                 )
             } else if item.is_dir() {
                 Line::styled(
                     format!("{}{}| {}/", ms, nf::DIR, item.name),
-                    Style::default().fg(Color::Green),
+                    Style::default().fg(self.cs.dir),
                 )
             } else if item.is_command() {
                 Line::styled(
                     format!("{}{}| {}", ms, nf::CMD, item.name),
-                    Style::default().fg(Color::Yellow),
+                    Style::default().fg(self.cs.command),
                 )
             } else if item.is_executable() {
                 Line::styled(
                     format!("{}{}| {}", ms, nf::CMD, item.name),
-                    Style::default().fg(Color::Magenta),
+                    Style::default().fg(self.cs.executable),
                 )
             } else {
                 // When exploded the item name is the full path
@@ -932,7 +1107,7 @@ impl<'a> App<'a> {
                 };
                 Line::styled(
                     format!("{}{}| {}", ms, nf::FILE, name),
-                    Style::default().fg(Color::Cyan),
+                    Style::default().fg(self.cs.file),
                 )
             };
             text.lines.push(Line::from(line));
@@ -941,18 +1116,18 @@ impl<'a> App<'a> {
     }
 
     fn preview_dir(&mut self, selected_path: &PathBuf) {
-        let path_line = App::fmtln_path(&selected_path);
+        let path_line = self.fmtln_path(&selected_path);
         self.preview_content += path_line;
         // Get the file metadata
         let metadata = fs::metadata(&selected_path);
         if let Ok(meta) = metadata {
             // Get permissions
             let permissions = meta.permissions();
-            let perm_line = App::fmtln_info("permissions", &format!("{:o}", permissions.mode()));
+            let perm_line = self.fmtln_info("permissions", &format!("{:o}", permissions.mode()));
             self.preview_content += perm_line;
         }
         let listing = self.get_directory_listing(&selected_path);
-        let count_line = App::fmtln_info("count", &listing.len().to_string());
+        let count_line = self.fmtln_info("count", &listing.len().to_string());
         self.preview_content += count_line;
         self.preview_content += Line::from(SEP);
         let pretty_listing = self.dir_list_pretty(&listing);
@@ -962,20 +1137,20 @@ impl<'a> App<'a> {
     }
 
     fn preview_file(&mut self, selected_path: &PathBuf) {
-        let path_line = App::fmtln_path(&selected_path);
+        let path_line = self.fmtln_path(&selected_path);
         self.preview_content += path_line;
         // Get the file metadata
         let metadata = fs::metadata(&selected_path);
         if let Ok(meta) = metadata {
             // Get permissions
             let permissions = meta.permissions();
-            let perm_line = App::fmtln_info("permissions", &format!("{:o}", permissions.mode()));
+            let perm_line = self.fmtln_info("permissions", &format!("{:o}", permissions.mode()));
             self.preview_content += perm_line;
             // Get mime type
             if meta.file_type().is_file() {
                 // Get mimetype using mime_guess
                 let mime = mime_guess::from_path(&selected_path).first_or_octet_stream();
-                let mime_line = App::fmtln_info("mime", &mime.to_string());
+                let mime_line = self.fmtln_info("mime", &mime.to_string());
                 self.preview_content += mime_line;
             }
         }
@@ -1023,7 +1198,7 @@ impl<'a> App<'a> {
         let mut h = HighlightLines::new(syntax, &ts.themes["base16-eighties.dark"]);
 
         // Print syntax name
-        self.preview_content += App::fmtln_info("detected", syntax.name.as_str());
+        self.preview_content += self.fmtln_info("detected", syntax.name.as_str());
 
         self.preview_content += Line::from(SEP);
 
@@ -1050,33 +1225,32 @@ impl<'a> App<'a> {
         self.reset_sec_scroll();
         match self.selection.name.as_str() {
             sc::EXIT => {
-                self.preview_content += App::fmtln_sc("Exit the application");
+                self.preview_content += self.fmtln_sc("Exit the application");
                 self.preview_content += Line::from("");
                 for (i, line) in LOGO.lines().enumerate() {
                     if i == 0 {
                         continue;
                     };
                     self.preview_content +=
-                        Line::styled(format!("{}", line), Style::default().fg(Color::LightGreen));
+                        Line::styled(format!("{}", line), Style::default().fg(self.cs.tip));
                 }
                 let kb_exit = kb::find_by_cmd(&self.keybinds, &cmd_data::CmdName::Exit).unwrap();
                 let kb_exit_str = kb::to_string_short(&kb_exit);
                 self.preview_content += Line::from("");
-                self.preview_content +=
-                    Line::styled("Tips:", Style::default().fg(Color::LightBlue));
+                self.preview_content += Line::styled("Tips:", Style::default().fg(self.cs.header));
                 self.preview_content += Line::from(format!("- Press {} to exit", kb_exit_str));
                 self.preview_content +=
                     Line::from("- Start typing to fuzzy find files and directories");
                 self.preview_content += Line::from("");
                 self.preview_content +=
-                    Line::styled("System Information:", Style::default().fg(Color::LightBlue));
+                    Line::styled("System Information:", Style::default().fg(self.cs.header));
                 if self.has_bat {
                     self.preview_content += Line::styled(
                         format!(
                             "- {} 'bat' - file previews will use 'bat' for syntax highlighting",
                             nf::CHECK
                         ),
-                        Style::default().fg(Color::Green),
+                        Style::default().fg(self.cs.ok),
                     );
                 } else {
                     self.preview_content += Line::styled(
@@ -1084,7 +1258,7 @@ impl<'a> App<'a> {
                             "- {} 'bat' - file previews will use built-in syntax highlighting",
                             nf::WARN
                         ),
-                        Style::default().fg(Color::Yellow),
+                        Style::default().fg(self.cs.warning),
                     );
                 }
                 if self.keybinds_found {
@@ -1094,7 +1268,7 @@ impl<'a> App<'a> {
                             nf::CHECK,
                             kb::get_path().to_str().unwrap()
                         ),
-                        Style::default().fg(Color::Green),
+                        Style::default().fg(self.cs.ok),
                     );
                 } else {
                     self.preview_content += Line::styled(
@@ -1103,45 +1277,45 @@ impl<'a> App<'a> {
                             nf::WARN,
                             kb::get_path().to_str().unwrap()
                         ),
-                        Style::default().fg(Color::Yellow),
+                        Style::default().fg(self.cs.warning),
                     );
                 }
                 self.preview_content += Line::from("");
             }
             sc::HOME => {
-                self.preview_content += App::fmtln_path(&dirs::home_dir().unwrap());
-                self.preview_content += App::fmtln_sc("Go to the home directory");
+                self.preview_content += self.fmtln_path(&dirs::home_dir().unwrap());
+                self.preview_content += self.fmtln_sc("Go to the home directory");
             }
             sc::DIR_UP => {
                 let up_path = self.cwd.parent().unwrap_or(&self.cwd);
-                self.preview_content += App::fmtln_path(&up_path.to_path_buf());
-                self.preview_content += App::fmtln_sc("Go up to the parent directory");
+                self.preview_content += self.fmtln_path(&up_path.to_path_buf());
+                self.preview_content += self.fmtln_sc("Go up to the parent directory");
             }
             sc::DIR_BACK => {
-                self.preview_content += App::fmtln_path(&self.lwd);
-                self.preview_content += App::fmtln_sc("Go back to the last working directory");
+                self.preview_content += self.fmtln_path(&self.lwd);
+                self.preview_content += self.fmtln_sc("Go back to the last working directory");
             }
             sc::EXP => {
-                self.preview_content += App::fmtln_sc("Toggle explode mode");
+                self.preview_content += self.fmtln_sc("Toggle explode mode");
                 self.preview_content += Line::styled(
                     "Shows all files in subdirectories under the current directory.",
-                    Style::default().fg(Color::Green),
+                    Style::default().fg(self.cs.tip),
                 );
                 let status = if self.mode_explode { "ON" } else { "OFF" };
-                self.preview_content += App::fmtln_info("explode mode", status);
+                self.preview_content += self.fmtln_info("explode mode", status);
             }
             sc::CMDS => {
-                self.preview_content += App::fmtln_sc("Show visual commands");
+                self.preview_content += self.fmtln_sc("Show visual commands");
                 self.preview_content += Line::styled(
                     "Toggles a visual command menu in the listing.",
-                    Style::default().fg(Color::Green),
+                    Style::default().fg(self.cs.tip),
                 );
             }
             sc::MENU_BACK => {
-                self.preview_content += App::fmtln_sc("Go back to the previous menu");
+                self.preview_content += self.fmtln_sc("Go back to the previous menu");
                 self.preview_content += Line::styled(
                     "Exits the current visual command menu.",
-                    Style::default().fg(Color::Green),
+                    Style::default().fg(self.cs.tip),
                 );
             }
             _ => {
@@ -1160,11 +1334,11 @@ impl<'a> App<'a> {
                     let data = cmd_data::get_cmd_data(&self.cmd_list, &cmd_name).clone();
                     self.preview_content += Line::styled(
                         format!("name: {}", data.fname),
-                        Style::default().fg(Color::Green),
+                        Style::default().fg(self.cs.tip),
                     );
                     self.preview_content += Line::styled(
                         format!("cmd : {}", data.cmd),
-                        Style::default().fg(Color::Yellow),
+                        Style::default().fg(self.cs.command),
                     );
                     self.preview_content += Line::from(format!("info: {}", data.description));
                     return;
@@ -1922,8 +2096,10 @@ impl<'a> App<'a> {
         }
         let input_span: Span =
             Span::styled(format!("{}", input_str), Style::default().fg(input_color));
-        let suffix: Span =
-            Span::styled(format!("|{} ", nf::MAG), Style::default().fg(Color::Green));
+        let suffix: Span = Span::styled(
+            format!("|{} ", nf::MAG),
+            Style::default().fg(self.cs.search_border),
+        );
         let mut input_line = Line::from(input_span);
         input_line.push_span(suffix);
         let input_widget = Paragraph::new(input_line).block(
@@ -1935,7 +2111,7 @@ impl<'a> App<'a> {
                     self.listing.len(),
                 ))
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Green)),
+                .border_style(Style::default().fg(self.cs.search_border)),
         );
 
         // Results list
@@ -1962,7 +2138,7 @@ impl<'a> App<'a> {
             Block::default()
                 .title(list_title)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Blue)),
+                .border_style(Style::default().fg(self.cs.listing_border)),
         );
         let mut state = ListState::default();
         if !self.results.is_empty() && self.selection_index >= 0 {
@@ -1975,7 +2151,7 @@ impl<'a> App<'a> {
                 Block::default()
                     .title(format!("{} m(0)_(0)m | {} ", nf::LOOK, self.selection.name))
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Yellow)),
+                    .border_style(Style::default().fg(self.cs.preview_border)),
                 // .style(Style::default().bg(Color::Back)),
             )
             .wrap(Wrap { trim: false })
