@@ -579,7 +579,7 @@ tip            green
 warning        yellow
 error          red
 ok             green
-hi             blue
+hi             white
 placeholder    gray
 misc           white
 "#;
