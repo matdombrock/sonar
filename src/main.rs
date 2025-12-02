@@ -22,7 +22,6 @@ use ratatui::{
     layout::Direction,
     widgets::{Block, Borders, List, ListState, Paragraph},
 };
-use regex::Regex;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::{env, process::Command};
@@ -1036,6 +1035,7 @@ struct App<'a> {
     mode_cmd_finder: bool,
     show_command_window: bool,
     command_input: String,
+    term_clear: bool, // Whether to clear terminal on next draw
     show_output_window: bool,
     output_title: String,
     output_text: String,
@@ -1046,6 +1046,7 @@ struct App<'a> {
     keybinds: kb::KeyBindList,
     cs: cs::Colors,
     cfg: cfg::Config,
+    // Found config files
     found_keybinds: bool,
     found_cs: bool,
     found_cfg: bool,
@@ -1091,6 +1092,7 @@ impl<'a> App<'a> {
             mode_cmd_finder: false,
             show_command_window: false,
             command_input: String::new(),
+            term_clear: false,
             show_output_window: false,
             output_title: String::new(),
             output_text: String::new(),
@@ -1390,6 +1392,7 @@ impl<'a> App<'a> {
 
     fn update_preview(&mut self) {
         log!("Updating preview for selection: {}", self.selection.name);
+        self.term_clear = true;
         self.preview_content = Default::default();
         self.reset_sec_scroll();
         match self.selection.name.as_str() {
@@ -2325,7 +2328,10 @@ impl<'a> App<'a> {
         loop {
             // FIXME: THIS CAUSES FLICKERING
             // THIS SHOULD ONLY BE USED WHEN NEEDED
-            terminal.clear()?;
+            if self.term_clear {
+                terminal.clear()?;
+                self.term_clear = false;
+            }
             terminal.draw(|f| self.render(f))?;
             if event::poll(std::time::Duration::from_millis(100))? {
                 if let Event::Key(KeyEvent {
