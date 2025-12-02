@@ -133,6 +133,7 @@ mod cmd_data {
         MultiSave,
         MultiCopy,
         MultiDelete,
+        MultiMove,
         MenuBack,
         Log,
         LogClear,
@@ -356,6 +357,15 @@ mod cmd_data {
                 fname: "Multi-Select Delete",
                 description: "Delete multi-selection files",
                 cmd: "mul-delete",
+                vis_hidden: false,
+            },
+        );
+        map.insert(
+            CmdName::MultiMove,
+            CmdData {
+                fname: "Multi-Select Move",
+                description: "Move (not copy) multi-selection to the current directory",
+                cmd: "mul-move",
                 vis_hidden: false,
             },
         );
@@ -1902,6 +1912,41 @@ impl<'a> App<'a> {
         self.cmd_output_window_show();
     }
 
+    fn cmd_multi_move(&mut self) {
+        let mut output_text = String::new();
+        if self.multi_selection.is_empty() {
+            self.set_output("Multi-select", "No items in multi selection to move.");
+            self.cmd_output_window_show();
+            return;
+        }
+        for path in self.multi_selection.iter() {
+            let file_name = match path.file_name() {
+                Some(name) => name,
+                None => continue,
+            };
+            let dest_path = self.cwd.join(file_name);
+            match fs::rename(&path, &dest_path) {
+                Ok(_) => {
+                    output_text += &format!(
+                        "Moved {} to {}\n",
+                        path.to_str().unwrap(),
+                        dest_path.to_str().unwrap()
+                    );
+                }
+                Err(e) => {
+                    output_text += &format!(
+                        "Failed to move {}: {}\n",
+                        path.to_str().unwrap(),
+                        e.to_string()
+                    );
+                }
+            }
+        }
+        self.multi_selection.clear();
+        self.set_output("Multi-select", &output_text);
+        self.cmd_output_window_show();
+    }
+
     fn cmd_cmd_finder_toggle(&mut self) {
         self.mode_cmd_finder = !self.mode_cmd_finder;
         self.update_listing();
@@ -2122,6 +2167,7 @@ impl<'a> App<'a> {
             _ if cmd == self.get_cmd(&CmdName::MultiSave) => self.cmd_multi_save(),
             _ if cmd == self.get_cmd(&CmdName::MultiCopy) => self.cmd_multi_copy(),
             _ if cmd == self.get_cmd(&CmdName::MultiDelete) => self.cmd_multi_delete(),
+            _ if cmd == self.get_cmd(&CmdName::MultiMove) => self.cmd_multi_move(),
             _ if cmd == self.get_cmd(&CmdName::CmdFinderToggle) => self.cmd_cmd_finder_toggle(),
             _ if cmd == self.get_cmd(&CmdName::CmdList) => self.cmd_cmd_list(),
             _ if cmd == self.get_cmd(&CmdName::MenuBack) => self.cmd_menu_back(),

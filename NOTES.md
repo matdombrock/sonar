@@ -15,7 +15,6 @@
 - Seer?
 
 ## Todo Cmd
-- mul-delete
 - mul-move
 - clipboard-file-contents
 - clipboard-file-path
