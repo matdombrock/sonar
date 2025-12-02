@@ -33,7 +33,7 @@ use syntect::parsing::SyntaxSet;
 use std::path::PathBuf;
 
 // INTERNAL MODULES
-use crate::{cmd_data::CmdName, node_info::ItemInfo, node_type::NodeType};
+use crate::{cmd_data::CmdName, node_info::NodeInfo, node_type::NodeType};
 
 const APP_NAME: &str = "sona";
 
@@ -501,11 +501,11 @@ mod node_info {
     use super::node_type::NodeType;
     // Information about a file or directory
     #[derive(Clone)]
-    pub struct ItemInfo {
+    pub struct NodeInfo {
         pub name: String,
         pub node_type: NodeType,
     }
-    impl ItemInfo {
+    impl NodeInfo {
         pub fn new(name: &str, node_type: NodeType) -> Self {
             Self {
                 name: name.to_string(),
@@ -985,9 +985,9 @@ enum LoopReturn {
 // Main application state
 struct App<'a> {
     input: String,
-    listing: Vec<ItemInfo>,
-    results: Vec<ItemInfo>,
-    selection: ItemInfo,
+    listing: Vec<NodeInfo>,
+    results: Vec<NodeInfo>,
+    selection: NodeInfo,
     selection_index: i32,
     multi_selection: Vec<PathBuf>,
     preview_content: Text<'a>,
@@ -1002,6 +1002,8 @@ struct App<'a> {
     show_output_window: bool,
     output_title: String,
     output_text: String,
+    show_yesno_window: bool,
+    yesno_text: String,
     cmd_list: cmd_data::CmdList,
     keybinds: kb::KeyBindList,
     cs: cs::Colors,
@@ -1039,7 +1041,7 @@ impl<'a> App<'a> {
             input: String::new(),
             listing: Vec::new(),
             results: Vec::new(),
-            selection: ItemInfo::empty(),
+            selection: NodeInfo::empty(),
             selection_index: 0,
             multi_selection: Vec::new(),
             preview_content: Default::default(),
@@ -1054,6 +1056,8 @@ impl<'a> App<'a> {
             show_output_window: false,
             output_title: String::new(),
             output_text: String::new(),
+            show_yesno_window: true,
+            yesno_text: String::new(),
             cmd_list: cmd_data::make_cmd_list(),
             keybinds: kb::make_list_auto(),
             cs: cs::Colors::make_list_auto(),
@@ -1079,7 +1083,7 @@ impl<'a> App<'a> {
         self.cwd = new_path;
     }
 
-    fn get_directory_listing(&self, path: &PathBuf) -> Vec<ItemInfo> {
+    fn get_directory_listing(&self, path: &PathBuf) -> Vec<NodeInfo> {
         log!("Getting directory listing for: {}", path.to_str().unwrap());
         let mut entries = Vec::new();
 
@@ -1093,7 +1097,7 @@ impl<'a> App<'a> {
                             Ok(metadata) => {
                                 let node_type = NodeType::find(metadata.clone());
                                 if !self.mode_explode {
-                                    entries.push(ItemInfo {
+                                    entries.push(NodeInfo {
                                         name: file_name_str.to_string(),
                                         node_type,
                                     });
@@ -1104,7 +1108,7 @@ impl<'a> App<'a> {
                                         let sub_entries = self.get_directory_listing(&sub_path);
                                         entries.extend(sub_entries);
                                     } else {
-                                        entries.push(ItemInfo {
+                                        entries.push(NodeInfo {
                                             name: sub_path.to_str().unwrap().to_string(),
                                             node_type,
                                         });
@@ -1174,7 +1178,7 @@ impl<'a> App<'a> {
         )
     }
 
-    fn dir_list_pretty(&self, list: &Vec<ItemInfo>) -> Text<'a> {
+    fn dir_list_pretty(&self, list: &Vec<NodeInfo>) -> Text<'a> {
         let mut text = Text::default();
         for item in list.iter().take(self.cfg.list_limit as usize) {
             // Check if this item is part of the multi selection
@@ -1557,7 +1561,7 @@ impl<'a> App<'a> {
                 if cmd_data.vis_hidden {
                     continue;
                 }
-                self.listing.push(ItemInfo {
+                self.listing.push(NodeInfo {
                     name: cmd_data.cmd.to_string(),
                     node_type: NodeType::Command,
                 });
@@ -1573,35 +1577,35 @@ impl<'a> App<'a> {
         // Inserted in reverse order
         listing.insert(
             0,
-            ItemInfo {
+            NodeInfo {
                 name: sc::DIR_BACK.to_string(),
                 node_type: NodeType::Shortcut,
             },
         );
         listing.insert(
             0,
-            ItemInfo {
+            NodeInfo {
                 name: sc::DIR_UP.to_string(),
                 node_type: NodeType::Shortcut,
             },
         );
         listing.insert(
             0,
-            ItemInfo {
+            NodeInfo {
                 name: sc::CMDS.to_string(),
                 node_type: NodeType::Shortcut,
             },
         );
         listing.insert(
             0,
-            ItemInfo {
+            NodeInfo {
                 name: sc::EXP.to_string(),
                 node_type: NodeType::Shortcut,
             },
         );
         listing.insert(
             0,
-            ItemInfo {
+            NodeInfo {
                 name: sc::EXIT.to_string(),
                 node_type: NodeType::Shortcut,
             },
@@ -1636,10 +1640,10 @@ impl<'a> App<'a> {
             self.selection = self.results[self.selection_index as usize].clone();
         } else if !self.results.is_empty() {
             self.selection_index = 0;
-            self.selection = ItemInfo::empty();
+            self.selection = NodeInfo::empty();
         } else {
             self.selection_index = 0;
-            self.selection = ItemInfo::empty();
+            self.selection = NodeInfo::empty();
         }
         // Remove icon prefix from selection
         // NOTE: This should be safe since file name should not contain pipe
@@ -1691,6 +1695,21 @@ impl<'a> App<'a> {
             _ => {}
         }
         LoopReturn::Ok
+    }
+
+    fn input_yesno_window(&mut self, modifiers: KeyModifiers, code: KeyCode) -> i32 {
+        match (modifiers, code) {
+            (KeyModifiers::NONE, KeyCode::Char('y')) => {
+                self.show_yesno_window = false;
+                return 0;
+            }
+            (KeyModifiers::NONE, KeyCode::Char('n')) => {
+                self.show_yesno_window = false;
+                return 1;
+            }
+            _ => {}
+        }
+        2 // Invalid response
     }
 
     // Returns true if input changed
@@ -2239,6 +2258,11 @@ impl<'a> App<'a> {
                         }
                         continue;
                     }
+                    // Yes/No window input handling
+                    if self.show_yesno_window {
+                        self.input_yesno_window(modifiers, code);
+                        continue;
+                    }
                     // Before key press handling
                     let input_changed = self.input_main(modifiers, code);
                     // Some things are not bindable
@@ -2445,6 +2469,20 @@ impl<'a> App<'a> {
                 .wrap(Wrap { trim: false })
                 .scroll((self.scroll_off_output as u16, self.scroll_off_output as u16));
             frame.render_widget(command_paragraph, popup_area);
+        }
+        if self.show_yesno_window {
+            let popup_area = centered_rect(30, 10, area);
+            frame.render_widget(Clear, popup_area);
+            let yesno_paragraph = Paragraph::new(self.yesno_text.clone())
+                .style(Style::default().bg(Color::Black))
+                .block(
+                    Block::default()
+                        .title(format!("{} Confirm (y/n)", nf::WARN))
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(Color::Red))
+                        .style(Style::default().bg(Color::Black)),
+                );
+            frame.render_widget(yesno_paragraph, popup_area);
         }
     }
 }
