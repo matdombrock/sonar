@@ -8,6 +8,9 @@
 - Config file
 - Shortcuts / bookmarks
 - Custom native commands
+- File size
+- Line count
+- Modified
 - Mouse support?
 - Seer?
 
@@ -17,6 +20,7 @@
 - clipboard-file-contents
 - clipboard-file-path
 - keybind-init
+- reload-dir
 
 ## Todo Bug / Incomplete
 - Handle large dirs
@@ -83,6 +87,7 @@ One problem there though is that the commands operate on self (app) so if they m
 ### Config
 - Set border colors
 - Custom welcome message
+- Sort - file first | dir first | alpha | chron | chron rev 
 
 
 ## Features

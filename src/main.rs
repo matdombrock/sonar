@@ -71,6 +71,7 @@ cmd-win  ctrl-w
 cmd-find ctrl-t 
 cmd-list ctrl-i
 mul-sel  ctrl-s
+mul-sel  none-tab
 sec-up   alt-k
 sec-down alt-j
 "#;
@@ -1818,257 +1819,261 @@ impl<'a> App<'a> {
         }
         LoopReturn::Ok
     }
-}
 
-fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
-    log!("Starting main event loop");
-    // Get directory listing
-    app.set_cwd(&app.cwd.clone());
-    app.update_listing();
-    app.update_results(); // Initial results
-    app.update_selection();
-    app.update_preview();
-    loop {
-        terminal.draw(|f| render(f, &mut app))?;
-        if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(KeyEvent {
-                code, modifiers, ..
-            }) = event::read()?
-            {
-                // Output window input handling
-                if app.show_output_window {
-                    app.input_out_window(modifiers, code);
-                    continue;
-                }
-                // Command window input handling
-                if app.show_command_window {
-                    let lr = app.input_cmd_window(modifiers, code);
+    fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
+        log!("Starting main event loop");
+        // Get directory listing
+        self.set_cwd(&self.cwd.clone());
+        self.update_listing();
+        self.update_results(); // Initial results
+        self.update_selection();
+        self.update_preview();
+        loop {
+            terminal.draw(|f| self.render(f))?;
+            if event::poll(std::time::Duration::from_millis(100))? {
+                if let Event::Key(KeyEvent {
+                    code, modifiers, ..
+                }) = event::read()?
+                {
+                    // Output window input handling
+                    if self.show_output_window {
+                        self.input_out_window(modifiers, code);
+                        continue;
+                    }
+                    // Command window input handling
+                    if self.show_command_window {
+                        let lr = self.input_cmd_window(modifiers, code);
+                        match lr {
+                            LoopReturn::Continue => continue,
+                            LoopReturn::Break => break,
+                            LoopReturn::Ok => {}
+                        }
+                        continue;
+                    }
+                    // Before key press handling
+                    let input_changed = self.input_main(modifiers, code);
+                    // Some things are not bindable
+                    if input_changed {
+                        self.update_results();
+                    }
+                    // Process key to command mselfing
+                    let cmd = self.input_keybinds(modifiers, code);
+                    // Handle commands
+                    let lr = self.handle_cmd(&cmd);
                     match lr {
                         LoopReturn::Continue => continue,
                         LoopReturn::Break => break,
                         LoopReturn::Ok => {}
                     }
-                    continue;
-                }
-                // Before key press handling
-                let input_changed = app.input_main(modifiers, code);
-                // Some things are not bindable
-                if input_changed {
-                    app.update_results();
-                }
-                // Process key to command mapping
-                let cmd = app.input_keybinds(modifiers, code);
-                // Handle commands
-                let lr = app.handle_cmd(&cmd);
-                match lr {
-                    LoopReturn::Continue => continue,
-                    LoopReturn::Break => break,
-                    LoopReturn::Ok => {}
-                }
-                // After key press handling
-                let sel_changed = app.update_selection();
-                if sel_changed {
-                    app.update_preview();
+                    // After key press handling
+                    let sel_changed = self.update_selection();
+                    if sel_changed {
+                        self.update_preview();
+                    }
                 }
             }
         }
+
+        Ok(())
     }
+    fn render(&mut self, frame: &mut Frame) {
+        fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+            let popup_layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(
+                    [
+                        Constraint::Percentage((100 - percent_y) / 2),
+                        Constraint::Percentage(percent_y),
+                        Constraint::Percentage((100 - percent_y) / 2),
+                    ]
+                    .as_ref(),
+                )
+                .split(area);
 
-    Ok(())
-}
-
-fn render(frame: &mut Frame, app: &mut App) {
-    fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
-        let popup_layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(
-                [
-                    Constraint::Percentage((100 - percent_y) / 2),
-                    Constraint::Percentage(percent_y),
-                    Constraint::Percentage((100 - percent_y) / 2),
-                ]
-                .as_ref(),
-            )
-            .split(area);
-
-        Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints(
-                [
-                    Constraint::Percentage((100 - percent_x) / 2),
-                    Constraint::Percentage(percent_x),
-                    Constraint::Percentage((100 - percent_x) / 2),
-                ]
-                .as_ref(),
-            )
-            .split(popup_layout[1])[1]
-    }
-    let area = frame.area();
-    // frame.render_widget(Clear, area); // Clear the area
-    let threshold = 100;
-
-    // --- Widget creation ---
-    // Input box
-    let mut input_color;
-    let input_str: String;
-    if app.input.is_empty() {
-        input_str = "Type to search...".to_string();
-        input_color = Color::Gray;
-    } else {
-        input_str = app.input.clone();
-        input_color = Color::White;
-    };
-    if app.results.is_empty() {
-        input_color = Color::Red;
-    }
-    let input_span: Span = Span::styled(format!("{}", input_str), Style::default().fg(input_color));
-    let suffix: Span = Span::styled(format!("|{} ", nf::MAG), Style::default().fg(Color::Green));
-    let mut input_line = Line::from(input_span);
-    input_line.push_span(suffix);
-    let input_widget = Paragraph::new(input_line).block(
-        Block::default()
-            .title(format!(
-                "( {} ) ) )  [ {} / {} ] ",
-                APP_NAME.to_uppercase(),
-                app.results.len(),
-                app.listing.len(),
-            ))
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Green)),
-    );
-
-    // Results list
-    let mut results_pretty = app.dir_list_pretty(&app.results);
-    // TODO: This is slow and should be done on dir pretty
-    for (idx, line) in results_pretty.lines.iter_mut().enumerate() {
-        if idx as i32 == app.selection_index {
-            let span = Span::styled(
-                format!("{}", nf::SEL),
-                Style::default().fg(Color::LightBlue).bg(Color::Black),
-            );
-            let mut new_line = Line::from(span);
-            new_line.push_span(Span::raw(format!(" {}", line)));
-            *line = new_line;
+            Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints(
+                    [
+                        Constraint::Percentage((100 - percent_x) / 2),
+                        Constraint::Percentage(percent_x),
+                        Constraint::Percentage((100 - percent_x) / 2),
+                    ]
+                    .as_ref(),
+                )
+                .split(popup_layout[1])[1]
         }
-    }
-    let explode_str = if app.mode_explode {
-        format!(" [{} exp]", nf::BOMB)
-    } else {
-        "".to_string()
-    };
-    let list_title = format!("|{}{} ", app.cwd.to_str().unwrap(), explode_str);
-    let list_widget = List::new(results_pretty).block(
-        Block::default()
-            .title(list_title)
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Blue)),
-    );
-    let mut state = ListState::default();
-    if !app.results.is_empty() && app.selection_index >= 0 {
-        state.select(Some(app.selection_index as usize));
-    }
+        let area = frame.area();
+        // frame.render_widget(Clear, area); // Clear the area
+        let threshold = 100;
 
-    // Preview box
-    let preview_widget = Paragraph::new(app.preview_content.clone())
-        .block(
+        // --- Widget creation ---
+        // Input box
+        let mut input_color;
+        let input_str: String;
+        if self.input.is_empty() {
+            input_str = "Type to search...".to_string();
+            input_color = Color::Gray;
+        } else {
+            input_str = self.input.clone();
+            input_color = Color::White;
+        };
+        if self.results.is_empty() {
+            input_color = Color::Red;
+        }
+        let input_span: Span =
+            Span::styled(format!("{}", input_str), Style::default().fg(input_color));
+        let suffix: Span =
+            Span::styled(format!("|{} ", nf::MAG), Style::default().fg(Color::Green));
+        let mut input_line = Line::from(input_span);
+        input_line.push_span(suffix);
+        let input_widget = Paragraph::new(input_line).block(
             Block::default()
-                .title(format!("{} m(0)_(0)m | {} ", nf::LOOK, app.selection.name))
+                .title(format!(
+                    "( {} ) ) )  [ {} / {} ] ",
+                    APP_NAME.to_uppercase(),
+                    self.results.len(),
+                    self.listing.len(),
+                ))
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Yellow)),
-            // .style(Style::default().bg(Color::Back)),
-        )
-        .wrap(Wrap { trim: false })
-        .scroll((app.scroll_off_preview as u16, app.scroll_off_preview as u16));
+                .border_style(Style::default().fg(Color::Green)),
+        );
 
-    // --- Layout and rendering ---
-    if area.width < threshold {
-        // Vertical layout
-        let vertical_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(
-                [
-                    Constraint::Length(3), // Input
-                    Constraint::Min(5),    // Results
-                    Constraint::Min(10),   // Preview
-                ]
-                .as_ref(),
-            )
-            .split(area);
+        // Results list
+        let mut results_pretty = self.dir_list_pretty(&self.results);
+        // TODO: This is slow and should be done on dir pretty
+        for (idx, line) in results_pretty.lines.iter_mut().enumerate() {
+            if idx as i32 == self.selection_index {
+                let span = Span::styled(
+                    format!("{}", nf::SEL),
+                    Style::default().fg(Color::LightBlue).bg(Color::Black),
+                );
+                let mut new_line = Line::from(span);
+                new_line.push_span(Span::raw(format!(" {}", line)));
+                *line = new_line;
+            }
+        }
+        let explode_str = if self.mode_explode {
+            format!(" [{} exp]", nf::BOMB)
+        } else {
+            "".to_string()
+        };
+        let list_title = format!("|{}{} ", self.cwd.to_str().unwrap(), explode_str);
+        let list_widget = List::new(results_pretty).block(
+            Block::default()
+                .title(list_title)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Blue)),
+        );
+        let mut state = ListState::default();
+        if !self.results.is_empty() && self.selection_index >= 0 {
+            state.select(Some(self.selection_index as usize));
+        }
 
-        frame.render_widget(input_widget, vertical_chunks[0]);
-        frame.render_stateful_widget(list_widget, vertical_chunks[1], &mut state);
-        frame.render_widget(preview_widget, vertical_chunks[2]);
-        app.lay_preview_area = vertical_chunks[2];
-    } else {
-        // Horizontal layout
-        let horizontal_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)].as_ref())
-            .split(area);
-
-        let left_vertical_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .margin(0)
-            .constraints([Constraint::Length(3), Constraint::Min(1)].as_ref())
-            .split(horizontal_chunks[0]);
-
-        frame.render_widget(input_widget, left_vertical_chunks[0]);
-        frame.render_stateful_widget(list_widget, left_vertical_chunks[1], &mut state);
-        frame.render_widget(preview_widget, horizontal_chunks[1]);
-        app.lay_preview_area = horizontal_chunks[1];
-    }
-
-    // --- Popups ---
-    if app.show_command_window {
-        let popup_area = centered_rect(50, 10, area);
-        let command_str = format!("> {}|", app.command_input);
-        frame.render_widget(Clear, popup_area);
-        let command_paragraph = Paragraph::new(command_str)
-            .style(Style::default().bg(Color::Black))
+        // Preview box
+        let preview_widget = Paragraph::new(self.preview_content.clone())
             .block(
                 Block::default()
-                    .title(format!("{} Command", nf::CMD))
+                    .title(format!("{} m(0)_(0)m | {} ", nf::LOOK, self.selection.name))
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Magenta))
-                    .style(Style::default().bg(Color::Black)),
-            );
-        frame.render_widget(command_paragraph, popup_area);
-    }
-    if app.show_output_window {
-        let popup_area = centered_rect(50, 90, area);
-        frame.render_widget(Clear, popup_area);
-        let command_paragraph = Paragraph::new(app.output_text.clone())
-            .style(Style::default().bg(Color::Black))
-            .block(
-                Block::default()
-                    .title(format!("{} {} ('esc' to exit)", nf::CMD, app.output_title))
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Magenta))
-                    .style(Style::default().bg(Color::Black)),
+                    .border_style(Style::default().fg(Color::Yellow)),
+                // .style(Style::default().bg(Color::Back)),
             )
             .wrap(Wrap { trim: false })
-            .scroll((app.scroll_off_output as u16, app.scroll_off_output as u16));
-        frame.render_widget(command_paragraph, popup_area);
+            .scroll((
+                self.scroll_off_preview as u16,
+                self.scroll_off_preview as u16,
+            ));
+
+        // --- Layout and rendering ---
+        if area.width < threshold {
+            // Vertical layout
+            let vertical_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(
+                    [
+                        Constraint::Length(3), // Input
+                        Constraint::Min(5),    // Results
+                        Constraint::Min(10),   // Preview
+                    ]
+                    .as_ref(),
+                )
+                .split(area);
+
+            frame.render_widget(input_widget, vertical_chunks[0]);
+            frame.render_stateful_widget(list_widget, vertical_chunks[1], &mut state);
+            frame.render_widget(preview_widget, vertical_chunks[2]);
+            self.lay_preview_area = vertical_chunks[2];
+        } else {
+            // Horizontal layout
+            let horizontal_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(40), Constraint::Percentage(60)].as_ref())
+                .split(area);
+
+            let left_vertical_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .margin(0)
+                .constraints([Constraint::Length(3), Constraint::Min(1)].as_ref())
+                .split(horizontal_chunks[0]);
+
+            frame.render_widget(input_widget, left_vertical_chunks[0]);
+            frame.render_stateful_widget(list_widget, left_vertical_chunks[1], &mut state);
+            frame.render_widget(preview_widget, horizontal_chunks[1]);
+            self.lay_preview_area = horizontal_chunks[1];
+        }
+
+        // --- Popups ---
+        if self.show_command_window {
+            let popup_area = centered_rect(50, 10, area);
+            let command_str = format!("> {}|", self.command_input);
+            frame.render_widget(Clear, popup_area);
+            let command_paragraph = Paragraph::new(command_str)
+                .style(Style::default().bg(Color::Black))
+                .block(
+                    Block::default()
+                        .title(format!("{} Command", nf::CMD))
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(Color::Magenta))
+                        .style(Style::default().bg(Color::Black)),
+                );
+            frame.render_widget(command_paragraph, popup_area);
+        }
+        if self.show_output_window {
+            let popup_area = centered_rect(50, 90, area);
+            frame.render_widget(Clear, popup_area);
+            let command_paragraph = Paragraph::new(self.output_text.clone())
+                .style(Style::default().bg(Color::Black))
+                .block(
+                    Block::default()
+                        .title(format!("{} {} ('esc' to exit)", nf::CMD, self.output_title))
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(Color::Magenta))
+                        .style(Style::default().bg(Color::Black)),
+                )
+                .wrap(Wrap { trim: false })
+                .scroll((self.scroll_off_output as u16, self.scroll_off_output as u16));
+            frame.render_widget(command_paragraph, popup_area);
+        }
     }
 }
 
-fn clear() {
+fn cls() {
     println!("\x1B[2J\x1B[1;1H");
 }
 
 fn main() -> Result<()> {
     log!("======= Starting application =======");
     color_eyre::install()?;
-    clear();
+    cls();
     enable_raw_mode()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout()))?;
 
-    let app = App::new();
+    let mut app = App::new();
 
-    run_app(&mut terminal, app)?;
+    app.run(&mut terminal)?;
 
     disable_raw_mode()?;
-    clear();
+    cls();
     println!("{} exited successfully.", APP_NAME);
     Ok(())
 }
