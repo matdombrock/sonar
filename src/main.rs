@@ -954,14 +954,16 @@ mod cfg {
     const FILE_NAME: &str = "config.txt";
     pub const DEFAULT: &str = r#"
 # Default configuration
-cmd_on_select edit
-list_limit    100000
-force_sixel   false
+cmd_on_select   edit
+list_limit      100000
+force_sixel     false
+max_image_width 80
 "#;
     pub struct Config {
         pub cmd_on_select: String,
         pub list_limit: i32,
         pub force_sixel: bool,
+        pub max_image_width: u16,
     }
     impl Config {
         pub fn new() -> Self {
@@ -969,6 +971,7 @@ force_sixel   false
                 cmd_on_select: "edit".to_string(),
                 list_limit: 100000,
                 force_sixel: false,
+                max_image_width: 80,
             }
         }
         pub fn get_path() -> std::path::PathBuf {
@@ -1005,6 +1008,11 @@ force_sixel   false
                             config.force_sixel = true;
                         } else {
                             config.force_sixel = false;
+                        }
+                    }
+                    "max_image_width" => {
+                        if let Ok(width) = value.parse::<u16>() {
+                            config.max_image_width = width;
                         }
                     }
                     _ => {}
@@ -2600,6 +2608,28 @@ impl<'a> App<'a> {
             self.lay_preview_area = horizontal_chunks[1];
         }
 
+        // The image widget.
+        let image: StatefulImage<StatefulProtocol> = StatefulImage::default();
+        // Render with the protocol state.
+        match self.preview_image {
+            Some(ref mut img) => {
+                if !self.selection.is_image() {
+                    return;
+                }
+                let mut new_area = Rect {
+                    x: self.lay_preview_area.x + 1,
+                    y: self.lay_preview_area.y + 1,
+                    width: self.lay_preview_area.width - 2,
+                    height: self.lay_preview_area.height - 2,
+                };
+                if new_area.width > self.cfg.max_image_width {
+                    new_area.width = self.cfg.max_image_width;
+                }
+                frame.render_stateful_widget(image, new_area, img);
+            }
+            None => {}
+        }
+
         // --- Popups ---
         if self.show_command_window {
             let popup_area = centered_rect(50, 10, area);
@@ -2645,25 +2675,6 @@ impl<'a> App<'a> {
                         .style(Style::default().bg(Color::Black)),
                 );
             frame.render_widget(yesno_paragraph, popup_area);
-        }
-
-        // The image widget.
-        let image: StatefulImage<StatefulProtocol> = StatefulImage::default();
-        // Render with the protocol state.
-        match self.preview_image {
-            Some(ref mut img) => {
-                if !self.selection.is_image() {
-                    return;
-                }
-                let new_area = Rect {
-                    x: self.lay_preview_area.x + 1,
-                    y: self.lay_preview_area.y + 1,
-                    width: self.lay_preview_area.width - 2,
-                    height: self.lay_preview_area.height - 2,
-                };
-                frame.render_stateful_widget(image, new_area, img);
-            }
-            None => {}
         }
     }
 }
