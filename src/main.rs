@@ -1433,7 +1433,7 @@ impl<'a> App<'a> {
     }
 
     fn preview_image(&mut self, selected_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-        let picker = Picker::from_fontsize((8, 12));
+        let picker = Picker::from_fontsize((6, 12));
 
         // Load an image with the image crate.
         let dyn_img = image::ImageReader::open(selected_path)?.decode()?;
