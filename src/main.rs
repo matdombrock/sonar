@@ -22,7 +22,11 @@ use ratatui::{
     layout::Direction,
     widgets::{Block, Borders, List, ListState, Paragraph},
 };
-use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
+use ratatui_image::{
+    StatefulImage,
+    picker::{Picker, ProtocolType},
+    protocol::StatefulProtocol,
+};
 use regex::Regex;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -952,16 +956,19 @@ mod cfg {
 # Default configuration
 cmd_on_select edit
 list_limit    100000
+force_sixel   false
 "#;
     pub struct Config {
         pub cmd_on_select: String,
         pub list_limit: i32,
+        pub force_sixel: bool,
     }
     impl Config {
         pub fn new() -> Self {
             Self {
                 cmd_on_select: "edit".to_string(),
                 list_limit: 100000,
+                force_sixel: false,
             }
         }
         pub fn get_path() -> std::path::PathBuf {
@@ -991,6 +998,13 @@ list_limit    100000
                     "list_limit" => {
                         if let Ok(limit) = value.parse::<i32>() {
                             config.list_limit = limit;
+                        }
+                    }
+                    "force_sixel" => {
+                        if value.to_lowercase() == "true" {
+                            config.force_sixel = true;
+                        } else {
+                            config.force_sixel = false;
                         }
                     }
                     _ => {}
@@ -1433,7 +1447,13 @@ impl<'a> App<'a> {
     }
 
     fn preview_image(&mut self, selected_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-        let picker = Picker::from_fontsize((6, 12));
+        self.preview_content = Default::default();
+        let mut picker = Picker::from_fontsize((6, 12));
+        if self.cfg.force_sixel {
+            picker.set_protocol_type(ProtocolType::Sixel);
+        } else {
+            picker.set_protocol_type(ProtocolType::Halfblocks);
+        }
 
         // Load an image with the image crate.
         let dyn_img = image::ImageReader::open(selected_path)?.decode()?;
