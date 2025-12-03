@@ -1430,7 +1430,6 @@ impl<'a> App<'a> {
 
     fn update_preview(&mut self) {
         log!("Updating preview for selection: {}", self.selection.name);
-        self.term_clear = true;
         self.preview_content = Default::default();
         self.reset_sec_scroll();
         match self.selection.name.as_str() {
