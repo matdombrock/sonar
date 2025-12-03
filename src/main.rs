@@ -22,6 +22,7 @@ use ratatui::{
     layout::Direction,
     widgets::{Block, Borders, List, ListState, Paragraph},
 };
+use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 use regex::Regex;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -1028,6 +1029,7 @@ struct App<'a> {
     selection_index: i32,
     multi_selection: Vec<PathBuf>,
     preview_content: Text<'a>,
+    preview_image: Option<StatefulProtocol>,
     scroll_off_preview: u16,
     scroll_off_output: u16,
     cwd: PathBuf,
@@ -1056,6 +1058,7 @@ struct App<'a> {
     // Layout vals - read only
     lay_preview_area: Rect,
 }
+
 impl<'a> App<'a> {
     fn new() -> Self {
         log!("App initialized");
@@ -1085,6 +1088,7 @@ impl<'a> App<'a> {
             selection_index: 0,
             multi_selection: Vec::new(),
             preview_content: Default::default(),
+            preview_image: None,
             scroll_off_preview: 0,
             scroll_off_output: 0,
             cwd: env::current_dir().unwrap(),
@@ -1428,6 +1432,18 @@ impl<'a> App<'a> {
         }
     }
 
+    fn preview_image(&mut self, selected_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+        let picker = Picker::from_fontsize((8, 12));
+
+        // Load an image with the image crate.
+        let dyn_img = image::ImageReader::open(selected_path)?.decode()?;
+
+        // Create the Protocol which will be used by the widget.
+        let image = picker.new_resize_protocol(dyn_img);
+        self.preview_image = Some(image);
+        Ok(())
+    }
+
     fn update_preview(&mut self) {
         log!("Updating preview for selection: {}", self.selection.name);
         self.preview_content = Default::default();
@@ -1613,6 +1629,7 @@ impl<'a> App<'a> {
                         "Image file preview not yet supported.",
                         Style::default().fg(self.cs.error),
                     );
+                    self.preview_image(&selected_path);
                 } else if self.selection.is_executable() {
                     self.preview_content += Line::styled(
                         "Executable file preview not yet supported.",
@@ -2608,6 +2625,25 @@ impl<'a> App<'a> {
                         .style(Style::default().bg(Color::Black)),
                 );
             frame.render_widget(yesno_paragraph, popup_area);
+        }
+
+        // The image widget.
+        let image: StatefulImage<StatefulProtocol> = StatefulImage::default();
+        // Render with the protocol state.
+        match self.preview_image {
+            Some(ref mut img) => {
+                if !self.selection.is_image() {
+                    return;
+                }
+                let new_area = Rect {
+                    x: self.lay_preview_area.x + 1,
+                    y: self.lay_preview_area.y + 1,
+                    width: self.lay_preview_area.width - 2,
+                    height: self.lay_preview_area.height - 2,
+                };
+                frame.render_stateful_widget(image, new_area, img);
+            }
+            None => {}
         }
     }
 }
