@@ -2007,6 +2007,7 @@ impl<'a> App<'a> {
                         };
                     self.mode_cmd_finder = false;
                     self.update_listing();
+                    self.update_results();
                     // If the command has params, open command window
                     let cmd_data = cmd_data::get_cmd_data(&self.cmd_list, &cmd_name);
                     if cmd_data.params.len() > 0 {
