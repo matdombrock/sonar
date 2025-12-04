@@ -505,9 +505,9 @@ mod cmd_data {
             CmdData {
                 fname: "Shell Quick",
                 description: "Run a quick shell command in the current directory",
-                cmd: "shell-quick",
+                cmd: "shell",
                 vis_hidden: false,
-                params: vec![],
+                params: vec!["command"],
             },
         );
         map.insert(
@@ -856,7 +856,7 @@ cmd-list    ctrl-i
 mul-sel     none-tab
 sec-up      alt-k
 sec-down    alt-j
-shell-quick ctrl-s
+shell       ctrl-s
 "#;
     #[derive(Clone)]
     pub struct KeyBind {
@@ -2333,9 +2333,21 @@ impl<'a> App<'a> {
         self.selection_index = 0;
     }
 
-    fn cmd_shell_quick(&mut self) {
-        self.command_input = "!".to_string();
-        self.show_command_window = true;
+    fn cmd_shell_quick(&mut self, args: Vec<&str>) {
+        let shell_cmd = args[0..].join(" ");
+        log!("Running shell command: {}", shell_cmd);
+        match Command::new("sh").arg("-c").arg(shell_cmd).output() {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let combined_output = format!("{}{}", stdout, stderr);
+                self.set_output("Shell", &combined_output);
+            }
+            Err(e) => {
+                self.set_output("Shell", &format!("Failed to run command: {}", e));
+            }
+        }
+        self.cmd_output_window_show();
     }
 
     fn cmd_shell_full(&mut self) {
@@ -2486,27 +2498,9 @@ impl<'a> App<'a> {
             _ if cmd == self.get_cmd(&CmdName::Edit) => self.cmd_edit(),
             _ if cmd == self.get_cmd(&CmdName::GoTo) => self.cmd_goto(args),
             _ if cmd == self.get_cmd(&CmdName::DbgClear) => self.cmd_dbg_clear_preview(),
-            _ if cmd == self.get_cmd(&CmdName::ShellQuick) => self.cmd_shell_quick(),
+            _ if cmd == self.get_cmd(&CmdName::ShellQuick) => self.cmd_shell_quick(args),
             _ if cmd == self.get_cmd(&CmdName::ShellFull) => self.cmd_shell_full(),
             _ => {
-                // If the cmd starts with `!` treat it as a shell command
-                if cmd.starts_with('!') {
-                    let shell_cmd = &cmd[1..];
-                    log!("Running shell command: {}", shell_cmd);
-                    match Command::new("sh").arg("-c").arg(shell_cmd).output() {
-                        Ok(output) => {
-                            let stdout = String::from_utf8_lossy(&output.stdout);
-                            let stderr = String::from_utf8_lossy(&output.stderr);
-                            let combined_output = format!("{}{}", stdout, stderr);
-                            self.set_output("Shell", &combined_output);
-                        }
-                        Err(e) => {
-                            self.set_output("Shell", &format!("Failed to run command: {}", e));
-                        }
-                    }
-                    self.cmd_output_window_show();
-                    return LoopReturn::Ok;
-                }
                 // If the command isnt empty print the incorrect command
                 if !cmd.is_empty() {
                     log!("No command matched: {}", cmd);
