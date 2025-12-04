@@ -25,6 +25,7 @@ syntect = "5.3.0"
 ansi-to-tui = "7.0.0"
 # Why is this not in the standard library yet? Used for string sanitization.
 regex = "1.12.2"
+# Image preview
 ratatui-image = "8.0.2"
 image = "0.25.9"
 
