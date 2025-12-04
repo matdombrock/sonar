@@ -2750,7 +2750,7 @@ impl<'a> App<'a> {
         // --- Popups ---
         if self.show_command_window {
             let popup_area = centered_rect(50, 10, area);
-            let command_str = format!("\n> {}|", self.command_input);
+            let command_str = format!("> {}|", self.command_input);
             frame.render_widget(Clear, popup_area);
             let command_paragraph = Paragraph::new(command_str)
                 .style(Style::default().bg(Color::Black))
