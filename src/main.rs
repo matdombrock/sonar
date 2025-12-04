@@ -67,10 +67,11 @@ mod nf {
     pub const CHECK: &str = "";
     pub const WARN: &str = "";
     pub const BOMB: &str = "";
-    pub const B4: &str = "█";
-    pub const B3: &str = "▓";
-    pub const B2: &str = "▒";
-    pub const B1: &str = "░";
+    // UNUSED
+    // pub const B4: &str = "█";
+    // pub const B3: &str = "▓";
+    // pub const B2: &str = "▒";
+    // pub const B1: &str = "░";
 }
 
 // Shortcut strings
@@ -148,6 +149,7 @@ mod cmd_data {
         ShowKeybinds,
         DbgClear,
         Edit,
+        GoTo,
         ShellQuick,
         ShellFull,
     }
@@ -158,6 +160,7 @@ mod cmd_data {
         pub description: &'static str,
         pub cmd: &'static str,
         pub vis_hidden: bool, // Hidden from visual cmd selection
+        pub params: Vec<&'static str>,
     }
     pub type CmdList = HashMap<CmdName, CmdData>;
     pub fn cmd_name_from_str(
@@ -194,6 +197,7 @@ mod cmd_data {
                 description: "Exit the application",
                 cmd: "exit",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -203,6 +207,7 @@ mod cmd_data {
                 description: "Go to your home directory",
                 cmd: "home",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -212,6 +217,7 @@ mod cmd_data {
                 description: "Move selection up",
                 cmd: "sel-up",
                 vis_hidden: true,
+                params: vec![],
             },
         );
         map.insert(
@@ -221,6 +227,7 @@ mod cmd_data {
                 description: "Move selection down",
                 cmd: "sel-down",
                 vis_hidden: true,
+                params: vec![],
             },
         );
         map.insert(
@@ -230,6 +237,7 @@ mod cmd_data {
                 description: "Go up to the parent directory",
                 cmd: "dir-up",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -239,6 +247,7 @@ mod cmd_data {
                 description: "Go back to the last working directory",
                 cmd: "dir-back",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -248,6 +257,7 @@ mod cmd_data {
                 description: "Find all files in subdirectories",
                 cmd: "explode",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -257,6 +267,7 @@ mod cmd_data {
                 description: "Select the current item",
                 cmd: "select",
                 vis_hidden: true,
+                params: vec![],
             },
         );
         map.insert(
@@ -266,6 +277,7 @@ mod cmd_data {
                 description: "Toggle command window where you can type commands",
                 cmd: "cmd-win",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -275,6 +287,7 @@ mod cmd_data {
                 description: "Toggle the fuzzy command finder",
                 cmd: "cmd-find",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -284,6 +297,7 @@ mod cmd_data {
                 description: "List all commands",
                 cmd: "cmd-list",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -293,6 +307,7 @@ mod cmd_data {
                 description: "Toggle output window",
                 cmd: "output-toggle",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -302,6 +317,7 @@ mod cmd_data {
                 description: "Show output window",
                 cmd: "output-show",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -311,6 +327,7 @@ mod cmd_data {
                 description: "Hide output window",
                 cmd: "output-hide",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -320,6 +337,7 @@ mod cmd_data {
                 description: "Toggle multi-selection for current item",
                 cmd: "mul-sel",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -329,6 +347,7 @@ mod cmd_data {
                 description: "Clear multi-selection",
                 cmd: "mul-clear",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -338,6 +357,7 @@ mod cmd_data {
                 description: "Show multi-selection in the output window",
                 cmd: "mul-show",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -347,6 +367,7 @@ mod cmd_data {
                 description: "Save multi-selection to file",
                 cmd: "mul-save",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -356,6 +377,7 @@ mod cmd_data {
                 description: "Copy multi-selection to the current directory",
                 cmd: "mul-copy",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -365,6 +387,7 @@ mod cmd_data {
                 description: "Delete multi-selection files",
                 cmd: "mul-delete",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -374,6 +397,7 @@ mod cmd_data {
                 description: "Move (not copy) multi-selection to the current directory",
                 cmd: "mul-move",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -383,6 +407,7 @@ mod cmd_data {
                 description: "Go back to previous menu",
                 cmd: "menu-back",
                 vis_hidden: true,
+                params: vec![],
             },
         );
         map.insert(
@@ -392,6 +417,7 @@ mod cmd_data {
                 description: "Show application log",
                 cmd: "log",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -401,6 +427,7 @@ mod cmd_data {
                 description: "Clear application log",
                 cmd: "log-clear",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -410,6 +437,7 @@ mod cmd_data {
                 description: "Scroll secondary window up",
                 cmd: "sec-up",
                 vis_hidden: true,
+                params: vec![],
             },
         );
         map.insert(
@@ -419,6 +447,7 @@ mod cmd_data {
                 description: "Scroll secondary window down",
                 cmd: "sec-down",
                 vis_hidden: true,
+                params: vec![],
             },
         );
         map.insert(
@@ -428,6 +457,7 @@ mod cmd_data {
                 description: "Show current keybindings",
                 cmd: "show-keybinds",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -437,6 +467,7 @@ mod cmd_data {
                 description: "Show current keybindings",
                 cmd: "show-keybinds",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -446,6 +477,7 @@ mod cmd_data {
                 description: "Clear screen content. Some terminals may not refresh properly causing artifacts.",
                 cmd: "dbg-prev-clear",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -455,6 +487,17 @@ mod cmd_data {
                 description: "Open selected file in $EDITOR",
                 cmd: "edit",
                 vis_hidden: false,
+                params: vec![],
+            },
+        );
+        map.insert(
+            CmdName::GoTo,
+            CmdData {
+                fname: "Go To Directory",
+                description: "Go to specified directory",
+                cmd: "goto",
+                vis_hidden: false,
+                params: vec!["path"],
             },
         );
         map.insert(
@@ -464,6 +507,7 @@ mod cmd_data {
                 description: "Run a quick shell command in the current directory",
                 cmd: "shell-quick",
                 vis_hidden: false,
+                params: vec![],
             },
         );
         map.insert(
@@ -473,6 +517,7 @@ mod cmd_data {
                 description: "Run a full shell in the current directory",
                 cmd: "shell-full",
                 vis_hidden: false,
+                params: vec![],
             },
         );
 
@@ -560,9 +605,10 @@ mod node_info {
                 node_type: NodeType::Unknown,
             }
         }
-        pub fn is(&self, _is: NodeType) -> bool {
-            return self.node_type == _is;
-        }
+        // UNUSED
+        // pub fn is(&self, _is: NodeType) -> bool {
+        //     return self.node_type == _is;
+        // }
         pub fn is_file(&self) -> bool {
             return self.node_type == NodeType::File;
         }
@@ -801,6 +847,7 @@ dir-up      ctrl-h
 dir-back    ctrl-u
 explode     ctrl-x
 edit        ctrl-e
+goto       ctrl-g
 select      none-enter
 select      ctrl-l
 cmd-win     ctrl-w
@@ -955,7 +1002,8 @@ mod cfg {
     pub const DEFAULT: &str = r#"
 # Default configuration
 cmd_on_select   edit
-list_limit      100000
+# 0 = no limit
+list_limit      0
 force_sixel     false
 max_image_width 80
 "#;
@@ -1000,7 +1048,7 @@ max_image_width 80
                     "cmd_on_select" => config.cmd_on_select = value.to_string(),
                     "list_limit" => {
                         if let Ok(limit) = value.parse::<i32>() {
-                            config.list_limit = limit;
+                            config.list_limit = if limit == 0 { i32::MAX } else { limit };
                         }
                     }
                     "force_sixel" => {
@@ -1138,14 +1186,23 @@ impl<'a> App<'a> {
         }
     }
 
-    fn set_cwd(&mut self, path: &PathBuf) {
+    fn append_cwd(&mut self, path: &PathBuf) {
         log!("Changing directory to: {}", path.to_str().unwrap());
         let new_path = if path.to_str().unwrap() == ".." {
             self.cwd.parent().unwrap_or(&self.cwd).to_path_buf()
         } else {
-            let mut temp_path = self.cwd.clone();
-            temp_path.push(path);
-            temp_path
+            if path.is_absolute() {
+                path.clone()
+            } else if path.starts_with("~") {
+                let mut home_path = dirs::home_dir().unwrap();
+                let rel_path = path.strip_prefix("~").unwrap();
+                home_path.push(rel_path);
+                home_path
+            } else {
+                let mut temp_path = self.cwd.clone();
+                temp_path.push(path);
+                temp_path
+            }
         };
         self.lwd = self.cwd.clone();
         self.cwd = new_path;
@@ -1657,7 +1714,7 @@ impl<'a> App<'a> {
                         "Image file preview not yet supported.",
                         Style::default().fg(self.cs.error),
                     );
-                    self.preview_image(&selected_path);
+                    let _ = self.preview_image(&selected_path);
                 } else if self.selection.is_executable() {
                     self.preview_content += Line::styled(
                         "Executable file preview not yet supported.",
@@ -1882,6 +1939,10 @@ impl<'a> App<'a> {
         for kb in self.keybinds.iter() {
             if kb.modifiers == modifiers && kb.code == code {
                 cmd = self.get_cmd(&kb.command).to_string();
+                let cmd_data = cmd_data::get_cmd_data(&self.cmd_list, &kb.command);
+                if cmd_data.params.len() > 0 {
+                    cmd += " {ASK}"; // Indicate that params are needed and should be asked for
+                }
                 break;
             }
         }
@@ -1892,21 +1953,21 @@ impl<'a> App<'a> {
     }
 
     fn cmd_home(&mut self) {
-        self.set_cwd(&dirs::home_dir().unwrap());
+        self.append_cwd(&dirs::home_dir().unwrap());
         self.update_listing();
         self.update_results();
         self.selection_index = 0;
     }
 
     fn cmd_dir_up(&mut self) {
-        self.set_cwd(&"..".into());
+        self.append_cwd(&"..".into());
         self.update_listing();
         self.update_results();
         self.selection_index = 0;
     }
 
     fn cmd_dir_back(&mut self) {
-        self.set_cwd(&self.lwd.clone());
+        self.append_cwd(&self.lwd.clone());
         self.update_listing();
         self.update_results();
         self.selection_index = 0;
@@ -2259,6 +2320,19 @@ impl<'a> App<'a> {
         self.cmd_output_window_show();
     }
 
+    fn cmd_goto(&mut self, args: Vec<&str>) {
+        if args.is_empty() {
+            self.set_output("Goto", "Error: No path provided.");
+            self.cmd_output_window_show();
+            return;
+        }
+        let path = PathBuf::from(args[0]);
+        self.append_cwd(&path);
+        self.update_listing();
+        self.update_results();
+        self.selection_index = 0;
+    }
+
     fn cmd_shell_quick(&mut self) {
         self.command_input = "!".to_string();
         self.show_command_window = true;
@@ -2277,6 +2351,7 @@ impl<'a> App<'a> {
             }
         }
         cls();
+        self.term_clear = true;
         self.cmd_output_window_show();
     }
 
@@ -2285,6 +2360,24 @@ impl<'a> App<'a> {
     }
 
     fn handle_cmd(&mut self, cmd: &str) -> LoopReturn {
+        // Check if we have a command with args
+        // If so just open command window to ask for args
+        if cmd.contains("{ASK}") {
+            self.command_input = cmd.replace("{ASK}", "").to_string();
+            self.show_command_window = true;
+            return LoopReturn::Continue;
+        }
+
+        let cmd_split = cmd.trim().split_whitespace().collect::<Vec<&str>>();
+        let cmd = match cmd_split.first() {
+            Some(c) => c.to_string(),
+            None => cmd.to_string(),
+        };
+        let args = if cmd_split.len() > 1 {
+            cmd_split[1..].to_vec()
+        } else {
+            Vec::new()
+        };
         match cmd {
             // The main Select command is long because it handles shortcuts
             _ if cmd == self.get_cmd(&CmdName::Select) => {
@@ -2294,7 +2387,10 @@ impl<'a> App<'a> {
                 // Get selection
                 let selection = self.selection.clone();
                 // NOTE: Handle shortcuts selections
+                // Handle internal commands
+                // Handle actual selection
                 match selection.name.as_str() {
+                    // Shortcuts
                     sc::EXIT => return LoopReturn::Break,
                     sc::HOME => {
                         self.cmd_home();
@@ -2318,17 +2414,43 @@ impl<'a> App<'a> {
                         self.cmd_cmd_finder_toggle();
                         return LoopReturn::Continue;
                     }
+                    // Possible internal command
                     _ => {
                         // Check if selection is an internal command
                         if selection.is_command() {
+                            let cmd_name = match cmd_data::cmd_name_from_str(
+                                &self.cmd_list,
+                                &selection.name,
+                            ) {
+                                Some(name) => name,
+                                None => {
+                                    self.set_output(
+                                        "Error",
+                                        "Command data not found for selected command.",
+                                    );
+                                    self.cmd_output_window_show();
+                                    return LoopReturn::Ok;
+                                }
+                            };
+                            let cmd_data = cmd_data::get_cmd_data(&self.cmd_list, &cmd_name);
+                            if cmd_data.params.len() > 0 {
+                                // Open command window for params
+                                self.command_input = format!("{} ", cmd_data.cmd);
+                                self.mode_cmd_finder = false;
+                                self.show_command_window = true;
+                                return LoopReturn::Continue;
+                            }
                             self.handle_cmd(&selection.name);
-                            self.cmd_cmd_finder_toggle();
+                            self.mode_cmd_finder = false;
                             return LoopReturn::Continue;
                         }
+                        // If we have a file, run the on select command
                         if selection.is_file() {
                             self.handle_cmd(self.cfg.cmd_on_select.clone().as_str());
+                            return LoopReturn::Continue;
                         }
-                        self.set_cwd(&self.selection.name.clone().into());
+                        // We have a directory, enter it
+                        self.append_cwd(&self.selection.name.clone().into());
                         self.update_listing();
                         self.update_results();
                         self.selection_index = 0;
@@ -2362,6 +2484,7 @@ impl<'a> App<'a> {
             _ if cmd == self.get_cmd(&CmdName::SecUp) => self.cmd_sec_up(),
             _ if cmd == self.get_cmd(&CmdName::ShowKeybinds) => self.cmd_show_keybinds(),
             _ if cmd == self.get_cmd(&CmdName::Edit) => self.cmd_edit(),
+            _ if cmd == self.get_cmd(&CmdName::GoTo) => self.cmd_goto(args),
             _ if cmd == self.get_cmd(&CmdName::DbgClear) => self.cmd_dbg_clear_preview(),
             _ if cmd == self.get_cmd(&CmdName::ShellQuick) => self.cmd_shell_quick(),
             _ if cmd == self.get_cmd(&CmdName::ShellFull) => self.cmd_shell_full(),
@@ -2398,7 +2521,7 @@ impl<'a> App<'a> {
     fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
         log!("Starting main event loop");
         // Get directory listing
-        self.set_cwd(&self.cwd.clone());
+        self.append_cwd(&self.cwd.clone());
         self.update_listing();
         self.update_results(); // Initial results
         self.update_selection();
