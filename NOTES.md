@@ -1,11 +1,9 @@
 # Sonar
 ## Todo Feat
-- Image previews
 - Git integration? Maybe rely on git and ignore if not
 - Select alt, like right click for context (delete, multi, etc)?
 - Better input handling (especially for commands)
 - Scroll/progress bars
-- Config file
 - Shortcuts / bookmarks
 - Custom native commands
 - File size
