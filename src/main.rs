@@ -146,7 +146,7 @@ mod cmd_data {
         LogClear,
         SecUp,
         SecDown,
-        ShowKeybinds,
+        KeybindsShow,
         DbgClear,
         Edit,
         GoTo,
@@ -451,21 +451,11 @@ mod cmd_data {
             },
         );
         map.insert(
-            CmdName::ShowKeybinds,
+            CmdName::KeybindsShow,
             CmdData {
                 fname: "Show Keybinds",
                 description: "Show current keybindings",
-                cmd: "show-keybinds",
-                vis_hidden: false,
-                params: vec![],
-            },
-        );
-        map.insert(
-            CmdName::ShowKeybinds,
-            CmdData {
-                fname: "Show Keybinds",
-                description: "Show current keybindings",
-                cmd: "show-keybinds",
+                cmd: "keybinds-show",
                 vis_hidden: false,
                 params: vec![],
             },
@@ -2504,7 +2494,7 @@ impl<'a> App<'a> {
             _ if cmd == self.get_cmd(&CmdName::LogClear) => self.cmd_log_clear(),
             _ if cmd == self.get_cmd(&CmdName::SecDown) => self.cmd_sec_down(),
             _ if cmd == self.get_cmd(&CmdName::SecUp) => self.cmd_sec_up(),
-            _ if cmd == self.get_cmd(&CmdName::ShowKeybinds) => self.cmd_show_keybinds(),
+            _ if cmd == self.get_cmd(&CmdName::KeybindsShow) => self.cmd_show_keybinds(),
             _ if cmd == self.get_cmd(&CmdName::Edit) => self.cmd_edit(),
             _ if cmd == self.get_cmd(&CmdName::GoTo) => self.cmd_goto(args),
             _ if cmd == self.get_cmd(&CmdName::DbgClear) => self.cmd_dbg_clear_preview(),
