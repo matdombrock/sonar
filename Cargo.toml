@@ -1,9 +1,9 @@
 [package]
 name = "fuz"
 version = "0.1.0"
-description = "An example generated using the hello-world template"
+description = ""
 authors = ["matdombrock <dombrock.mathieu@gmail.com>"]
-license = "MIT"
+license = "GPL-3.0-or-later"
 edition = "2024"
 
 [dependencies]
