@@ -1084,6 +1084,7 @@ max_image_width 80
 
 // Return type for loop control
 // TODO: Im still suspicious of this design
+// I think all we need is a way to break
 enum LoopReturn {
     Continue,
     Break,
@@ -1952,6 +1953,91 @@ impl<'a> App<'a> {
         cmd.to_string()
     }
 
+    fn cmd_select(&mut self) -> LoopReturn {
+        // Update input to empty to reset search
+        self.input = String::new();
+        self.update_results();
+        // Get selection
+        let selection = self.selection.clone();
+        // NOTE: Handle shortcuts selections
+        // Handle internal commands
+        // Handle actual selection
+        match selection.name.as_str() {
+            // Shortcuts
+            sc::EXIT => return LoopReturn::Break,
+            sc::HOME => {
+                self.cmd_home();
+                return LoopReturn::Continue;
+            }
+            sc::DIR_UP => {
+                self.cmd_dir_up();
+                return LoopReturn::Continue;
+            }
+            sc::DIR_BACK => {
+                self.cmd_dir_back();
+                return LoopReturn::Continue;
+            }
+            sc::EXP => {
+                self.cmd_explode();
+                return LoopReturn::Continue;
+            }
+            sc::MENU_BACK => {
+                self.cmd_menu_back();
+                return LoopReturn::Continue;
+            }
+            sc::CMDS => {
+                self.cmd_cmd_finder_toggle();
+                return LoopReturn::Continue;
+            }
+            // Either an internal command, file or dir
+            _ => {
+                // Check if selection is an internal command
+                if selection.is_command() {
+                    let cmd_name =
+                        match cmd_data::cmd_name_from_str(&self.cmd_list, &selection.name) {
+                            Some(name) => name,
+                            None => {
+                                self.set_output(
+                                    "Error",
+                                    "Command data not found for selected command.",
+                                );
+                                self.cmd_output_window_show();
+                                return LoopReturn::Ok;
+                            }
+                        };
+                    self.mode_cmd_finder = false;
+                    self.update_listing();
+                    // If the command has params, open command window
+                    let cmd_data = cmd_data::get_cmd_data(&self.cmd_list, &cmd_name);
+                    if cmd_data.params.len() > 0 {
+                        // Open command window for params
+                        self.command_input = format!("{} ", cmd_data.cmd);
+                        self.show_command_window = true;
+                        return LoopReturn::Continue;
+                    }
+                    self.handle_cmd(&selection.name);
+                    return LoopReturn::Continue;
+                }
+                // If we have a file, run the on_select command
+                // We have a directory, enter it
+                if selection.is_file() {
+                    self.handle_cmd(self.cfg.cmd_on_select.clone().as_str());
+                    return LoopReturn::Continue;
+                } else if selection.is_dir() {
+                    self.append_cwd(&self.selection.name.clone().into());
+                    self.update_listing();
+                    self.update_results();
+                    self.selection_index = 0;
+                    return LoopReturn::Continue;
+                } else {
+                    self.set_output("Error", "Selected item is neither a file nor a directory.");
+                    self.cmd_output_window_show();
+                    return LoopReturn::Ok;
+                }
+            }
+        }
+    }
+
     fn cmd_home(&mut self) {
         self.append_cwd(&dirs::home_dir().unwrap());
         self.update_listing();
@@ -2391,85 +2477,8 @@ impl<'a> App<'a> {
             Vec::new()
         };
         match cmd {
-            // The main Select command is long because it handles shortcuts
-            _ if cmd == self.get_cmd(&CmdName::Select) => {
-                // Update input to empty to reset search
-                self.input = String::new();
-                self.update_results();
-                // Get selection
-                let selection = self.selection.clone();
-                // NOTE: Handle shortcuts selections
-                // Handle internal commands
-                // Handle actual selection
-                match selection.name.as_str() {
-                    // Shortcuts
-                    sc::EXIT => return LoopReturn::Break,
-                    sc::HOME => {
-                        self.cmd_home();
-                        return LoopReturn::Continue;
-                    }
-                    sc::DIR_UP => {
-                        self.cmd_dir_up();
-                    }
-                    sc::DIR_BACK => {
-                        self.cmd_dir_back();
-                    }
-                    sc::EXP => {
-                        self.cmd_explode();
-                        return LoopReturn::Continue;
-                    }
-                    sc::MENU_BACK => {
-                        self.cmd_menu_back();
-                        return LoopReturn::Continue;
-                    }
-                    sc::CMDS => {
-                        self.cmd_cmd_finder_toggle();
-                        return LoopReturn::Continue;
-                    }
-                    // Possible internal command
-                    _ => {
-                        // Check if selection is an internal command
-                        if selection.is_command() {
-                            let cmd_name = match cmd_data::cmd_name_from_str(
-                                &self.cmd_list,
-                                &selection.name,
-                            ) {
-                                Some(name) => name,
-                                None => {
-                                    self.set_output(
-                                        "Error",
-                                        "Command data not found for selected command.",
-                                    );
-                                    self.cmd_output_window_show();
-                                    return LoopReturn::Ok;
-                                }
-                            };
-                            let cmd_data = cmd_data::get_cmd_data(&self.cmd_list, &cmd_name);
-                            if cmd_data.params.len() > 0 {
-                                // Open command window for params
-                                self.command_input = format!("{} ", cmd_data.cmd);
-                                self.mode_cmd_finder = false;
-                                self.show_command_window = true;
-                                return LoopReturn::Continue;
-                            }
-                            self.handle_cmd(&selection.name);
-                            self.mode_cmd_finder = false;
-                            return LoopReturn::Continue;
-                        }
-                        // If we have a file, run the on select command
-                        if selection.is_file() {
-                            self.handle_cmd(self.cfg.cmd_on_select.clone().as_str());
-                            return LoopReturn::Continue;
-                        }
-                        // We have a directory, enter it
-                        self.append_cwd(&self.selection.name.clone().into());
-                        self.update_listing();
-                        self.update_results();
-                        self.selection_index = 0;
-                    }
-                }
-            }
             _ if cmd == self.get_cmd(&CmdName::Exit) => return LoopReturn::Break,
+            _ if cmd == self.get_cmd(&CmdName::Select) => return self.cmd_select(),
             _ if cmd == self.get_cmd(&CmdName::SelDown) => self.cmd_sel_down(),
             _ if cmd == self.get_cmd(&CmdName::SelUp) => self.cmd_sel_up(),
             _ if cmd == self.get_cmd(&CmdName::DirUp) => self.cmd_dir_up(),

@@ -11,6 +11,8 @@
 - File size
 - Line count
 - Modified
+- Lazy loading - delay before loading file content and metadata
+- Search delay - delay before filtering
 - Mouse support?
 - Seer?
 
