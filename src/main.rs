@@ -53,6 +53,8 @@ const LOGO: &str = r#"
 
 const SEP: &str = "───────────────────────────────────────────────";
 
+const ASK: &str = "{ASK}";
+
 // Nerd font icons
 mod nf {
     pub const MAG: &str = "󰍉";
@@ -526,14 +528,15 @@ mod node_type {
     use crate::log;
     #[derive(Clone, PartialEq)]
     pub enum NodeType {
-        File,       // A regular file
-        Directory,  // A directory
-        Shortcut,   // Internal shortcut
-        Command,    // Internal command, name should always be the command string
-        Executable, // An executable file
-        Image,      // An image file
-        Symlink,    // A symbolic link
-        Unknown,    // Unknown, unsupported, etc.
+        File,         // A regular file
+        Directory,    // A directory
+        Shortcut,     // Internal shortcut
+        Command,      // Internal command, name should always be the command string
+        ShellCommand, // A shell command
+        Executable,   // An executable file
+        Image,        // An image file
+        Symlink,      // A symbolic link
+        Unknown,      // Unknown, unsupported, etc.
     }
     impl NodeType {
         pub fn find(path: &Path, metadata: fs::Metadata) -> NodeType {
@@ -610,6 +613,9 @@ mod node_info {
         }
         pub fn is_command(&self) -> bool {
             return self.node_type == NodeType::Command;
+        }
+        pub fn is_shell_command(&self) -> bool {
+            return self.node_type == NodeType::ShellCommand;
         }
         pub fn is_executable(&self) -> bool {
             return self.node_type == NodeType::Executable;
@@ -719,6 +725,7 @@ misc           white
                 _ => Color::White,
             }
         }
+
         pub fn get_path() -> std::path::PathBuf {
             let cs_path = dirs::config_dir()
                 .unwrap_or(std::env::current_dir().unwrap())
@@ -726,7 +733,20 @@ misc           white
                 .join(FILE_NAME);
             cs_path
         }
-        pub fn make_list(colors_str: &str) -> Colors {
+
+        pub fn make_list_auto() -> Colors {
+            // Read colors.txt
+            let colors = match fs::read_to_string(crate::APP_NAME.to_string() + FILE_NAME) {
+                Ok(content) => content,
+                Err(_) => {
+                    log!("colors.txt not found, using default colorscheme");
+                    return Colors::make_list(DEFAULT);
+                }
+            };
+            Colors::make_list(&colors)
+        }
+
+        fn make_list(colors_str: &str) -> Colors {
             let mut colors = Colors::new();
             for line in colors_str.lines() {
                 // Ignore comments
@@ -801,17 +821,6 @@ misc           white
                 }
             }
             colors
-        }
-        pub fn make_list_auto() -> Colors {
-            // Read colors.txt
-            let colors = match fs::read_to_string(crate::APP_NAME.to_string() + FILE_NAME) {
-                Ok(content) => content,
-                Err(_) => {
-                    log!("colors.txt not found, using default colorscheme");
-                    return Colors::make_list(DEFAULT);
-                }
-            };
-            Colors::make_list(&colors)
         }
     }
 }
@@ -902,7 +911,19 @@ shell       ctrl-s
         kb_path
     }
 
-    pub fn make_list(keybinds_str: &str) -> KeyBindList {
+    pub fn make_list_auto() -> KeyBindList {
+        // Read keybinds.txt
+        let keybinds = match fs::read_to_string(get_path()) {
+            Ok(content) => content,
+            Err(_) => {
+                log!("{} not found, using default keybinds", FILE_NAME);
+                return make_list(KEYBINDS);
+            }
+        };
+        make_list(&keybinds)
+    }
+
+    fn make_list(keybinds_str: &str) -> KeyBindList {
         let mut list = KeyBindList::new();
         let cmd_list = cmd_data::make_cmd_list();
         for line in keybinds_str.lines() {
@@ -971,18 +992,6 @@ shell       ctrl-s
         }
         list
     }
-
-    pub fn make_list_auto() -> KeyBindList {
-        // Read keybinds.txt
-        let keybinds = match fs::read_to_string(get_path()) {
-            Ok(content) => content,
-            Err(_) => {
-                log!("{} not found, using default keybinds", FILE_NAME);
-                return make_list(KEYBINDS);
-            }
-        };
-        make_list(&keybinds)
-    }
 }
 
 mod cfg {
@@ -1019,7 +1028,18 @@ max_image_width 80
                 .join(FILE_NAME);
             cfg_path
         }
-        pub fn make_list(cfg_str: &str) -> Config {
+        pub fn make_list_auto() -> Config {
+            // Read config.txt
+            let config = match fs::read_to_string(crate::APP_NAME.to_string() + FILE_NAME) {
+                Ok(content) => content,
+                Err(_) => {
+                    crate::log!("{} not found, using default configuration", FILE_NAME);
+                    return Config::make_list(DEFAULT);
+                }
+            };
+            Config::make_list(&config)
+        }
+        fn make_list(cfg_str: &str) -> Config {
             let mut config = Config::new();
             for line in cfg_str.lines() {
                 // Ignore comments
@@ -1058,17 +1078,54 @@ max_image_width 80
             }
             config
         }
-        pub fn make_list_auto() -> Config {
-            // Read config.txt
-            let config = match fs::read_to_string(crate::APP_NAME.to_string() + FILE_NAME) {
-                Ok(content) => content,
-                Err(_) => {
-                    crate::log!("{} not found, using default configuration", FILE_NAME);
-                    return Config::make_list(DEFAULT);
-                }
-            };
-            Config::make_list(&config)
+    }
+}
+
+mod shell_cmds {
+    use crate::cmd_data;
+
+    const FILE_NAME: &str = "shell_cmds.txt";
+    pub const DEFAULT: &str = r#"
+ls -la
+ls {ASK}
+ls $1
+zip -r archive.zip $...
+"#;
+
+    pub fn get_path() -> std::path::PathBuf {
+        let shell_cmds_path = dirs::config_dir()
+            .unwrap_or(std::env::current_dir().unwrap())
+            .join(crate::APP_NAME)
+            .join(FILE_NAME);
+        shell_cmds_path
+    }
+
+    pub fn make_list_auto() -> Vec<String> {
+        // Read shell_cmds.txt
+        let shell_cmds = match std::fs::read_to_string(crate::APP_NAME.to_string() + FILE_NAME) {
+            Ok(content) => content,
+            Err(_) => {
+                crate::log!("shell_cmds.txt not found, using default shell commands");
+                return make_list(DEFAULT);
+            }
+        };
+        make_list(&shell_cmds)
+    }
+
+    pub fn make_list(shell_str: &str) -> Vec<String> {
+        let shell_cmd_name =
+            cmd_data::get_cmd(&cmd_data::make_cmd_list(), &cmd_data::CmdName::ShellQuick);
+        let mut list = Vec::new();
+        for line in shell_str.lines() {
+            // Ignore comments
+            if line.starts_with('#') || line.trim().is_empty() {
+                continue;
+            }
+            // Trim whitespace
+            let line = line.trim();
+            list.push(format!("{} {}", shell_cmd_name, line));
         }
+        list
     }
 }
 
@@ -1107,6 +1164,7 @@ struct App<'a> {
     yesno_text: String,
     yesno_result: i32, // 0 = no, 1 = yes, 2 = unset
     cmd_list: cmd_data::CmdList,
+    shell_cmd_list: Vec<String>,
     keybinds: kb::KeyBindList,
     cs: cs::Colors,
     cfg: cfg::Config,
@@ -1114,6 +1172,7 @@ struct App<'a> {
     found_keybinds: bool,
     found_cs: bool,
     found_cfg: bool,
+    found_shell_cmds: bool,
     // Has external tools
     has_bat: bool,
     // Layout vals - read only
@@ -1137,6 +1196,10 @@ impl<'a> App<'a> {
             Err(_) => false,
         };
         let cfg_check = match fs::read_to_string(&cfg::Config::get_path()) {
+            Ok(_) => true,
+            Err(_) => false,
+        };
+        let shell_cmds_ehck = match fs::read_to_string(&shell_cmds::get_path()) {
             Ok(_) => true,
             Err(_) => false,
         };
@@ -1166,12 +1229,14 @@ impl<'a> App<'a> {
             yesno_text: String::new(),
             yesno_result: 2,
             cmd_list: cmd_data::make_cmd_list(),
+            shell_cmd_list: shell_cmds::make_list_auto(),
             keybinds: kb::make_list_auto(),
             cs: cs::Colors::make_list_auto(),
             cfg: cfg::Config::make_list_auto(),
             found_keybinds: kb_check,
             found_cs: cs_check,
             found_cfg: cfg_check,
+            found_shell_cmds: shell_cmds_ehck,
             has_bat: bat_check,
             lay_preview_area: Rect::default(),
         }
@@ -1312,7 +1377,6 @@ impl<'a> App<'a> {
             if is_multi_selected {
                 ms = &ms_on;
             }
-            // Limit for performance
             let line = if item.is_shortcut() {
                 Line::styled(
                     format!("{}{}| {}", ms, nf::CMD, item.name),
@@ -1327,6 +1391,11 @@ impl<'a> App<'a> {
                 Line::styled(
                     format!("{}{}| {}", ms, nf::CMD, item.name),
                     Style::default().fg(self.cs.command),
+                )
+            } else if item.is_shell_command() {
+                Line::styled(
+                    format!("{}{}| {}", ms, nf::CMD, item.name),
+                    Style::default().fg(self.cs.executable),
                 )
             } else if item.is_executable() {
                 Line::styled(
@@ -1547,6 +1616,8 @@ impl<'a> App<'a> {
                     "└ Start typing to fuzzy find files and directories",
                     Style::default().fg(self.cs.tip),
                 );
+                // System Information
+                // TODO: This is not very dry
                 self.preview_content += Line::from("");
                 self.preview_content +=
                     Line::styled("System Information:", Style::default().fg(self.cs.header));
@@ -1624,6 +1695,26 @@ impl<'a> App<'a> {
                         Style::default().fg(self.cs.warning),
                     );
                 }
+                if self.found_shell_cmds {
+                    self.preview_content += Line::styled(
+                        format!(
+                            "- {} shell commands - loaded from {}",
+                            nf::CHECK,
+                            self.fpath(&shell_cmds::get_path()),
+                        ),
+                        Style::default().fg(self.cs.ok),
+                    );
+                } else {
+                    self.preview_content += Line::styled(
+                        format!(
+                            "- {} shell commands - no file found at {}",
+                            nf::WARN,
+                            self.fpath(&shell_cmds::get_path()),
+                        ),
+                        Style::default().fg(self.cs.warning),
+                    );
+                }
+
                 self.preview_content += Line::from("");
             }
             sc::HOME => {
@@ -1692,6 +1783,14 @@ impl<'a> App<'a> {
                     );
                     return;
                 }
+                // Check if we have a shell command
+                if self.selection.is_shell_command() {
+                    self.preview_content += Line::styled(
+                        format!("Shell Command: {}", self.selection.name),
+                        Style::default().fg(self.cs.command),
+                    );
+                    return;
+                }
                 // We have a file or dir
                 let mut selected_path = self.cwd.clone();
                 selected_path.push(&self.selection.name);
@@ -1741,7 +1840,14 @@ impl<'a> App<'a> {
         if self.mode_cmd_finder {
             log!("Updating command listing");
             self.listing.clear();
-            // Soft the commands alphabetically
+            // Shell commands
+            for shell_cmd in self.shell_cmd_list.iter() {
+                self.listing.push(NodeInfo {
+                    name: shell_cmd.to_string(),
+                    node_type: NodeType::ShellCommand,
+                });
+            }
+            // Sort the commands alphabetically
             let mut entries: Vec<_> = self.cmd_list.iter().collect();
             entries.sort_by(|a, b| a.1.cmd.cmp(b.1.cmd));
             for (_, cmd_data) in entries {
@@ -1932,7 +2038,7 @@ impl<'a> App<'a> {
                 cmd = self.get_cmd(&kb.command).to_string();
                 let cmd_data = cmd_data::get_cmd_data(&self.cmd_list, &kb.command);
                 if cmd_data.params.len() > 0 {
-                    cmd += " {ASK}"; // Indicate that params are needed and should be asked for
+                    cmd += &format!(" {}", ASK); // Indicate that params are needed and should be asked for
                 }
                 break;
             }
@@ -2006,6 +2112,14 @@ impl<'a> App<'a> {
                         self.show_command_window = true;
                         return LoopReturn::Continue;
                     }
+                    self.handle_cmd(&selection.name);
+                    return LoopReturn::Continue;
+                }
+                // Check if selection is a shell command
+                if selection.is_shell_command() {
+                    self.mode_cmd_finder = false;
+                    self.update_listing();
+                    self.update_results();
                     self.handle_cmd(&selection.name);
                     return LoopReturn::Continue;
                 }
@@ -2092,15 +2206,11 @@ impl<'a> App<'a> {
     }
 
     fn cmd_multi_sel(&mut self) {
-        let mut selected_path = self.cwd.clone();
-        selected_path.push(&self.selection.name);
-        let is_sc = self
-            .results
-            .get(self.selection_index as usize)
-            .map_or(false, |item| item.is_shortcut());
-        if is_sc {
+        if !self.selection.is_file() && !self.selection.is_dir() {
             return;
         }
+        let mut selected_path = self.cwd.clone();
+        selected_path.push(&self.selection.name);
         // Check if already in multi selection
         if let Some(pos) = self
             .multi_selection
@@ -2449,8 +2559,8 @@ impl<'a> App<'a> {
     fn handle_cmd(&mut self, cmd: &str) -> LoopReturn {
         // Check if we have a command with args
         // If so just open command window to ask for args
-        if cmd.contains("{ASK}") {
-            self.command_input = cmd.replace("{ASK}", "").to_string();
+        if cmd.contains(ASK) {
+            self.command_input = cmd.replace(ASK, "").to_string();
             self.show_command_window = true;
             return LoopReturn::Continue;
         }
