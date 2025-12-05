@@ -636,7 +636,10 @@ mod cs {
 
     const FILE_NAME: &str = "colors.txt";
     pub const DEFAULT: &str = r#"
+#
 # Default color
+#
+
 name           default
 search_border  green
 preview_border yellow
@@ -834,7 +837,10 @@ mod kb {
 
     const FILE_NAME: &str = "keybinds.txt";
     pub const KEYBINDS: &str = r#"
+#
 # Default keybinds
+#
+
 exit        ctrl-q
 exit        none-esc
 home        alt-h
@@ -1086,11 +1092,18 @@ mod shell_cmds {
 
     const FILE_NAME: &str = "shell_cmds.txt";
     pub const DEFAULT: &str = r#"
+#
+# Default shell commands
+#
+
+# A simple command
 ls -la
+# Ask for input (open prompt window)
 ls {ASK}
-ls $1
+# Echo the first selected file/directory
+echo $1
+# Create a zip archive of all selected files/directories
 zip -r archive.zip $...
-echo $...
 "#;
 
     pub fn get_path() -> std::path::PathBuf {
