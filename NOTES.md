@@ -5,12 +5,14 @@
 - Better input handling (especially for commands)
 - Scroll/progress bars
 - Shortcuts / bookmarks
-- Custom native commands
 - File size
 - Line count
 - Modified
 - Lazy loading - delay before loading file content and metadata
 - Search delay - delay before filtering
+- Hide preview window
+- If preview window hidden dont generate preview or meta
+- Toggle hidden files
 - Mouse support?
 - Seer?
 
@@ -20,6 +22,8 @@
 - clipboard-file-path
 - keybind-init
 - reload-dir
+- config-init
+- config-clear
 
 ## Todo Bug / Incomplete
 - Handle large dirs
@@ -33,6 +37,7 @@
 - Better keybind printing
 - Load default keybinds from embedded text (parse)
 - multi select edit should offer to do something
+
 
 ## Notes
 
@@ -95,6 +100,8 @@ One problem there though is that the commands operate on self (app) so if they m
 - Multi-select operations
 - Responsive layout
 - Optional bat integration
+- Custom native shell commands
+- Image preview
 
 ## Goals
 
