@@ -28,9 +28,10 @@ use ratatui_image::{
     protocol::StatefulProtocol,
 };
 use regex::Regex;
-use std::fs;
 use std::os::unix::fs::PermissionsExt;
+use std::time::UNIX_EPOCH;
 use std::{env, process::Command};
+use std::{fs, time::SystemTime};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style as SyntectStyle, ThemeSet};
 use syntect::parsing::SyntaxSet;
@@ -1620,6 +1621,7 @@ impl<'a> App<'a> {
         self.reset_sec_scroll();
         match self.selection.name.as_str() {
             sc::EXIT => {
+                // FIXME: WHY IS THIS ALL HERE
                 self.preview_content += self.fmtln_sc("Exit the application");
                 self.preview_content += Line::from("");
                 for (i, line) in LOGO.lines().enumerate() {
@@ -2743,8 +2745,19 @@ impl<'a> App<'a> {
                 .split(popup_layout[1])[1]
         }
         let area = frame.area();
-        // frame.render_widget(Clear, area); // Clear the area
         let threshold = 100;
+
+        // Reserve one line at the bottom for the status bar
+        let main_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(1),    // Main UI
+                Constraint::Length(1), // Status bar
+            ])
+            .split(area);
+
+        let main_area = main_chunks[0];
+        let status_area = main_chunks[1];
 
         // --- Widget creation ---
         // Input box
@@ -2771,7 +2784,7 @@ impl<'a> App<'a> {
         let input_widget = Paragraph::new(input_line).block(
             Block::default()
                 .title(format!(
-                    "( {} ) ) )  [ {} / {} ] ",
+                    "( {} ) ) )  [ {} / {} ]",
                     APP_NAME.to_uppercase(),
                     self.results.len(),
                     self.listing.len(),
@@ -2782,7 +2795,6 @@ impl<'a> App<'a> {
 
         // Results list
         let mut results_pretty = self.dir_list_pretty(&self.results);
-        // TODO: This is slow and should be done on dir pretty
         if let Some(line) = results_pretty.lines.get_mut(self.selection_index as usize) {
             let sel_span = Span::styled(
                 format!("{}", nf::SEL),
@@ -2817,7 +2829,6 @@ impl<'a> App<'a> {
                     .title(format!("{} m(0)_(0)m | {} ", nf::LOOK, self.selection.name))
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(self.cs.preview_border)),
-                // .style(Style::default().bg(Color::Back)),
             )
             .wrap(Wrap { trim: false })
             .scroll((
@@ -2826,7 +2837,7 @@ impl<'a> App<'a> {
             ));
 
         // --- Layout and rendering ---
-        if area.width < threshold {
+        if main_area.width < threshold {
             // Vertical layout
             let vertical_chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -2838,7 +2849,7 @@ impl<'a> App<'a> {
                     ]
                     .as_ref(),
                 )
-                .split(area);
+                .split(main_area);
 
             frame.render_widget(input_widget, vertical_chunks[0]);
             frame.render_stateful_widget(list_widget, vertical_chunks[1], &mut state);
@@ -2849,7 +2860,7 @@ impl<'a> App<'a> {
             let horizontal_chunks = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(40), Constraint::Percentage(60)].as_ref())
-                .split(area);
+                .split(main_area);
 
             let left_vertical_chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -2863,9 +2874,32 @@ impl<'a> App<'a> {
             self.lay_preview_area = horizontal_chunks[1];
         }
 
-        // The image widget.
+        // --- Status bar ---
+        // FIXME: THESE SHOULD BE CACHED
+        let username = env::var("USER").unwrap_or_else(|_| "unknown".to_string());
+        let hostname = fs::read_to_string("/etc/hostname")
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|_| "unknown".to_string());
+
+        let whoami = format!("{}@{}", username, hostname);
+        let unix_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let hhmmss = format!(
+            "{:02}:{:02}:{:02}",
+            (unix_time / 3600) % 24,
+            (unix_time / 60) % 60,
+            unix_time % 60
+        );
+        let multi_count = self.multi_selection.len();
+        let status_text = format!(" {} | multi: {} | {}", whoami, multi_count, hhmmss);
+        let status_widget =
+            Paragraph::new(status_text).style(Style::default().fg(self.cs.dim).bg(Color::Black));
+        frame.render_widget(status_widget, status_area);
+
+        // --- The image widget ---
         let image: StatefulImage<StatefulProtocol> = StatefulImage::default();
-        // Render with the protocol state.
         match self.preview_image {
             Some(ref mut img) => {
                 if !self.selection.is_image() {
