@@ -1342,6 +1342,17 @@ impl<'a> App<'a> {
         cmd_data::get_cmd(&self.cmd_list, name)
     }
 
+    fn replace_shell_vars(&self, mut shell_cmd: String) -> String {
+        let mut path_all = String::new();
+        for (i, path) in self.multi_selection.iter().enumerate() {
+            let var_name = format!("${}", i + 1);
+            let path_str = path.to_str().unwrap();
+            shell_cmd = shell_cmd.replace(&var_name, path_str);
+            path_all += &format!("{} ", path_str);
+        }
+        shell_cmd.replace("$...", &path_all.trim_end())
+    }
+
     fn fpath(&self, path: &PathBuf) -> String {
         let pstring = path.to_str().unwrap().to_string();
         let home = dirs::home_dir().unwrap();
@@ -1800,9 +1811,16 @@ impl<'a> App<'a> {
                 // Check if we have a shell command
                 if self.selection.is_shell_command() {
                     self.preview_content += Line::styled(
-                        format!("Shell Command: {}", self.selection.name),
+                        format!("shell: {}", self.selection.name),
                         Style::default().fg(self.cs.command),
                     );
+                    let replaced = self.replace_shell_vars(self.selection.name.clone());
+                    if replaced != self.selection.name {
+                        self.preview_content += Line::styled(
+                            format!("as: {}", replaced),
+                            Style::default().fg(self.cs.info),
+                        )
+                    };
                     return;
                 }
                 // We have a file or dir
@@ -2529,14 +2547,7 @@ impl<'a> App<'a> {
         let mut shell_cmd = args[0..].join(" ");
 
         // Replace variables
-        let mut path_all = String::new();
-        for (i, path) in self.multi_selection.iter().enumerate() {
-            let var_name = format!("${}", i + 1);
-            let path_str = path.to_str().unwrap();
-            shell_cmd = shell_cmd.replace(&var_name, path_str);
-            path_all += &format!("{} ", path_str);
-        }
-        shell_cmd = shell_cmd.replace("$...", &path_all.trim_end());
+        shell_cmd = self.replace_shell_vars(shell_cmd);
 
         // Run the command
         log!("Running shell command: {}", shell_cmd);
