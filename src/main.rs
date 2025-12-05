@@ -1090,6 +1090,7 @@ ls -la
 ls {ASK}
 ls $1
 zip -r archive.zip $...
+echo $...
 "#;
 
     pub fn get_path() -> std::path::PathBuf {
@@ -1977,16 +1978,8 @@ impl<'a> App<'a> {
             }
             (KeyModifiers::NONE, KeyCode::Enter) => {
                 // Handle commands
-                let mut cmd = self.command_input.clone();
+                let cmd = self.command_input.clone();
                 log!("cmd: {}", &cmd);
-                let mut path_all = String::new();
-                for (i, path) in self.multi_selection.iter().enumerate() {
-                    let var_name = format!("${}", i + 1);
-                    let path_str = path.to_str().unwrap();
-                    cmd = cmd.replace(&var_name, path_str);
-                    path_all += &format!("{} ", path_str);
-                }
-                cmd = cmd.replace("$...", &path_all.trim_end());
                 self.command_input = String::new();
                 self.show_command_window = false;
                 return self.handle_cmd(&cmd);
@@ -2519,7 +2512,20 @@ impl<'a> App<'a> {
     }
 
     fn cmd_shell_quick(&mut self, args: Vec<&str>) {
-        let shell_cmd = args[0..].join(" ");
+        // Join args into a single command string
+        let mut shell_cmd = args[0..].join(" ");
+
+        // Replace variables
+        let mut path_all = String::new();
+        for (i, path) in self.multi_selection.iter().enumerate() {
+            let var_name = format!("${}", i + 1);
+            let path_str = path.to_str().unwrap();
+            shell_cmd = shell_cmd.replace(&var_name, path_str);
+            path_all += &format!("{} ", path_str);
+        }
+        shell_cmd = shell_cmd.replace("$...", &path_all.trim_end());
+
+        // Run the command
         log!("Running shell command: {}", shell_cmd);
         match Command::new("sh").arg("-c").arg(shell_cmd).output() {
             Ok(output) => {
