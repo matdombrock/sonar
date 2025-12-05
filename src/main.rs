@@ -2387,14 +2387,12 @@ impl<'a> App<'a> {
             .arg(selected_path.to_str().unwrap())
             .status()
         {
-            Ok(_) => {
-                self.set_output("Editor", "Editor closed.");
-            }
+            Ok(_) => {}
             Err(e) => {
                 self.set_output("Editor", &format!("Failed to open editor: {}", e));
+                self.cmd_output_window_show();
             }
         }
-        self.cmd_output_window_show();
     }
 
     fn cmd_goto(&mut self, args: Vec<&str>) {
