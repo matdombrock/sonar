@@ -948,7 +948,7 @@ mod cmd_data {
             CmdName::DirBack,
             CmdData {
                 fname: "Directory Back (cd -)",
-                description: "Go back to the last working directory",
+                description: "Go back to the most recent working directory",
                 cmd: "dir-back",
                 vis_hidden: false,
                 params: vec![],
@@ -959,7 +959,7 @@ mod cmd_data {
             CmdName::DirReload,
             CmdData {
                 fname: "Directory Reload",
-                description: "Reload the current directory",
+                description: "Reload the current working directory",
                 cmd: "dir-reload",
                 vis_hidden: false,
                 params: vec![],
@@ -970,7 +970,7 @@ mod cmd_data {
             CmdName::Explode,
             CmdData {
                 fname: "Explode Mode Toggle",
-                description: "Find all files in subdirectories",
+                description: "Find all files in subdirectories under the current directory",
                 cmd: "explode",
                 vis_hidden: false,
                 params: vec![],
@@ -981,7 +981,7 @@ mod cmd_data {
             CmdName::Enter,
             CmdData {
                 fname: "Enter",
-                description: "Open/Edit/Run the current item",
+                description: "Open/Edit/Run the item under the cursor",
                 cmd: "enter",
                 vis_hidden: true,
                 params: vec![],
@@ -1014,7 +1014,7 @@ mod cmd_data {
             CmdName::CmdList,
             CmdData {
                 fname: "Command List",
-                description: "List all commands",
+                description: "List all commands in the output window",
                 cmd: "cmd-list",
                 vis_hidden: false,
                 params: vec![],
@@ -1025,7 +1025,7 @@ mod cmd_data {
             CmdName::OutputWinToggle,
             CmdData {
                 fname: "Output Window Toggle",
-                description: "Toggle output window",
+                description: "Toggle the output window",
                 cmd: "output-toggle",
                 vis_hidden: false,
                 params: vec![],
@@ -1036,7 +1036,7 @@ mod cmd_data {
             CmdName::OutputWinShow,
             CmdData {
                 fname: "Output Window Show",
-                description: "Show output window",
+                description: "Show the output window",
                 cmd: "output-show",
                 vis_hidden: false,
                 params: vec![],
@@ -1047,7 +1047,7 @@ mod cmd_data {
             CmdName::OutputWinHide,
             CmdData {
                 fname: "Output Window Hide",
-                description: "Hide output window",
+                description: "Hide the output window",
                 cmd: "output-hide",
                 vis_hidden: false,
                 params: vec![],
@@ -1058,7 +1058,7 @@ mod cmd_data {
             CmdName::Sel,
             CmdData {
                 fname: "Select Item Toggle",
-                description: "Toggle selection of current item",
+                description: "Toggle selection of the item under the cursor",
                 cmd: "sel",
                 vis_hidden: false,
                 params: vec![],
@@ -1069,7 +1069,7 @@ mod cmd_data {
             CmdName::SelClear,
             CmdData {
                 fname: "Selection Clear",
-                description: "Clear selection",
+                description: "Clear the current selection of files and directories",
                 cmd: "sel-clear",
                 vis_hidden: false,
                 params: vec![],
@@ -1080,7 +1080,7 @@ mod cmd_data {
             CmdName::SelShow,
             CmdData {
                 fname: "Selection Show",
-                description: "Show selection in the output window",
+                description: "Show the current selection of files and directories in the output window",
                 cmd: "sel-show",
                 vis_hidden: false,
                 params: vec![],
@@ -1091,7 +1091,7 @@ mod cmd_data {
             CmdName::SelSave,
             CmdData {
                 fname: "Selection Save",
-                description: "Save selection to file",
+                description: "Save the current selection of files and directories to file",
                 cmd: "sel-save",
                 vis_hidden: false,
                 params: vec![],
@@ -1102,7 +1102,7 @@ mod cmd_data {
             CmdName::SelCopy,
             CmdData {
                 fname: "Selection Copy",
-                description: "Copy selection to the current directory",
+                description: "Copy the current selection of files and directories to the current directory",
                 cmd: "sel-copy",
                 vis_hidden: false,
                 params: vec![],
@@ -1113,7 +1113,7 @@ mod cmd_data {
             CmdName::SelDelete,
             CmdData {
                 fname: "Selection Delete",
-                description: "Delete selection files",
+                description: "Delete all currently selected files and directories",
                 cmd: "sel-delete",
                 vis_hidden: false,
                 params: vec![],
@@ -1124,7 +1124,7 @@ mod cmd_data {
             CmdName::SelMove,
             CmdData {
                 fname: "Selection Move",
-                description: "Move (not copy) selection to the current directory",
+                description: "Move (not copy) the currently selected files and directories to the current directory",
                 cmd: "sel-move",
                 vis_hidden: false,
                 params: vec![],
@@ -1135,7 +1135,7 @@ mod cmd_data {
             CmdName::SelClipPath,
             CmdData {
                 fname: "Selection Copy Paths to Clipboard",
-                description: "Copy selection file paths to clipboard",
+                description: "Copy the current selection of file and diretory paths to clipboard",
                 cmd: "sel-clip",
                 vis_hidden: false,
                 params: vec![],
@@ -1157,7 +1157,7 @@ mod cmd_data {
             CmdName::Log,
             CmdData {
                 fname: "Low Viewer",
-                description: "Show application log",
+                description: "Show the application log",
                 cmd: "log",
                 vis_hidden: false,
                 params: vec![],
@@ -1168,7 +1168,7 @@ mod cmd_data {
             CmdName::LogClear,
             CmdData {
                 fname: "Log Clear",
-                description: "Clear application log",
+                description: "Clear the application log",
                 cmd: "log-clear",
                 vis_hidden: false,
                 params: vec![],
@@ -1178,8 +1178,8 @@ mod cmd_data {
         map.insert(
             CmdName::SecUp,
             CmdData {
-                fname: "Secondary Scroll Up",
-                description: "Scroll secondary window up",
+                fname: "Secondary Window Scroll Up",
+                description: "Scroll the secondary window up",
                 cmd: "sec-up",
                 vis_hidden: true,
                 params: vec![],
@@ -1189,8 +1189,8 @@ mod cmd_data {
         map.insert(
             CmdName::SecDown,
             CmdData {
-                fname: "Secondary Scroll Down",
-                description: "Scroll secondary window down",
+                fname: "Secondary Window Scroll Down",
+                description: "Scroll the secondary window down",
                 cmd: "sec-down",
                 vis_hidden: true,
                 params: vec![],
@@ -1201,7 +1201,7 @@ mod cmd_data {
             CmdName::KeybindsShow,
             CmdData {
                 fname: "Show Keybinds",
-                description: "Show current keybindings",
+                description: "Show the currently loaded keybindings",
                 cmd: "keybinds-show",
                 vis_hidden: false,
                 params: vec![],
@@ -1212,7 +1212,7 @@ mod cmd_data {
             CmdName::DbgClear,
             CmdData {
                 fname: "Debug Clear",
-                description: "Clear screen content. Some terminals may not refresh properly causing artifacts.",
+                description: "Clear the screen content. Some terminals may not refresh properly causing artifacts.",
                 cmd: "dbg-prev-clear",
                 vis_hidden: false,
                 params: vec![],
@@ -1223,7 +1223,7 @@ mod cmd_data {
             CmdName::Edit,
             CmdData {
                 fname: "Edit File",
-                description: "Open focused file or directory in $EDITOR",
+                description: "Open the focused file or directory in $EDITOR",
                 cmd: "edit",
                 vis_hidden: false,
                 params: vec![],
@@ -1234,7 +1234,7 @@ mod cmd_data {
             CmdName::GoTo,
             CmdData {
                 fname: "Go To Directory",
-                description: "Go to specified directory",
+                description: "Go to a specified directory",
                 cmd: "goto",
                 vis_hidden: false,
                 params: vec!["path"],
@@ -1246,7 +1246,7 @@ mod cmd_data {
             CmdData {
                 fname: "Clear Input",
                 description: "Clear the current input/search",
-                cmd: "clear-input",
+                cmd: "input-clear",
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::input_clear,
@@ -1278,7 +1278,7 @@ mod cmd_data {
             CmdName::ConfigInit,
             CmdData {
                 fname: "Config Init",
-                description: "Initialize configuration files with defaults",
+                description: "Initialize the configuration files with defaults",
                 cmd: "config-init",
                 vis_hidden: false,
                 params: vec![],
@@ -1289,7 +1289,7 @@ mod cmd_data {
             CmdName::ConfigClear,
             CmdData {
                 fname: "Config Clear",
-                description: "Clear configuration files",
+                description: "Clear (delete) the configuration files",
                 cmd: "config-clear",
                 vis_hidden: false,
                 params: vec![],
@@ -1535,7 +1535,7 @@ cmd-find    ctrl-t
 cmd-list    ctrl-i
 sec-up      alt-k
 sec-down    alt-j
-clear-input ctrl-z
+input-clear ctrl-z
 shell       ctrl-s
 "#;
     #[derive(Clone)]

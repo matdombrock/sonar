@@ -64,6 +64,7 @@ Maybe `select` is what needs to change and `mul-sel` becomes `sel`
 - Optional bat integration
 - Custom native shell commands
 - Image preview
+- Discoverable commands and features
 
 ## Goals
 
