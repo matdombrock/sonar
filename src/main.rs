@@ -589,6 +589,12 @@ mod cmd {
         app.selection_index = 0;
     }
 
+    pub fn cmd_clear_input(app: &mut App, _args: Vec<&str>) {
+        app.input.clear();
+        app.update_results();
+        app.selection_index = 0;
+    }
+
     pub fn cmd_shell_quick(app: &mut App, args: Vec<&str>) {
         // Join args into a single command string
         let mut shell_cmd = args[0..].join(" ");
@@ -672,6 +678,7 @@ mod cmd_data {
         DbgClear,
         Edit,
         GoTo,
+        ClearInput,
         ShellQuick,
         ShellFull,
     }
@@ -1045,6 +1052,17 @@ mod cmd_data {
             },
         );
         map.insert(
+            CmdName::ClearInput,
+            CmdData {
+                fname: "Clear Input",
+                description: "Clear the current input/search",
+                cmd: "clear-input",
+                vis_hidden: false,
+                params: vec![],
+                op: cmd::cmd_clear_input,
+            },
+        );
+        map.insert(
             CmdName::ShellQuick,
             CmdData {
                 fname: "Shell Quick",
@@ -1068,101 +1086,6 @@ mod cmd_data {
         );
 
         map
-    }
-}
-
-// Each item in the listing is a "Node"
-// NodeInfo holds information each node
-mod node_info {
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
-    use std::path::Path;
-
-    use mime_guess::mime;
-
-    use crate::log;
-
-    #[derive(Clone, PartialEq)]
-    pub enum NodeType {
-        File,         // A regular file
-        Directory,    // A directory
-        Shortcut,     // Internal shortcut
-        Command,      // Internal command, name should always be the command string
-        ShellCommand, // A shell command
-        Executable,   // An executable file
-        Image,        // An image file
-        Symlink,      // A symbolic link
-        Unknown,      // Unknown, unsupported, etc.
-    }
-    impl NodeType {
-        pub fn find(path: &Path, metadata: fs::Metadata) -> NodeType {
-            if metadata.is_dir() {
-                NodeType::Directory
-            } else if metadata.is_file() {
-                #[cfg(unix)]
-                {
-                    if metadata.permissions().mode() & 0o111 != 0 {
-                        return NodeType::Executable;
-                    }
-                }
-                // Check if image
-                // // SLOW
-                let file_type = mime_guess::from_path(path).first_or_octet_stream();
-                if file_type.type_() == mime::IMAGE {
-                    log!("Detected image mime type: {}", file_type.essence_str());
-                    return NodeType::Image;
-                }
-
-                NodeType::File
-            } else if metadata.file_type().is_symlink() {
-                NodeType::Symlink
-            } else {
-                NodeType::Unknown
-            }
-        }
-    }
-
-    // Information about a file or directory
-    #[derive(Clone)]
-    pub struct NodeInfo {
-        pub name: String,
-        pub node_type: NodeType,
-    }
-    impl NodeInfo {
-        pub fn new() -> Self {
-            Self {
-                name: String::new(),
-                node_type: NodeType::Unknown,
-            }
-        }
-        // UNUSED
-        // pub fn is(&self, _is: NodeType) -> bool {
-        //     return self.node_type == _is;
-        // }
-        pub fn is_file(&self) -> bool {
-            return self.node_type == NodeType::File;
-        }
-        pub fn is_dir(&self) -> bool {
-            return self.node_type == NodeType::Directory;
-        }
-        pub fn is_shortcut(&self) -> bool {
-            return self.node_type == NodeType::Shortcut;
-        }
-        pub fn is_command(&self) -> bool {
-            return self.node_type == NodeType::Command;
-        }
-        pub fn is_shell_command(&self) -> bool {
-            return self.node_type == NodeType::ShellCommand;
-        }
-        pub fn is_executable(&self) -> bool {
-            return self.node_type == NodeType::Executable;
-        }
-        pub fn is_image(&self) -> bool {
-            return self.node_type == NodeType::Image;
-        }
-        pub fn is_unknown(&self) -> bool {
-            return self.node_type == NodeType::Unknown;
-        }
     }
 }
 
@@ -1400,6 +1323,7 @@ cmd-list    ctrl-i
 mul-sel     tab
 sec-up      alt-k
 sec-down    alt-j
+clear-input ctrl-z
 shell       ctrl-s
 "#;
     #[derive(Clone)]
@@ -1683,6 +1607,101 @@ zip -r archive.zip $...
             list.push(format!("{} {}", shell_cmd_name, line));
         }
         list
+    }
+}
+
+// Each item in the listing is a "Node"
+// NodeInfo holds information each node
+mod node_info {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::Path;
+
+    use mime_guess::mime;
+
+    use crate::log;
+
+    #[derive(Clone, PartialEq)]
+    pub enum NodeType {
+        File,         // A regular file
+        Directory,    // A directory
+        Shortcut,     // Internal shortcut
+        Command,      // Internal command, name should always be the command string
+        ShellCommand, // A shell command
+        Executable,   // An executable file
+        Image,        // An image file
+        Symlink,      // A symbolic link
+        Unknown,      // Unknown, unsupported, etc.
+    }
+    impl NodeType {
+        pub fn find(path: &Path, metadata: fs::Metadata) -> NodeType {
+            if metadata.is_dir() {
+                NodeType::Directory
+            } else if metadata.is_file() {
+                #[cfg(unix)]
+                {
+                    if metadata.permissions().mode() & 0o111 != 0 {
+                        return NodeType::Executable;
+                    }
+                }
+                // Check if image
+                // // SLOW
+                let file_type = mime_guess::from_path(path).first_or_octet_stream();
+                if file_type.type_() == mime::IMAGE {
+                    log!("Detected image mime type: {}", file_type.essence_str());
+                    return NodeType::Image;
+                }
+
+                NodeType::File
+            } else if metadata.file_type().is_symlink() {
+                NodeType::Symlink
+            } else {
+                NodeType::Unknown
+            }
+        }
+    }
+
+    // Information about a file or directory
+    #[derive(Clone)]
+    pub struct NodeInfo {
+        pub name: String,
+        pub node_type: NodeType,
+    }
+    impl NodeInfo {
+        pub fn new() -> Self {
+            Self {
+                name: String::new(),
+                node_type: NodeType::Unknown,
+            }
+        }
+        // UNUSED
+        // pub fn is(&self, _is: NodeType) -> bool {
+        //     return self.node_type == _is;
+        // }
+        pub fn is_file(&self) -> bool {
+            return self.node_type == NodeType::File;
+        }
+        pub fn is_dir(&self) -> bool {
+            return self.node_type == NodeType::Directory;
+        }
+        pub fn is_shortcut(&self) -> bool {
+            return self.node_type == NodeType::Shortcut;
+        }
+        pub fn is_command(&self) -> bool {
+            return self.node_type == NodeType::Command;
+        }
+        pub fn is_shell_command(&self) -> bool {
+            return self.node_type == NodeType::ShellCommand;
+        }
+        pub fn is_executable(&self) -> bool {
+            return self.node_type == NodeType::Executable;
+        }
+        pub fn is_image(&self) -> bool {
+            return self.node_type == NodeType::Image;
+        }
+        pub fn is_unknown(&self) -> bool {
+            return self.node_type == NodeType::Unknown;
+        }
     }
 }
 
