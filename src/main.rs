@@ -119,7 +119,8 @@ mod log {
 
 // Command implementations
 mod cmd {
-    use crate::{APP_NAME, App, SEP, cfg, cls, cmd_data, cs, kb, log, sc, shell_cmds};
+    use crate::util;
+    use crate::{APP_NAME, App, SEP, cfg, cmd_data, cs, kb, log, sc, shell_cmds};
     use clipboard::ClipboardContext;
     use clipboard::ClipboardProvider;
     use std::{env, fs, path::PathBuf, process::Command};
@@ -659,8 +660,7 @@ mod cmd {
     pub fn shell_full(app: &mut App, _args: Vec<&str>) {
         let shell = env::var("SHELL").unwrap_or("/bin/sh".to_string());
         log!("Opening shell: {}", shell);
-        cls();
-        // Clear terminal before opening shell
+        util::cls();
         match Command::new(shell).status() {
             Ok(_) => {
                 app.set_output("Shell", "Shell closed.");
@@ -669,7 +669,7 @@ mod cmd {
                 app.set_output("Shell", &format!("Failed to open shell: {}", e));
             }
         }
-        cls();
+        util::cls();
         app.term_clear = true;
         output_window_show(app, vec![]);
     }
@@ -1824,6 +1824,24 @@ zip -r archive.zip $...
     }
 }
 
+mod util {
+    use std::path::PathBuf;
+
+    pub fn cls() {
+        println!("\x1B[2J\x1B[1;1H");
+    }
+
+    pub fn fpath(path: &PathBuf) -> String {
+        let pstring = path.to_str().unwrap().to_string();
+        let home = dirs::home_dir().unwrap();
+        let home_str = home.to_str().unwrap();
+        if pstring.starts_with(home_str) {
+            return pstring.replacen(home_str, "~", 1);
+        }
+        pstring
+    }
+}
+
 // Each item in the listing is a "Node"
 // NodeInfo holds information each node
 mod node_info {
@@ -2132,16 +2150,6 @@ impl<'a> App<'a> {
         shell_cmd.replace("$...", &path_all.trim_end())
     }
 
-    fn fpath(&self, path: &PathBuf) -> String {
-        let pstring = path.to_str().unwrap().to_string();
-        let home = dirs::home_dir().unwrap();
-        let home_str = home.to_str().unwrap();
-        if pstring.starts_with(home_str) {
-            return pstring.replacen(home_str, "~", 1);
-        }
-        pstring
-    }
-
     fn fmtln_info(&self, label: &str, value: &str) -> Line<'a> {
         Line::styled(
             format!("{} {:<12}: {}", nf::INFO, label, value),
@@ -2230,25 +2238,25 @@ impl<'a> App<'a> {
         self.preview_content += check_found_file(
             self.found_keybinds,
             "keybinds",
-            self.fpath(&kb::get_path()).as_ref(),
+            util::fpath(&kb::get_path()).as_ref(),
             self.cs.clone(),
         );
         self.preview_content += check_found_file(
             self.found_cs,
             "colors",
-            self.fpath(&cs::Colors::get_path()).as_ref(),
+            util::fpath(&cs::Colors::get_path()).as_ref(),
             self.cs.clone(),
         );
         self.preview_content += check_found_file(
             self.found_cfg,
             "config",
-            self.fpath(&cfg::Config::get_path()).as_ref(),
+            util::fpath(&cfg::Config::get_path()).as_ref(),
             self.cs.clone(),
         );
         self.preview_content += check_found_file(
             self.found_shell_cmds,
             "shell commands",
-            self.fpath(&shell_cmds::get_path()).as_ref(),
+            util::fpath(&shell_cmds::get_path()).as_ref(),
             self.cs.clone(),
         );
         self.preview_content += Line::from("");
@@ -3022,7 +3030,7 @@ impl<'a> App<'a> {
         } else {
             "".to_string()
         };
-        let list_title = format!("|{}{} ", self.fpath(&self.cwd), explode_str);
+        let list_title = format!("|{}{} ", util::fpath(&self.cwd), explode_str);
         let list_widget = List::new(results_pretty).block(
             Block::default()
                 .title(list_title)
@@ -3180,14 +3188,10 @@ impl<'a> App<'a> {
     }
 }
 
-fn cls() {
-    println!("\x1B[2J\x1B[1;1H");
-}
-
 fn main() -> Result<()> {
     log!("======= Starting application =======");
     color_eyre::install()?;
-    cls();
+    util::cls();
     enable_raw_mode()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout()))?;
 
@@ -3196,7 +3200,7 @@ fn main() -> Result<()> {
     app.run(&mut terminal)?;
 
     disable_raw_mode()?;
-    cls();
+    util::cls();
     println!("{} exited successfully.", APP_NAME);
     Ok(())
 }
