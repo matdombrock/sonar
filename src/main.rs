@@ -1380,24 +1380,24 @@ mod kb {
 # Default keybinds
 #
 
+exit        esc
 exit        ctrl-q
-exit        none-esc
 home        alt-h
-sel-up      none-up
+sel-up      up
 sel-up      ctrl-k
-sel-down    none-down
+sel-down    down
 sel-down    ctrl-j
 dir-up      ctrl-h
 dir-back    ctrl-u
 explode     ctrl-x
 edit        ctrl-e
-goto       ctrl-g
-select      none-enter
+goto        ctrl-g
+select      enter
 select      ctrl-l
 cmd-win     ctrl-w
 cmd-find    ctrl-t 
 cmd-list    ctrl-i
-mul-sel     none-tab
+mul-sel     tab
 sec-up      alt-k
 sec-down    alt-j
 shell       ctrl-s
@@ -1419,18 +1419,22 @@ shell       ctrl-s
     }
     pub type KeyBindList = Vec<KeyBind>;
 
+    // Short string like "ctrl-a"
     pub fn to_string_short(kb: &KeyBind) -> String {
         let modifier = match kb.modifiers {
             KeyModifiers::ALT => "alt",
             KeyModifiers::CONTROL => "ctrl",
             KeyModifiers::SHIFT => "shift",
-            KeyModifiers::NONE => "none",
+            KeyModifiers::NONE => "",
             _ => "UNKNOWN",
         };
+        if modifier.is_empty() {
+            return format!("{}", kb.code.to_string().to_lowercase());
+        }
         return format!("{}-{}", modifier, kb.code.to_string().to_lowercase());
     }
 
-    // Needs the command list before KeyBind only points to enum
+    // Full string with command name
     pub fn to_string_full(cmd_list: &cmd_data::CmdList, kb: &KeyBind) -> String {
         return format!(
             "{:<12} {}\n",
@@ -1485,14 +1489,12 @@ shell       ctrl-s
             }
             let cmd = split[0];
             let combo = split[1];
-            let mut modifier = "none";
-            let mut code = combo;
-            if combo.contains('-') {
-                let combo_split = combo.split('-').collect::<Vec<&str>>();
-                modifier = combo_split[0];
-                code = combo_split[1];
-            }
-            //
+            let (modifier, code) = if combo.contains('-') {
+                let combo_split = combo.splitn(2, '-').collect::<Vec<&str>>();
+                (combo_split[0], combo_split[1])
+            } else {
+                ("none", combo)
+            };
             let cmd = match cmd_data::cmd_name_from_str(&cmd_list, cmd) {
                 Some(name) => name,
                 None => {
