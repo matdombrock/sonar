@@ -589,8 +589,9 @@ mod cmd {
         app.selection_index = 0;
     }
 
-    pub fn clear_input(app: &mut App, _args: Vec<&str>) {
+    pub fn input_clear(app: &mut App, _args: Vec<&str>) {
         app.input.clear();
+        app.command_input.clear();
         app.update_results();
         app.selection_index = 0;
     }
@@ -678,7 +679,7 @@ mod cmd_data {
         DbgClear,
         Edit,
         GoTo,
-        ClearInput,
+        InputClear,
         ShellQuick,
         ShellFull,
     }
@@ -1052,14 +1053,14 @@ mod cmd_data {
             },
         );
         map.insert(
-            CmdName::ClearInput,
+            CmdName::InputClear,
             CmdData {
                 fname: "Clear Input",
                 description: "Clear the current input/search",
                 cmd: "clear-input",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::clear_input,
+                op: cmd::input_clear,
             },
         );
         map.insert(
