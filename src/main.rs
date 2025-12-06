@@ -59,8 +59,9 @@ const ASK: &str = "{ASK}";
 // Nerd font icons
 mod nf {
     pub const MAG: &str = "󰍉";
-    pub const LOOK: &str = "";
+    pub const LOOK: &str = "󰮔";
     pub const SEL: &str = ""; //➤
+    pub const MSEL: &str = "󰅎";
     pub const DIR: &str = "";
     pub const DIRO: &str = "󰉒";
     pub const FILE: &str = "";
@@ -1108,10 +1109,7 @@ mod node_info {
                 // // SLOW
                 let file_type = mime_guess::from_path(path).first_or_octet_stream();
                 if file_type.type_() == mime::IMAGE {
-                    log!(
-                        "!!!!!!!!!!!Detected image mime type: {}",
-                        file_type.essence_str()
-                    );
+                    log!("Detected image mime type: {}", file_type.essence_str());
                     return NodeType::Image;
                 }
 
@@ -2035,7 +2033,7 @@ impl<'a> App<'a> {
                     break;
                 }
             }
-            let ms_on = format!("{} ", nf::CHECK);
+            let ms_on = format!("{} ", nf::MSEL);
             if is_multi_selected {
                 ms = &ms_on;
             }
@@ -2871,7 +2869,7 @@ impl<'a> App<'a> {
             unix_time % 60
         );
         let multi_count = self.multi_selection.len();
-        let status_text = format!(" {} | multi: {} | {}", whoami, multi_count, hhmmss);
+        let status_text = format!(" {} | {} {} | {}", whoami, nf::MSEL, multi_count, hhmmss);
         let status_widget =
             Paragraph::new(status_text).style(Style::default().fg(self.cs.dim).bg(Color::Black));
         frame.render_widget(status_widget, status_area);
