@@ -128,16 +128,16 @@ mod cmd {
         app.should_quit = true;
     }
 
-    pub fn select(app: &mut App, _args: Vec<&str>) {
+    pub fn enter(app: &mut App, _args: Vec<&str>) {
         // Update input to empty to reset search
         app.input = String::new();
         app.update_results();
-        // Get selection
-        let selection = app.selection.clone();
+        // Get focused
+        let focused = app.focused.clone();
         // NOTE: Handle shortcuts selections
         // Handle internal commands
         // Handle actual selection
-        match selection.name.as_str() {
+        match focused.name.as_str() {
             // Shortcuts
             sc::EXIT => {}
             sc::HOME => {
@@ -166,13 +166,12 @@ mod cmd {
             }
             // Either an internal command, file or dir
             _ => {
-                // Check if selection is an internal command
-                if selection.is_command() {
-                    let cmd_name = match cmd_data::cmd_name_from_str(&app.cmd_list, &selection.name)
-                    {
+                // Check if focused is an internal command
+                if focused.is_command() {
+                    let cmd_name = match cmd_data::cmd_name_from_str(&app.cmd_list, &focused.name) {
                         Some(name) => name,
                         None => {
-                            app.set_output("Error", "Command data not found for selected command.");
+                            app.set_output("Error", "Command data not found for focused command.");
                             output_window_show(app, vec![]);
                             return;
                         }
@@ -188,27 +187,27 @@ mod cmd {
                         app.show_command_window = true;
                         return;
                     }
-                    app.handle_cmd(&selection.name);
+                    app.handle_cmd(&focused.name);
                     return;
                 }
-                // Check if selection is a shell command
-                if selection.is_shell_command() {
+                // Check if focused is a shell command
+                if focused.is_shell_command() {
                     app.mode_cmd_finder = false;
                     app.update_listing();
                     app.update_results();
-                    app.handle_cmd(&selection.name);
+                    app.handle_cmd(&focused.name);
                     return;
                 }
-                // If we have a file, run the on_select command
+                // If we have a file, run the on_enter command
                 // We have a directory, enter it
-                if selection.is_file() {
-                    app.handle_cmd(app.cfg.cmd_on_select.clone().as_str());
+                if focused.is_file() {
+                    app.handle_cmd(app.cfg.cmd_on_enter.clone().as_str());
                     return;
-                } else if selection.is_dir() {
-                    app.append_cwd(&app.selection.name.clone().into());
+                } else if focused.is_dir() {
+                    app.append_cwd(&app.focused.name.clone().into());
                     app.update_listing();
                     app.update_results();
-                    app.selection_index = 0;
+                    app.focus_index = 0;
                     return;
                 } else {
                     app.set_output("Error", "Selected item is neither a file nor a directory.");
@@ -223,51 +222,51 @@ mod cmd {
         app.append_cwd(&dirs::home_dir().unwrap());
         app.update_listing();
         app.update_results();
-        app.selection_index = 0;
+        app.focus_index = 0;
     }
 
     pub fn dir_up(app: &mut App, _args: Vec<&str>) {
         app.append_cwd(&"..".into());
         app.update_listing();
         app.update_results();
-        app.selection_index = 0;
+        app.focus_index = 0;
     }
 
     pub fn dir_back(app: &mut App, _args: Vec<&str>) {
         app.append_cwd(&app.lwd.clone());
         app.update_listing();
         app.update_results();
-        app.selection_index = 0;
+        app.focus_index = 0;
     }
 
     pub fn dir_reload(app: &mut App, _args: Vec<&str>) {
         app.update_listing();
         app.update_results();
-        app.selection_index = 0;
+        app.focus_index = 0;
     }
 
     pub fn explode(app: &mut App, _args: Vec<&str>) {
         app.mode_explode = !app.mode_explode;
         app.update_listing();
         app.update_results();
-        app.update_selection();
+        app.update_focused();
         app.update_preview();
-        app.selection_index = 0;
+        app.focus_index = 0;
     }
 
-    pub fn sel_down(app: &mut App, _args: Vec<&str>) {
-        app.selection_index += 1;
-        if app.selection_index >= app.results.len() as i32 {
-            app.selection_index = 0;
+    pub fn cur_down(app: &mut App, _args: Vec<&str>) {
+        app.focus_index += 1;
+        if app.focus_index >= app.results.len() as i32 {
+            app.focus_index = 0;
         }
     }
 
-    pub fn sel_up(app: &mut App, _args: Vec<&str>) {
-        app.selection_index += -1;
-        if app.selection_index < 0 && !app.results.is_empty() {
-            app.selection_index = app.results.len() as i32 - 1;
+    pub fn cur_up(app: &mut App, _args: Vec<&str>) {
+        app.focus_index += -1;
+        if app.focus_index < 0 && !app.results.is_empty() {
+            app.focus_index = app.results.len() as i32 - 1;
         } else if app.results.is_empty() {
-            app.selection_index = 0;
+            app.focus_index = 0;
         }
     }
 
@@ -288,16 +287,16 @@ mod cmd {
     }
 
     pub fn multi_sel(app: &mut App, _args: Vec<&str>) {
-        if !app.selection.is_file() && !app.selection.is_dir() {
+        if !app.focused.is_file() && !app.focused.is_dir() {
             return;
         }
-        let mut selected_path = app.cwd.clone();
-        selected_path.push(&app.selection.name);
+        let mut focused_path = app.cwd.clone();
+        focused_path.push(&app.focused.name);
         // Check if already in multi selection
-        if let Some(pos) = app.multi_selection.iter().position(|x| *x == selected_path) {
+        if let Some(pos) = app.multi_selection.iter().position(|x| *x == focused_path) {
             app.multi_selection.remove(pos);
         } else {
-            app.multi_selection.push(selected_path);
+            app.multi_selection.push(focused_path);
         }
     }
 
@@ -475,7 +474,7 @@ mod cmd {
         app.mode_cmd_finder = !app.mode_cmd_finder;
         app.update_listing();
         app.update_results();
-        app.selection_index = 0;
+        app.focus_index = 0;
     }
 
     // Show a list of commands
@@ -591,18 +590,18 @@ mod cmd {
         output_window_show(app, vec![]);
     }
 
-    // Edit the selected file
+    // Edit the focused file
     pub fn edit(app: &mut App, _args: Vec<&str>) {
-        let mut selected_path = app.cwd.clone();
-        selected_path.push(&app.selection.name);
+        let mut focused_path = app.cwd.clone();
+        focused_path.push(&app.focused.name);
         let editor = env::var("EDITOR").unwrap_or("vi".to_string());
         log!(
             "Opening editor: {} {}",
             editor,
-            selected_path.to_str().unwrap()
+            focused_path.to_str().unwrap()
         );
         match Command::new(editor)
-            .arg(selected_path.to_str().unwrap())
+            .arg(focused_path.to_str().unwrap())
             .status()
         {
             Ok(_) => {}
@@ -623,14 +622,14 @@ mod cmd {
         app.append_cwd(&path);
         app.update_listing();
         app.update_results();
-        app.selection_index = 0;
+        app.focus_index = 0;
     }
 
     pub fn input_clear(app: &mut App, _args: Vec<&str>) {
         app.input.clear();
         app.command_input.clear();
         app.update_results();
-        app.selection_index = 0;
+        app.focus_index = 0;
     }
 
     pub fn shell_quick(app: &mut App, args: Vec<&str>) {
@@ -815,27 +814,27 @@ mod cmd_data {
     pub enum CmdName {
         Exit,
         Home,
-        SelUp,
-        SelDown,
+        CurUp,
+        CurDown,
         DirUp,
         DirBack,
         DirReload,
         Explode,
-        Select,
+        Enter,
         CmdWinToggle,
         CmdFinderToggle,
         CmdList,
         OutputWinToggle,
         OutputWinShow,
         OutputWinHide,
-        MultiSel,
-        MultiClear,
-        MultiShow,
-        MultiSave,
-        MultiCopy,
-        MultiDelete,
-        MultiMove,
-        MultiClipPath,
+        Sel,
+        SelClear,
+        SelShow,
+        SelSave,
+        SelCopy,
+        SelDelete,
+        SelMove,
+        SelClipPath,
         MenuBack,
         Log,
         LogClear,
@@ -913,25 +912,25 @@ mod cmd_data {
             },
         );
         map.insert(
-            CmdName::SelUp,
+            CmdName::CurUp,
             CmdData {
-                fname: "Selection Up",
-                description: "Move selection up",
-                cmd: "sel-up",
+                fname: "Cursor Up",
+                description: "Move selection cursor up",
+                cmd: "cur-up",
                 vis_hidden: true,
                 params: vec![],
-                op: cmd::sel_up,
+                op: cmd::cur_up,
             },
         );
         map.insert(
-            CmdName::SelDown,
+            CmdName::CurDown,
             CmdData {
-                fname: "Selection Down",
-                description: "Move selection down",
-                cmd: "sel-down",
+                fname: "Cursor Down",
+                description: "Move selection cursor down",
+                cmd: "cur-down",
                 vis_hidden: true,
                 params: vec![],
-                op: cmd::sel_down,
+                op: cmd::cur_down,
             },
         );
         map.insert(
@@ -979,14 +978,14 @@ mod cmd_data {
             },
         );
         map.insert(
-            CmdName::Select,
+            CmdName::Enter,
             CmdData {
-                fname: "Select Current Item",
-                description: "Select the current item",
-                cmd: "select",
+                fname: "Enter",
+                description: "Open/Edit/Run the current item",
+                cmd: "enter",
                 vis_hidden: true,
                 params: vec![],
-                op: cmd::select,
+                op: cmd::enter,
             },
         );
         map.insert(
@@ -1056,88 +1055,88 @@ mod cmd_data {
             },
         );
         map.insert(
-            CmdName::MultiSel,
+            CmdName::Sel,
             CmdData {
-                fname: "Multi-Select Toggle",
-                description: "Toggle multi-selection for current item",
-                cmd: "mul-sel",
+                fname: "Select Item Toggle",
+                description: "Toggle selection of current item",
+                cmd: "sel",
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::multi_sel,
             },
         );
         map.insert(
-            CmdName::MultiClear,
+            CmdName::SelClear,
             CmdData {
-                fname: "Multi-Select Clear",
-                description: "Clear multi-selection",
-                cmd: "mul-clear",
+                fname: "Selection Clear",
+                description: "Clear selection",
+                cmd: "sel-clear",
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::multi_clear,
             },
         );
         map.insert(
-            CmdName::MultiShow,
+            CmdName::SelShow,
             CmdData {
-                fname: "Multi-Select Show",
-                description: "Show multi-selection in the output window",
-                cmd: "mul-show",
+                fname: "Selection Show",
+                description: "Show selection in the output window",
+                cmd: "sel-show",
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::multi_show,
             },
         );
         map.insert(
-            CmdName::MultiSave,
+            CmdName::SelSave,
             CmdData {
-                fname: "Multi-Select Save",
-                description: "Save multi-selection to file",
-                cmd: "mul-save",
+                fname: "Selection Save",
+                description: "Save selection to file",
+                cmd: "sel-save",
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::multi_save,
             },
         );
         map.insert(
-            CmdName::MultiCopy,
+            CmdName::SelCopy,
             CmdData {
-                fname: "Multi-Select Copy",
-                description: "Copy multi-selection to the current directory",
-                cmd: "mul-copy",
+                fname: "Selection Copy",
+                description: "Copy selection to the current directory",
+                cmd: "sel-copy",
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::multi_copy,
             },
         );
         map.insert(
-            CmdName::MultiDelete,
+            CmdName::SelDelete,
             CmdData {
-                fname: "Multi-Select Delete",
-                description: "Delete multi-selection files",
-                cmd: "mul-delete",
+                fname: "Selection Delete",
+                description: "Delete selection files",
+                cmd: "sel-delete",
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::multi_delete,
             },
         );
         map.insert(
-            CmdName::MultiMove,
+            CmdName::SelMove,
             CmdData {
-                fname: "Multi-Select Move",
-                description: "Move (not copy) multi-selection to the current directory",
-                cmd: "mul-move",
+                fname: "Selection Move",
+                description: "Move (not copy) selection to the current directory",
+                cmd: "sel-move",
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::multi_move,
             },
         );
         map.insert(
-            CmdName::MultiClipPath,
+            CmdName::SelClipPath,
             CmdData {
-                fname: "Multi-Select Copy Paths to Clipboard",
-                description: "Copy multi-selection file paths to clipboard",
-                cmd: "mul-clip",
+                fname: "Selection Copy Paths to Clipboard",
+                description: "Copy selection file paths to clipboard",
+                cmd: "sel-clip",
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::multi_clip_path,
@@ -1224,7 +1223,7 @@ mod cmd_data {
             CmdName::Edit,
             CmdData {
                 fname: "Edit File",
-                description: "Open selected file in $EDITOR",
+                description: "Open focused file or directory in $EDITOR",
                 cmd: "edit",
                 vis_hidden: false,
                 params: vec![],
@@ -1519,21 +1518,21 @@ mod kb {
 exit        esc
 exit        ctrl-q
 home        alt-h
-sel-up      up
-sel-up      ctrl-k
-sel-down    down
-sel-down    ctrl-j
+cur-up      up
+cur-up      ctrl-k
+cur-down    down
+cur-down    ctrl-j
+sel         tab
 dir-up      ctrl-h
 dir-back    ctrl-u
 explode     ctrl-x
 edit        ctrl-e
 goto        ctrl-g
-select      enter
-select      ctrl-l
+enter       enter
+enter       ctrl-l
 cmd-win     ctrl-w
 cmd-find    ctrl-t 
 cmd-list    ctrl-i
-mul-sel     tab
 sec-up      alt-k
 sec-down    alt-j
 clear-input ctrl-z
@@ -1685,14 +1684,14 @@ mod cfg {
     const FILE_NAME: &str = "config.txt";
     pub const DEFAULT: &str = r#"
 # Default configuration
-cmd_on_select   edit
+cmd_on_enter    edit
 # 0 = no limit
 list_limit      0
 force_sixel     false
 max_image_width 80
 "#;
     pub struct Config {
-        pub cmd_on_select: String,
+        pub cmd_on_enter: String,
         pub list_limit: i32,
         pub force_sixel: bool,
         pub max_image_width: u16,
@@ -1700,7 +1699,7 @@ max_image_width 80
     impl Config {
         pub fn new() -> Self {
             Self {
-                cmd_on_select: "edit".to_string(),
+                cmd_on_enter: "edit".to_string(),
                 list_limit: 100000,
                 force_sixel: false,
                 max_image_width: 80,
@@ -1740,7 +1739,7 @@ max_image_width 80
                 let key = split[0];
                 let value = split[1];
                 match key {
-                    "cmd_on_select" => config.cmd_on_select = value.to_string(),
+                    "cmd_on_enter" => config.cmd_on_enter = value.to_string(),
                     "list_limit" => {
                         if let Ok(limit) = value.parse::<i32>() {
                             config.list_limit = if limit == 0 { i32::MAX } else { limit };
@@ -1951,8 +1950,8 @@ struct App<'a> {
     input: String,
     listing: Vec<NodeInfo>,
     results: Vec<NodeInfo>,
-    selection: NodeInfo,
-    selection_index: i32,
+    focused: NodeInfo,
+    focus_index: i32,
     multi_selection: Vec<PathBuf>,
     preview_content: Text<'a>,
     preview_image: Option<StatefulProtocol>,
@@ -2018,8 +2017,8 @@ impl<'a> App<'a> {
             input: String::new(),
             listing: Vec::new(),
             results: Vec::new(),
-            selection: NodeInfo::new(),
-            selection_index: 0,
+            focused: NodeInfo::new(),
+            focus_index: 0,
             multi_selection: Vec::new(),
             preview_content: Default::default(),
             preview_image: None,
@@ -2267,10 +2266,10 @@ impl<'a> App<'a> {
             // Check if this item is part of the multi selection
             let mut ms = "";
             let mut is_multi_selected = false;
-            let mut selected_path = self.cwd.clone();
-            selected_path.push(&item.name);
+            let mut cur_path = self.cwd.clone();
+            cur_path.push(&item.name);
             for ms_item in self.multi_selection.iter() {
-                if *ms_item == selected_path {
+                if *ms_item == cur_path {
                     is_multi_selected = true;
                     break;
                 }
@@ -2327,18 +2326,18 @@ impl<'a> App<'a> {
         text
     }
 
-    fn preview_dir(&mut self, selected_path: &PathBuf) {
-        let path_line = self.fmtln_path(&selected_path);
+    fn preview_dir(&mut self, focused_path: &PathBuf) {
+        let path_line = self.fmtln_path(&focused_path);
         self.preview_content += path_line;
         // Get the file metadata
-        let metadata = fs::metadata(&selected_path);
+        let metadata = fs::metadata(&focused_path);
         if let Ok(meta) = metadata {
             // Get permissions
             let permissions = meta.permissions();
             let perm_line = self.fmtln_info("permissions", &format!("{:o}", permissions.mode()));
             self.preview_content += perm_line;
         }
-        let listing = self.get_directory_listing(&selected_path);
+        let listing = self.get_directory_listing(&focused_path);
         let count_line = self.fmtln_info("count", &listing.len().to_string());
         self.preview_content += count_line;
         self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
@@ -2348,11 +2347,11 @@ impl<'a> App<'a> {
         }
     }
 
-    fn preview_file(&mut self, selected_path: &PathBuf) {
-        let path_line = self.fmtln_path(&selected_path);
+    fn preview_file(&mut self, focused_path: &PathBuf) {
+        let path_line = self.fmtln_path(&focused_path);
         self.preview_content += path_line;
         // Get the file metadata
-        let metadata = fs::metadata(&selected_path);
+        let metadata = fs::metadata(&focused_path);
         if let Ok(meta) = metadata {
             // Get permissions
             let permissions = meta.permissions();
@@ -2361,7 +2360,7 @@ impl<'a> App<'a> {
             // Get mime type
             if meta.file_type().is_file() {
                 // Get mimetype using mime_guess
-                let mime = mime_guess::from_path(&selected_path).first_or_octet_stream();
+                let mime = mime_guess::from_path(&focused_path).first_or_octet_stream();
                 let mime_line = self.fmtln_info("mime", &mime.to_string());
                 self.preview_content += mime_line;
             }
@@ -2406,7 +2405,7 @@ impl<'a> App<'a> {
             if let Ok(bat_output) = Command::new("bat")
                 .arg("--color=always")
                 .arg("--style=plain")
-                .arg(selected_path.to_str().unwrap())
+                .arg(focused_path.to_str().unwrap())
                 .output()
             {
                 if bat_output.status.success() {
@@ -2443,7 +2442,7 @@ impl<'a> App<'a> {
         // FIXME: Should only load once
         let ts = ThemeSet::load_defaults();
         let syntax = ss
-            .find_syntax_for_file(&selected_path)
+            .find_syntax_for_file(&focused_path)
             .unwrap_or(None)
             .unwrap_or_else(|| ss.find_syntax_plain_text());
         let mut h = HighlightLines::new(syntax, &ts.themes["base16-eighties.dark"]);
@@ -2453,7 +2452,7 @@ impl<'a> App<'a> {
 
         self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
 
-        if let Ok(content) = fs::read_to_string(&selected_path) {
+        if let Ok(content) = fs::read_to_string(&focused_path) {
             for line in content.lines().take(100) {
                 let ranges = h.highlight_line(line, &ss).unwrap_or_default();
                 let mut styled_line = Line::default();
@@ -2473,7 +2472,7 @@ impl<'a> App<'a> {
         }
     }
 
-    fn preview_image(&mut self, selected_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+    fn preview_image(&mut self, focused_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         self.preview_content = Default::default();
         let mut picker = Picker::from_fontsize((6, 12));
         if self.cfg.force_sixel {
@@ -2483,7 +2482,7 @@ impl<'a> App<'a> {
         }
 
         // Load an image with the image crate.
-        let dyn_img = image::ImageReader::open(selected_path)?.decode()?;
+        let dyn_img = image::ImageReader::open(focused_path)?.decode()?;
 
         // Create the Protocol which will be used by the widget.
         let image = picker.new_resize_protocol(dyn_img);
@@ -2492,10 +2491,10 @@ impl<'a> App<'a> {
     }
 
     fn update_preview(&mut self) {
-        log!("Updating preview for selection: {}", self.selection.name);
+        log!("Updating preview for item: {}", self.focused.name);
         self.preview_content = Default::default();
         self.reset_sec_scroll();
-        match self.selection.name.as_str() {
+        match self.focused.name.as_str() {
             sc::EXIT => {
                 self.welcome_message();
             }
@@ -2538,9 +2537,9 @@ impl<'a> App<'a> {
             _ => {
                 self.preview_content = Default::default();
                 // Check if we have an internal command
-                if self.selection.is_command() {
+                if self.focused.is_command() {
                     let cmd_name =
-                        match cmd_data::cmd_name_from_str(&self.cmd_list, &self.selection.name) {
+                        match cmd_data::cmd_name_from_str(&self.cmd_list, &self.focused.name) {
                             Some(name) => name,
                             None => {
                                 self.preview_content += Line::styled(
@@ -2566,13 +2565,13 @@ impl<'a> App<'a> {
                     return;
                 }
                 // Check if we have a shell command
-                if self.selection.is_shell_command() {
+                if self.focused.is_shell_command() {
                     self.preview_content += Line::styled(
-                        format!("shell: {}", self.selection.name),
+                        format!("shell: {}", self.focused.name),
                         Style::default().fg(self.cs.command),
                     );
-                    let replaced = self.replace_shell_vars(self.selection.name.clone());
-                    if replaced != self.selection.name {
+                    let replaced = self.replace_shell_vars(self.focused.name.clone());
+                    if replaced != self.focused.name {
                         self.preview_content += Line::styled(
                             format!("as: {}", replaced),
                             Style::default().fg(self.cs.info),
@@ -2581,40 +2580,40 @@ impl<'a> App<'a> {
                     return;
                 }
                 // We have a file or dir
-                let mut selected_path = self.cwd.clone();
-                selected_path.push(&self.selection.name);
+                let mut focused_path = self.cwd.clone();
+                focused_path.push(&self.focused.name);
 
-                if self.selection.is_dir() {
-                    self.preview_dir(&selected_path);
-                } else if self.selection.is_file() {
-                    self.preview_file(&selected_path);
-                } else if self.selection.is_image() {
+                if self.focused.is_dir() {
+                    self.preview_dir(&focused_path);
+                } else if self.focused.is_file() {
+                    self.preview_file(&focused_path);
+                } else if self.focused.is_image() {
                     self.preview_content += Line::styled(
                         "Image file preview not yet supported.",
                         Style::default().fg(self.cs.error),
                     );
-                    let _ = self.preview_image(&selected_path);
-                } else if self.selection.is_executable() {
+                    let _ = self.preview_image(&focused_path);
+                } else if self.focused.is_executable() {
                     self.preview_content += Line::styled(
                         "Executable file preview not yet supported.",
                         Style::default().fg(self.cs.error),
                     );
-                } else if self.selection.is_shortcut() {
+                } else if self.focused.is_shortcut() {
                     self.preview_content += Line::styled(
                         "Shortcut preview not supported.",
                         Style::default().fg(self.cs.error),
                     );
-                } else if self.selection.is_unknown() {
+                } else if self.focused.is_unknown() {
                     self.preview_content +=
                         Line::styled("Unknown file type.", Style::default().fg(self.cs.error));
                 } else {
                     // Unknown
                     self.preview_content += Line::styled(
-                        "Error: Selected node type cant be detected",
+                        "Error: Focused node type cant be detected",
                         Style::default().fg(self.cs.error),
                     );
                     // Debug info
-                    let metadata = fs::metadata(&selected_path);
+                    let metadata = fs::metadata(&focused_path);
                     self.preview_content += Line::styled(
                         format!("{:?}", metadata),
                         Style::default().fg(self.cs.error),
@@ -2716,23 +2715,23 @@ impl<'a> App<'a> {
         self.scroll_off_output = 0;
     }
 
-    fn update_selection(&mut self) -> bool {
-        let old = self.selection.clone();
-        if self.selection_index < self.results.len() as i32 {
-            self.selection = self.results[self.selection_index as usize].clone();
+    fn update_focused(&mut self) -> bool {
+        let old = self.focused.clone();
+        if self.focus_index < self.results.len() as i32 {
+            self.focused = self.results[self.focus_index as usize].clone();
         } else if !self.results.is_empty() {
-            self.selection_index = 0;
-            self.selection = NodeInfo::new();
+            self.focus_index = 0;
+            self.focused = NodeInfo::new();
         } else {
-            self.selection_index = 0;
-            self.selection = NodeInfo::new();
+            self.focus_index = 0;
+            self.focused = NodeInfo::new();
         }
         // Remove icon prefix from selection
         // NOTE: This should be safe since file name should not contain pipe
-        if let Some(pos) = self.selection.name.find("| ") {
-            self.selection.name = self.selection.name[(pos + 2)..].to_string();
+        if let Some(pos) = self.focused.name.find("| ") {
+            self.focused.name = self.focused.name[(pos + 2)..].to_string();
         }
-        return old.name != self.selection.name;
+        return old.name != self.focused.name;
     }
 
     fn input_out_window(&mut self, modifiers: KeyModifiers, code: KeyCode) {
@@ -2873,7 +2872,7 @@ impl<'a> App<'a> {
         self.append_cwd(&self.cwd.clone());
         self.update_listing();
         self.update_results(); // Initial results
-        self.update_selection();
+        self.update_focused();
         self.update_preview();
         loop {
             if self.should_quit {
@@ -2927,7 +2926,7 @@ impl<'a> App<'a> {
                         LoopReturn::Ok => {}
                     }
                     // After key press handling
-                    let sel_changed = self.update_selection();
+                    let sel_changed = self.update_focused();
                     if sel_changed {
                         self.update_preview();
                     }
@@ -3014,7 +3013,7 @@ impl<'a> App<'a> {
 
         // Results list
         let mut results_pretty = self.dir_list_pretty(&self.results);
-        if let Some(line) = results_pretty.lines.get_mut(self.selection_index as usize) {
+        if let Some(line) = results_pretty.lines.get_mut(self.focus_index as usize) {
             let sel_span = Span::styled(
                 format!("{}", nf::SEL),
                 Style::default().fg(self.cs.hi).bg(Color::Black),
@@ -3037,15 +3036,15 @@ impl<'a> App<'a> {
                 .border_style(Style::default().fg(self.cs.listing_border)),
         );
         let mut state = ListState::default();
-        if !self.results.is_empty() && self.selection_index >= 0 {
-            state.select(Some(self.selection_index as usize));
+        if !self.results.is_empty() && self.focus_index >= 0 {
+            state.select(Some(self.focus_index as usize));
         }
 
         // Preview box
         let preview_widget = Paragraph::new(self.preview_content.clone())
             .block(
                 Block::default()
-                    .title(format!("{} m(0)_(0)m | {} ", nf::LOOK, self.selection.name))
+                    .title(format!("{} m(0)_(0)m | {} ", nf::LOOK, self.focused.name))
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(self.cs.preview_border)),
             )
@@ -3121,7 +3120,7 @@ impl<'a> App<'a> {
         let image: StatefulImage<StatefulProtocol> = StatefulImage::default();
         match self.preview_image {
             Some(ref mut img) => {
-                if !self.selection.is_image() {
+                if !self.focused.is_image() {
                     return;
                 }
                 let mut new_area = Rect {
