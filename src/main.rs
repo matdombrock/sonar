@@ -286,7 +286,7 @@ mod cmd {
         app.show_output_window = false;
     }
 
-    pub fn multi_sel(app: &mut App, _args: Vec<&str>) {
+    pub fn sel(app: &mut App, _args: Vec<&str>) {
         if !app.focused.is_file() && !app.focused.is_dir() {
             return;
         }
@@ -300,13 +300,13 @@ mod cmd {
         }
     }
 
-    pub fn multi_clear(app: &mut App, _args: Vec<&str>) {
+    pub fn sel_clear(app: &mut App, _args: Vec<&str>) {
         app.multi_selection.clear();
         app.set_output("", "Multi selection cleared.");
         output_window_show(app, vec![]);
     }
 
-    pub fn multi_show(app: &mut App, _args: Vec<&str>) {
+    pub fn sel_show(app: &mut App, _args: Vec<&str>) {
         let mut output_text = String::new();
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection.");
@@ -321,7 +321,7 @@ mod cmd {
     }
 
     // Write multi selection to a file
-    pub fn multi_save(app: &mut App, _args: Vec<&str>) {
+    pub fn sel_save(app: &mut App, _args: Vec<&str>) {
         let tmp = env::temp_dir();
         let file = tmp.join(APP_NAME).join("multi.txt");
         fs::write(
@@ -345,7 +345,7 @@ mod cmd {
     }
 
     // Copy multi selection to the cwd
-    pub fn multi_copy(app: &mut App, _args: Vec<&str>) {
+    pub fn sel_copy(app: &mut App, _args: Vec<&str>) {
         let mut output_text = String::new();
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to copy.");
@@ -379,7 +379,7 @@ mod cmd {
         output_window_show(app, vec![]);
     }
 
-    pub fn multi_delete(app: &mut App, _args: Vec<&str>) {
+    pub fn sel_delete(app: &mut App, _args: Vec<&str>) {
         let mut output_text = String::new();
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to delete.");
@@ -405,7 +405,7 @@ mod cmd {
         output_window_show(app, vec![]);
     }
 
-    pub fn multi_move(app: &mut App, _args: Vec<&str>) {
+    pub fn sel_move(app: &mut App, _args: Vec<&str>) {
         let mut output_text = String::new();
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to move.");
@@ -440,7 +440,7 @@ mod cmd {
         output_window_show(app, vec![]);
     }
 
-    pub fn multi_clip_path(app: &mut App, _args: Vec<&str>) {
+    pub fn sel_clip_path(app: &mut App, _args: Vec<&str>) {
         if app.multi_selection.is_empty() {
             app.set_output(
                 "Multi-select",
@@ -1062,7 +1062,7 @@ mod cmd_data {
                 cmd: "sel",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::multi_sel,
+                op: cmd::sel,
             },
         );
         map.insert(
@@ -1073,7 +1073,7 @@ mod cmd_data {
                 cmd: "sel-clear",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::multi_clear,
+                op: cmd::sel_clear,
             },
         );
         map.insert(
@@ -1084,7 +1084,7 @@ mod cmd_data {
                 cmd: "sel-show",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::multi_show,
+                op: cmd::sel_show,
             },
         );
         map.insert(
@@ -1095,7 +1095,7 @@ mod cmd_data {
                 cmd: "sel-save",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::multi_save,
+                op: cmd::sel_save,
             },
         );
         map.insert(
@@ -1106,7 +1106,7 @@ mod cmd_data {
                 cmd: "sel-copy",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::multi_copy,
+                op: cmd::sel_copy,
             },
         );
         map.insert(
@@ -1117,7 +1117,7 @@ mod cmd_data {
                 cmd: "sel-delete",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::multi_delete,
+                op: cmd::sel_delete,
             },
         );
         map.insert(
@@ -1128,7 +1128,7 @@ mod cmd_data {
                 cmd: "sel-move",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::multi_move,
+                op: cmd::sel_move,
             },
         );
         map.insert(
@@ -1139,7 +1139,7 @@ mod cmd_data {
                 cmd: "sel-clip",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::multi_clip_path,
+                op: cmd::sel_clip_path,
             },
         );
         map.insert(
