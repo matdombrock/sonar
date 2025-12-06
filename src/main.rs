@@ -27,10 +27,11 @@ use ratatui_image::{
     protocol::StatefulProtocol,
 };
 use regex::Regex;
-use std::os::unix::fs::PermissionsExt;
-use std::time::UNIX_EPOCH;
+use std::io::BufRead;
 use std::{env, process::Command};
 use std::{fs, time::SystemTime};
+use std::{fs::File, io::BufReader, time::UNIX_EPOCH};
+use std::{io, os::unix::fs::PermissionsExt};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style as SyntectStyle, ThemeSet};
 use syntect::parsing::SyntaxSet;
@@ -1687,6 +1688,7 @@ mod cfg {
 cmd_on_enter     edit
 # 0 = no limit
 list_limit       0
+preview_limit    100
 force_sixel      false
 max_image_width  80
 responsive_break 100
@@ -1694,6 +1696,7 @@ responsive_break 100
     pub struct Config {
         pub cmd_on_enter: String,
         pub list_limit: i32,
+        pub preview_limit: usize,
         pub force_sixel: bool,
         pub max_image_width: u16,
         pub responsive_break: u16,
@@ -1703,6 +1706,7 @@ responsive_break 100
             Self {
                 cmd_on_enter: "edit".to_string(),
                 list_limit: 100000,
+                preview_limit: 100,
                 force_sixel: false,
                 max_image_width: 80,
                 responsive_break: 100,
@@ -1746,6 +1750,11 @@ responsive_break 100
                     "list_limit" => {
                         if let Ok(limit) = value.parse::<i32>() {
                             config.list_limit = if limit == 0 { i32::MAX } else { limit };
+                        }
+                    }
+                    "preview_limit" => {
+                        if let Ok(limit) = value.parse::<usize>() {
+                            config.preview_limit = if limit == 0 { usize::MAX } else { limit };
                         }
                     }
                     "force_sixel" => {
@@ -2413,6 +2422,7 @@ impl<'a> App<'a> {
             if let Ok(bat_output) = Command::new("bat")
                 .arg("--color=always")
                 .arg("--style=plain")
+                .arg(format!("--line-range=:{}", self.cfg.preview_limit as i32))
                 .arg(focused_path.to_str().unwrap())
                 .output()
             {
@@ -2435,7 +2445,8 @@ impl<'a> App<'a> {
                             return;
                         }
                     };
-                    for line in output.lines.iter().take(100) {
+                    // NOTE: This take is redundant due to the --line-range flag
+                    for line in output.lines.iter().take(self.cfg.preview_limit) {
                         self.preview_content += Line::from(line.clone());
                     }
                     return;
@@ -2460,8 +2471,13 @@ impl<'a> App<'a> {
 
         self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
 
-        if let Ok(content) = fs::read_to_string(&focused_path) {
-            for line in content.lines().take(100) {
+        fn read_n_lines(path: &PathBuf, n: usize) -> Result<String, std::io::Error> {
+            let file = File::open(path)?;
+            let reader = BufReader::new(file);
+            reader.lines().take(n).collect()
+        }
+        if let Ok(content) = read_n_lines(&focused_path, self.cfg.preview_limit) {
+            for line in content.lines().take(self.cfg.preview_limit) {
                 let ranges = h.highlight_line(line, &ss).unwrap_or_default();
                 let mut styled_line = Line::default();
                 for (style, text) in ranges {
