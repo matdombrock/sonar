@@ -121,7 +121,7 @@ mod log {
 mod cmd {
     use std::{env, fs, path::PathBuf, process::Command};
 
-    use crate::{APP_NAME, App, SEP, cls, cmd_data, kb, log, sc};
+    use crate::{APP_NAME, App, SEP, cfg, cls, cmd_data, cs, kb, log, sc, shell_cmds};
 
     pub fn exit(app: &mut App, _args: Vec<&str>) {
         app.should_quit = true;
@@ -234,6 +234,12 @@ mod cmd {
 
     pub fn dir_back(app: &mut App, _args: Vec<&str>) {
         app.append_cwd(&app.lwd.clone());
+        app.update_listing();
+        app.update_results();
+        app.selection_index = 0;
+    }
+
+    pub fn dir_reload(app: &mut App, _args: Vec<&str>) {
         app.update_listing();
         app.update_results();
         app.selection_index = 0;
@@ -636,6 +642,133 @@ mod cmd {
         output_window_show(app, vec![]);
     }
 
+    pub fn config_init(app: &mut App, _args: Vec<&str>) {
+        // Write the default files to the config directory
+        let config_path = cfg::Config::get_path();
+        let colors_path = cs::Colors::get_path();
+        let kb_path = kb::get_path();
+        let shell_cmds_path = shell_cmds::get_path();
+        fs::create_dir_all(config_path.parent().unwrap()).unwrap();
+        fs::create_dir_all(colors_path.parent().unwrap()).unwrap();
+        fs::create_dir_all(kb_path.parent().unwrap()).unwrap();
+        fs::create_dir_all(shell_cmds_path.parent().unwrap()).unwrap();
+        let mut output_text = String::new();
+        match fs::write(&config_path, cfg::DEFAULT) {
+            Ok(_) => {
+                output_text += &format!("Created config file: {}\n", config_path.to_str().unwrap());
+            }
+            Err(e) => {
+                output_text += &format!(
+                    "Failed to create config file: {} ({})\n",
+                    config_path.to_str().unwrap(),
+                    e
+                );
+            }
+        }
+        match fs::write(&colors_path, cs::DEFAULT) {
+            Ok(_) => {
+                output_text += &format!("Created colors file: {}\n", colors_path.to_str().unwrap());
+            }
+            Err(e) => {
+                output_text += &format!(
+                    "Failed to create colors file: {} ({})\n",
+                    colors_path.to_str().unwrap(),
+                    e
+                );
+            }
+        }
+        match fs::write(&kb_path, kb::DEFAULT) {
+            Ok(_) => {
+                output_text += &format!("Created keybinds file: {}\n", kb_path.to_str().unwrap());
+            }
+            Err(e) => {
+                output_text += &format!(
+                    "Failed to create keybinds file: {} ({})\n",
+                    kb_path.to_str().unwrap(),
+                    e
+                );
+            }
+        }
+        match fs::write(&shell_cmds_path, shell_cmds::DEFAULT) {
+            Ok(_) => {
+                output_text += &format!(
+                    "Created shell commands file: {}\n",
+                    shell_cmds_path.to_str().unwrap()
+                );
+            }
+            Err(e) => {
+                output_text += &format!(
+                    "Failed to create shell commands file: {} ({})\n",
+                    shell_cmds_path.to_str().unwrap(),
+                    e
+                );
+            }
+        }
+        app.set_output("Config Init", &output_text);
+        output_window_show(app, vec![]);
+    }
+
+    pub fn config_clear(app: &mut App, _args: Vec<&str>) {
+        let config_path = cfg::Config::get_path();
+        let colors_path = cs::Colors::get_path();
+        let kb_path = kb::get_path();
+        let shell_cmds_path = shell_cmds::get_path();
+        let mut output_text = String::new();
+        match fs::remove_file(&config_path) {
+            Ok(_) => {
+                output_text += &format!("Removed config file: {}\n", config_path.to_str().unwrap());
+            }
+            Err(e) => {
+                output_text += &format!(
+                    "Failed to remove config file: {} ({})\n",
+                    config_path.to_str().unwrap(),
+                    e
+                );
+            }
+        }
+        match fs::remove_file(&colors_path) {
+            Ok(_) => {
+                output_text += &format!("Removed colors file: {}\n", colors_path.to_str().unwrap());
+            }
+            Err(e) => {
+                output_text += &format!(
+                    "Failed to remove colors file: {} ({})\n",
+                    colors_path.to_str().unwrap(),
+                    e
+                );
+            }
+        }
+        match fs::remove_file(&kb_path) {
+            Ok(_) => {
+                output_text += &format!("Removed keybinds file: {}\n", kb_path.to_str().unwrap());
+            }
+            Err(e) => {
+                output_text += &format!(
+                    "Failed to remove keybinds file: {} ({})\n",
+                    kb_path.to_str().unwrap(),
+                    e
+                );
+            }
+        }
+        match fs::remove_file(&shell_cmds_path) {
+            Ok(_) => {
+                output_text += &format!(
+                    "Removed shell commands file: {}\n",
+                    shell_cmds_path.to_str().unwrap()
+                );
+            }
+            Err(e) => {
+                output_text += &format!(
+                    "Failed to remove shell commands file: {} ({})\n",
+                    shell_cmds_path.to_str().unwrap(),
+                    e
+                );
+            }
+        }
+        app.set_output("Config Clear", &output_text);
+        output_window_show(app, vec![]);
+    }
+
     pub fn dbg_clear_preview(app: &mut App, _args: Vec<&str>) {
         app.term_clear = true;
     }
@@ -655,6 +788,7 @@ mod cmd_data {
         SelDown,
         DirUp,
         DirBack,
+        DirReload,
         Explode,
         Select,
         CmdWinToggle,
@@ -682,6 +816,8 @@ mod cmd_data {
         InputClear,
         ShellQuick,
         ShellFull,
+        ConfigInit,
+        ConfigClear,
     }
 
     #[derive(Debug, Clone)]
@@ -786,6 +922,17 @@ mod cmd_data {
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::dir_back,
+            },
+        );
+        map.insert(
+            CmdName::DirReload,
+            CmdData {
+                fname: "Directory Reload",
+                description: "Reload the current directory",
+                cmd: "dir-reload",
+                vis_hidden: false,
+                params: vec![],
+                op: cmd::dir_reload,
             },
         );
         map.insert(
@@ -1085,6 +1232,28 @@ mod cmd_data {
                 op: cmd::shell_full,
             },
         );
+        map.insert(
+            CmdName::ConfigInit,
+            CmdData {
+                fname: "Config Init",
+                description: "Initialize configuration files with defaults",
+                cmd: "config-init",
+                vis_hidden: false,
+                params: vec![],
+                op: cmd::config_init,
+            },
+        );
+        map.insert(
+            CmdName::ConfigClear,
+            CmdData {
+                fname: "Config Clear",
+                description: "Clear configuration files",
+                cmd: "config-clear",
+                vis_hidden: false,
+                params: vec![],
+                op: cmd::config_clear,
+            },
+        );
 
         map
     }
@@ -1299,7 +1468,7 @@ mod kb {
     use std::{env, fs, path::PathBuf};
 
     const FILE_NAME: &str = "keybinds.txt";
-    pub const KEYBINDS: &str = r#"
+    pub const DEFAULT: &str = r#"
 #
 # Default keybinds
 #
@@ -1391,7 +1560,7 @@ shell       ctrl-s
             Ok(content) => content,
             Err(_) => {
                 log!("{} not found, using default keybinds", FILE_NAME);
-                return make_list(KEYBINDS);
+                return make_list(DEFAULT);
             }
         };
         make_list(&keybinds)

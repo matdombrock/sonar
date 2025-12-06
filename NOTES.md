@@ -19,8 +19,6 @@
 ## Todo Cmd
 - clipboard-file-contents
 - clipboard-file-path
-- keybind-init
-- reload-dir
 - config-init
 - config-clear
 
