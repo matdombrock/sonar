@@ -17,7 +17,6 @@
 - Seer?
 
 ## Todo Cmd
-- mul-move
 - clipboard-file-contents
 - clipboard-file-path
 - keybind-init

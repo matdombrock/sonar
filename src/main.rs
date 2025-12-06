@@ -1385,6 +1385,130 @@ impl<'a> App<'a> {
         )
     }
 
+    fn welcome_message(&mut self) {
+        self.preview_content += self.fmtln_sc("Exit the application");
+        self.preview_content += Line::from("");
+        for (i, line) in LOGO.lines().enumerate() {
+            if i == 0 {
+                continue;
+            };
+            self.preview_content +=
+                Line::styled(format!("{}", line), Style::default().fg(self.cs.tip));
+        }
+        let kb_exit = kb::find_by_cmd(&self.keybinds, &cmd_data::CmdName::Exit).unwrap();
+        let kb_exit_str = kb::to_string_short(&kb_exit);
+        self.preview_content += Line::from("");
+        self.preview_content += Line::styled("Tips:", Style::default().fg(self.cs.header));
+        self.preview_content += Line::styled(
+            format!("└ Press {} to exit", kb_exit_str),
+            Style::default().fg(self.cs.tip),
+        );
+        self.preview_content += Line::styled(
+            "└ Start typing to fuzzy find files and directories",
+            Style::default().fg(self.cs.tip),
+        );
+        // System Information
+        // TODO: This is not very dry
+        self.preview_content += Line::from("");
+        self.preview_content +=
+            Line::styled("System Information:", Style::default().fg(self.cs.header));
+        if self.has_bat {
+            self.preview_content += Line::styled(
+                format!(
+                    "- {} 'bat' - file previews will use 'bat' for syntax highlighting",
+                    nf::CHECK
+                ),
+                Style::default().fg(self.cs.ok),
+            );
+        } else {
+            self.preview_content += Line::styled(
+                format!(
+                    "- {} 'bat' - file previews will use built-in syntax highlighting",
+                    nf::WARN
+                ),
+                Style::default().fg(self.cs.warning),
+            );
+        }
+        if self.found_keybinds {
+            self.preview_content += Line::styled(
+                format!(
+                    "- {} keybinds - loaded from {}",
+                    nf::CHECK,
+                    self.fpath(&kb::get_path())
+                ),
+                Style::default().fg(self.cs.ok),
+            );
+        } else {
+            self.preview_content += Line::styled(
+                format!(
+                    "- {} keybinds - no file found at {}",
+                    nf::WARN,
+                    self.fpath(&kb::get_path())
+                ),
+                Style::default().fg(self.cs.warning),
+            );
+        }
+        if self.found_cs {
+            self.preview_content += Line::styled(
+                format!(
+                    "- {} colors - loaded from {}",
+                    nf::CHECK,
+                    self.fpath(&cs::Colors::get_path())
+                ),
+                Style::default().fg(self.cs.ok),
+            );
+        } else {
+            self.preview_content += Line::styled(
+                format!(
+                    "- {} colors - no file found at {}",
+                    nf::WARN,
+                    self.fpath(&cs::Colors::get_path())
+                ),
+                Style::default().fg(self.cs.warning),
+            );
+        }
+        if self.found_cfg {
+            self.preview_content += Line::styled(
+                format!(
+                    "- {} config - loaded from {}",
+                    nf::CHECK,
+                    self.fpath(&cfg::Config::get_path()),
+                ),
+                Style::default().fg(self.cs.ok),
+            );
+        } else {
+            self.preview_content += Line::styled(
+                format!(
+                    "- {} config - no file found at {}",
+                    nf::WARN,
+                    self.fpath(&cfg::Config::get_path()),
+                ),
+                Style::default().fg(self.cs.warning),
+            );
+        }
+        if self.found_shell_cmds {
+            self.preview_content += Line::styled(
+                format!(
+                    "- {} shell commands - loaded from {}",
+                    nf::CHECK,
+                    self.fpath(&shell_cmds::get_path()),
+                ),
+                Style::default().fg(self.cs.ok),
+            );
+        } else {
+            self.preview_content += Line::styled(
+                format!(
+                    "- {} shell commands - no file found at {}",
+                    nf::WARN,
+                    self.fpath(&shell_cmds::get_path()),
+                ),
+                Style::default().fg(self.cs.warning),
+            );
+        }
+
+        self.preview_content += Line::from("");
+    }
+
     fn dir_list_pretty(&self, list: &Vec<NodeInfo>) -> Text<'a> {
         let mut text = Text::default();
         for item in list.iter().take(self.cfg.list_limit as usize) {
@@ -1621,128 +1745,7 @@ impl<'a> App<'a> {
         self.reset_sec_scroll();
         match self.selection.name.as_str() {
             sc::EXIT => {
-                // FIXME: WHY IS THIS ALL HERE
-                self.preview_content += self.fmtln_sc("Exit the application");
-                self.preview_content += Line::from("");
-                for (i, line) in LOGO.lines().enumerate() {
-                    if i == 0 {
-                        continue;
-                    };
-                    self.preview_content +=
-                        Line::styled(format!("{}", line), Style::default().fg(self.cs.tip));
-                }
-                let kb_exit = kb::find_by_cmd(&self.keybinds, &cmd_data::CmdName::Exit).unwrap();
-                let kb_exit_str = kb::to_string_short(&kb_exit);
-                self.preview_content += Line::from("");
-                self.preview_content += Line::styled("Tips:", Style::default().fg(self.cs.header));
-                self.preview_content += Line::styled(
-                    format!("└ Press {} to exit", kb_exit_str),
-                    Style::default().fg(self.cs.tip),
-                );
-                self.preview_content += Line::styled(
-                    "└ Start typing to fuzzy find files and directories",
-                    Style::default().fg(self.cs.tip),
-                );
-                // System Information
-                // TODO: This is not very dry
-                self.preview_content += Line::from("");
-                self.preview_content +=
-                    Line::styled("System Information:", Style::default().fg(self.cs.header));
-                if self.has_bat {
-                    self.preview_content += Line::styled(
-                        format!(
-                            "- {} 'bat' - file previews will use 'bat' for syntax highlighting",
-                            nf::CHECK
-                        ),
-                        Style::default().fg(self.cs.ok),
-                    );
-                } else {
-                    self.preview_content += Line::styled(
-                        format!(
-                            "- {} 'bat' - file previews will use built-in syntax highlighting",
-                            nf::WARN
-                        ),
-                        Style::default().fg(self.cs.warning),
-                    );
-                }
-                if self.found_keybinds {
-                    self.preview_content += Line::styled(
-                        format!(
-                            "- {} keybinds - loaded from {}",
-                            nf::CHECK,
-                            self.fpath(&kb::get_path())
-                        ),
-                        Style::default().fg(self.cs.ok),
-                    );
-                } else {
-                    self.preview_content += Line::styled(
-                        format!(
-                            "- {} keybinds - no file found at {}",
-                            nf::WARN,
-                            self.fpath(&kb::get_path())
-                        ),
-                        Style::default().fg(self.cs.warning),
-                    );
-                }
-                if self.found_cs {
-                    self.preview_content += Line::styled(
-                        format!(
-                            "- {} colors - loaded from {}",
-                            nf::CHECK,
-                            self.fpath(&cs::Colors::get_path())
-                        ),
-                        Style::default().fg(self.cs.ok),
-                    );
-                } else {
-                    self.preview_content += Line::styled(
-                        format!(
-                            "- {} colors - no file found at {}",
-                            nf::WARN,
-                            self.fpath(&cs::Colors::get_path())
-                        ),
-                        Style::default().fg(self.cs.warning),
-                    );
-                }
-                if self.found_cfg {
-                    self.preview_content += Line::styled(
-                        format!(
-                            "- {} config - loaded from {}",
-                            nf::CHECK,
-                            self.fpath(&cfg::Config::get_path()),
-                        ),
-                        Style::default().fg(self.cs.ok),
-                    );
-                } else {
-                    self.preview_content += Line::styled(
-                        format!(
-                            "- {} config - no file found at {}",
-                            nf::WARN,
-                            self.fpath(&cfg::Config::get_path()),
-                        ),
-                        Style::default().fg(self.cs.warning),
-                    );
-                }
-                if self.found_shell_cmds {
-                    self.preview_content += Line::styled(
-                        format!(
-                            "- {} shell commands - loaded from {}",
-                            nf::CHECK,
-                            self.fpath(&shell_cmds::get_path()),
-                        ),
-                        Style::default().fg(self.cs.ok),
-                    );
-                } else {
-                    self.preview_content += Line::styled(
-                        format!(
-                            "- {} shell commands - no file found at {}",
-                            nf::WARN,
-                            self.fpath(&shell_cmds::get_path()),
-                        ),
-                        Style::default().fg(self.cs.warning),
-                    );
-                }
-
-                self.preview_content += Line::from("");
+                self.welcome_message();
             }
             sc::HOME => {
                 self.preview_content += self.fmtln_path(&dirs::home_dir().unwrap());
