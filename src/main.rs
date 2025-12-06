@@ -39,7 +39,7 @@ use syntect::parsing::SyntaxSet;
 use std::path::PathBuf;
 
 // INTERNAL MODULES
-use crate::{cmd::CmdName, node_info::NodeInfo, node_type::NodeType};
+use crate::{node_info::NodeInfo, node_info::NodeType};
 
 const APP_NAME: &str = "sona";
 
@@ -116,79 +116,11 @@ mod log {
     }
 }
 
+// Command implementations
 mod cmd {
-    use std::{collections::HashMap, env, fs, path::PathBuf, process::Command};
+    use std::{env, fs, path::PathBuf, process::Command};
 
-    use crate::{APP_NAME, App, SEP, cls, cmd, kb, log, sc};
-
-    #[derive(Hash, Eq, PartialEq, Debug, Clone, PartialOrd, Ord)]
-    pub enum CmdName {
-        Exit,
-        Home,
-        SelUp,
-        SelDown,
-        DirUp,
-        DirBack,
-        Explode,
-        Select,
-        CmdWinToggle,
-        CmdFinderToggle,
-        CmdList,
-        OutputWinToggle,
-        OutputWinShow,
-        OutputWinHide,
-        MultiSel,
-        MultiClear,
-        MultiShow,
-        MultiSave,
-        MultiCopy,
-        MultiDelete,
-        MultiMove,
-        MenuBack,
-        Log,
-        LogClear,
-        SecUp,
-        SecDown,
-        KeybindsShow,
-        DbgClear,
-        Edit,
-        GoTo,
-        ShellQuick,
-        ShellFull,
-    }
-
-    #[derive(Debug, Clone)]
-    pub struct CmdData {
-        pub fname: &'static str,
-        pub description: &'static str,
-        pub cmd: &'static str,
-        pub vis_hidden: bool, // Hidden from visual cmd selection
-        pub params: Vec<&'static str>,
-        pub op: fn(&mut App, Vec<&str>) -> (),
-    }
-    pub type CmdList = HashMap<CmdName, CmdData>;
-    pub fn cmd_name_from_str(
-        cmd_list: &HashMap<CmdName, cmd::CmdData>,
-        cmd: &str,
-    ) -> Option<cmd::CmdName> {
-        for (name, data) in cmd_list.iter() {
-            if data.cmd == cmd {
-                return Some(name.clone());
-            }
-        }
-        None
-    }
-    pub fn get_cmd_data(cmd_list: &cmd::CmdList, name: &cmd::CmdName) -> cmd::CmdData {
-        match cmd_list.get(name) {
-            Some(data) => data.clone(),
-            None => panic!("Command not found: {:?}", name),
-        }
-    }
-
-    // Helper to get command string from CmdName
-    pub fn get_cmd(cmd_list: &cmd::CmdList, name: &cmd::CmdName) -> String {
-        get_cmd_data(cmd_list, name).cmd.to_string()
-    }
+    use crate::{APP_NAME, App, SEP, cls, cmd_data, kb, log, sc};
 
     pub fn cmd_exit(app: &mut App, _args: Vec<&str>) {
         app.should_quit = true;
@@ -207,38 +139,39 @@ mod cmd {
             // Shortcuts
             sc::EXIT => {}
             sc::HOME => {
-                cmd::cmd_home(app, vec![]);
+                cmd_home(app, vec![]);
                 return;
             }
             sc::DIR_UP => {
-                cmd::cmd_dir_up(app, vec![]);
+                cmd_dir_up(app, vec![]);
                 return;
             }
             sc::DIR_BACK => {
-                cmd::cmd_dir_back(app, vec![]);
+                cmd_dir_back(app, vec![]);
                 return;
             }
             sc::EXP => {
-                cmd::cmd_explode(app, vec![]);
+                cmd_explode(app, vec![]);
                 return;
             }
             sc::MENU_BACK => {
-                cmd::cmd_menu_back(app, vec![]);
+                cmd_menu_back(app, vec![]);
                 return;
             }
             sc::CMDS => {
-                cmd::cmd_cmd_finder_toggle(app, vec![]);
+                cmd_cmd_finder_toggle(app, vec![]);
                 return;
             }
             // Either an internal command, file or dir
             _ => {
                 // Check if selection is an internal command
                 if selection.is_command() {
-                    let cmd_name = match cmd::cmd_name_from_str(&app.cmd_list, &selection.name) {
+                    let cmd_name = match cmd_data::cmd_name_from_str(&app.cmd_list, &selection.name)
+                    {
                         Some(name) => name,
                         None => {
                             app.set_output("Error", "Command data not found for selected command.");
-                            cmd::cmd_output_window_show(app, vec![]);
+                            cmd_output_window_show(app, vec![]);
                             return;
                         }
                     };
@@ -246,7 +179,7 @@ mod cmd {
                     app.update_listing();
                     app.update_results();
                     // If the command has params, open command window
-                    let cmd_data = cmd::get_cmd_data(&app.cmd_list, &cmd_name);
+                    let cmd_data = cmd_data::get_cmd_data(&app.cmd_list, &cmd_name);
                     if cmd_data.params.len() > 0 {
                         // Open command window for params
                         app.command_input = format!("{} ", cmd_data.cmd);
@@ -277,7 +210,7 @@ mod cmd {
                     return;
                 } else {
                     app.set_output("Error", "Selected item is neither a file nor a directory.");
-                    cmd::cmd_output_window_show(app, vec![]);
+                    cmd_output_window_show(app, vec![]);
                     return;
                 }
             }
@@ -363,21 +296,21 @@ mod cmd {
     pub fn cmd_multi_clear(app: &mut App, _args: Vec<&str>) {
         app.multi_selection.clear();
         app.set_output("", "Multi selection cleared.");
-        cmd::cmd_output_window_show(app, vec![]);
+        cmd_output_window_show(app, vec![]);
     }
 
     pub fn cmd_multi_show(app: &mut App, _args: Vec<&str>) {
         let mut output_text = String::new();
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection.");
-            cmd::cmd_output_window_show(app, vec![]);
+            cmd_output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
             output_text += &format!("{}\n", path.to_str().unwrap());
         }
         app.set_output("Multi-select", &output_text);
-        cmd::cmd_output_window_show(app, vec![]);
+        cmd_output_window_show(app, vec![]);
     }
 
     // Write multi selection to a file
@@ -401,7 +334,7 @@ mod cmd {
                 app.multi_selection.len()
             ),
         );
-        cmd::cmd_output_window_show(app, vec![]);
+        cmd_output_window_show(app, vec![]);
     }
 
     // Copy multi selection to the cwd
@@ -409,7 +342,7 @@ mod cmd {
         let mut output_text = String::new();
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to copy.");
-            cmd::cmd_output_window_show(app, vec![]);
+            cmd_output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
@@ -436,14 +369,14 @@ mod cmd {
             }
         }
         app.set_output("Multi-select", &output_text);
-        cmd::cmd_output_window_show(app, vec![]);
+        cmd_output_window_show(app, vec![]);
     }
 
     pub fn cmd_multi_delete(app: &mut App, _args: Vec<&str>) {
         let mut output_text = String::new();
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to delete.");
-            cmd::cmd_output_window_show(app, vec![]);
+            cmd_output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
@@ -462,14 +395,14 @@ mod cmd {
         }
         app.multi_selection.clear();
         app.set_output("Multi-select", &output_text);
-        cmd::cmd_output_window_show(app, vec![]);
+        cmd_output_window_show(app, vec![]);
     }
 
     pub fn cmd_multi_move(app: &mut App, _args: Vec<&str>) {
         let mut output_text = String::new();
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to move.");
-            cmd::cmd_output_window_show(app, vec![]);
+            cmd_output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
@@ -497,7 +430,7 @@ mod cmd {
         }
         app.multi_selection.clear();
         app.set_output("Multi-select", &output_text);
-        cmd::cmd_output_window_show(app, vec![]);
+        cmd_output_window_show(app, vec![]);
     }
 
     pub fn cmd_cmd_finder_toggle(app: &mut App, _args: Vec<&str>) {
@@ -517,7 +450,7 @@ mod cmd {
             text += &format!("{} - {}\n", cmd_data.cmd, cmd_data.description);
         }
         app.set_output("Available Commands", &text);
-        cmd::cmd_output_window_show(app, vec![]);
+        cmd_output_window_show(app, vec![]);
     }
 
     // Deprecated?
@@ -544,7 +477,7 @@ mod cmd {
                 app.set_output("Log", "No log file found.");
             }
         }
-        cmd::cmd_output_window_show(app, vec![]);
+        cmd_output_window_show(app, vec![]);
     }
 
     pub fn cmd_log_clear(app: &mut App, _args: Vec<&str>) {
@@ -557,7 +490,7 @@ mod cmd {
                 app.set_output("Log", "No log file found to clear.");
             }
         }
-        cmd::cmd_output_window_show(app, vec![]);
+        cmd_output_window_show(app, vec![]);
     }
 
     pub fn cmd_sec_up(app: &mut App, _args: Vec<&str>) {
@@ -617,7 +550,7 @@ mod cmd {
         }
 
         app.set_output("Keybinds", &out);
-        cmd::cmd_output_window_show(app, vec![]);
+        cmd_output_window_show(app, vec![]);
     }
 
     // Edit the selected file
@@ -637,7 +570,7 @@ mod cmd {
             Ok(_) => {}
             Err(e) => {
                 app.set_output("Editor", &format!("Failed to open editor: {}", e));
-                cmd::cmd_output_window_show(app, vec![]);
+                cmd_output_window_show(app, vec![]);
             }
         }
     }
@@ -645,7 +578,7 @@ mod cmd {
     pub fn cmd_goto(app: &mut App, args: Vec<&str>) {
         if args.is_empty() {
             app.set_output("Goto", "Error: No path provided.");
-            cmd::cmd_output_window_show(app, vec![]);
+            cmd_output_window_show(app, vec![]);
             return;
         }
         let path = PathBuf::from(args[0]);
@@ -675,7 +608,7 @@ mod cmd {
                 app.set_output("Shell", &format!("Failed to run command: {}", e));
             }
         }
-        cmd::cmd_output_window_show(app, vec![]);
+        cmd_output_window_show(app, vec![]);
     }
 
     pub fn cmd_shell_full(app: &mut App, _args: Vec<&str>) {
@@ -692,11 +625,90 @@ mod cmd {
         }
         cls();
         app.term_clear = true;
-        cmd::cmd_output_window_show(app, vec![]);
+        cmd_output_window_show(app, vec![]);
     }
 
     pub fn cmd_dbg_clear_preview(app: &mut App, _args: Vec<&str>) {
         app.term_clear = true;
+    }
+}
+
+// Command metadata
+mod cmd_data {
+    use std::collections::HashMap;
+
+    use crate::{App, cmd, cmd_data};
+
+    #[derive(Hash, Eq, PartialEq, Debug, Clone, PartialOrd, Ord)]
+    pub enum CmdName {
+        Exit,
+        Home,
+        SelUp,
+        SelDown,
+        DirUp,
+        DirBack,
+        Explode,
+        Select,
+        CmdWinToggle,
+        CmdFinderToggle,
+        CmdList,
+        OutputWinToggle,
+        OutputWinShow,
+        OutputWinHide,
+        MultiSel,
+        MultiClear,
+        MultiShow,
+        MultiSave,
+        MultiCopy,
+        MultiDelete,
+        MultiMove,
+        MenuBack,
+        Log,
+        LogClear,
+        SecUp,
+        SecDown,
+        KeybindsShow,
+        DbgClear,
+        Edit,
+        GoTo,
+        ShellQuick,
+        ShellFull,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct CmdData {
+        pub fname: &'static str,
+        pub description: &'static str,
+        pub cmd: &'static str,
+        pub vis_hidden: bool, // Hidden from visual cmd selection
+        pub params: Vec<&'static str>,
+        pub op: fn(&mut App, Vec<&str>) -> (),
+    }
+    pub type CmdList = HashMap<CmdName, CmdData>;
+    pub fn cmd_name_from_str(
+        cmd_list: &HashMap<CmdName, cmd_data::CmdData>,
+        cmd: &str,
+    ) -> Option<cmd_data::CmdName> {
+        for (name, data) in cmd_list.iter() {
+            if data.cmd == cmd {
+                return Some(name.clone());
+            }
+        }
+        None
+    }
+    pub fn get_cmd_data(
+        cmd_list: &cmd_data::CmdList,
+        name: &cmd_data::CmdName,
+    ) -> cmd_data::CmdData {
+        match cmd_list.get(name) {
+            Some(data) => data.clone(),
+            None => panic!("Command not found: {:?}", name),
+        }
+    }
+
+    // Helper to get command string from CmdName
+    pub fn get_cmd(cmd_list: &cmd_data::CmdList, name: &cmd_data::CmdName) -> String {
+        get_cmd_data(cmd_list, name).cmd.to_string()
     }
 
     pub fn make_cmd_list() -> CmdList {
@@ -709,7 +721,7 @@ mod cmd {
                 cmd: "exit",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_exit,
+                op: cmd::cmd_exit,
             },
         );
         map.insert(
@@ -720,7 +732,7 @@ mod cmd {
                 cmd: "home",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_home,
+                op: cmd::cmd_home,
             },
         );
         map.insert(
@@ -731,7 +743,7 @@ mod cmd {
                 cmd: "sel-up",
                 vis_hidden: true,
                 params: vec![],
-                op: cmd_sel_up,
+                op: cmd::cmd_sel_up,
             },
         );
         map.insert(
@@ -742,7 +754,7 @@ mod cmd {
                 cmd: "sel-down",
                 vis_hidden: true,
                 params: vec![],
-                op: cmd_sel_down,
+                op: cmd::cmd_sel_down,
             },
         );
         map.insert(
@@ -753,7 +765,7 @@ mod cmd {
                 cmd: "dir-up",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_dir_up,
+                op: cmd::cmd_dir_up,
             },
         );
         map.insert(
@@ -764,7 +776,7 @@ mod cmd {
                 cmd: "dir-back",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_dir_back,
+                op: cmd::cmd_dir_back,
             },
         );
         map.insert(
@@ -775,7 +787,7 @@ mod cmd {
                 cmd: "explode",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_explode,
+                op: cmd::cmd_explode,
             },
         );
         map.insert(
@@ -786,7 +798,7 @@ mod cmd {
                 cmd: "select",
                 vis_hidden: true,
                 params: vec![],
-                op: cmd_select,
+                op: cmd::cmd_select,
             },
         );
         map.insert(
@@ -797,7 +809,7 @@ mod cmd {
                 cmd: "cmd-win",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_cmd_window_toggle,
+                op: cmd::cmd_cmd_window_toggle,
             },
         );
         map.insert(
@@ -808,7 +820,7 @@ mod cmd {
                 cmd: "cmd-find",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_cmd_finder_toggle,
+                op: cmd::cmd_cmd_finder_toggle,
             },
         );
         map.insert(
@@ -819,7 +831,7 @@ mod cmd {
                 cmd: "cmd-list",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_cmd_list,
+                op: cmd::cmd_cmd_list,
             },
         );
         map.insert(
@@ -830,7 +842,7 @@ mod cmd {
                 cmd: "output-toggle",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_output_window_toggle,
+                op: cmd::cmd_output_window_toggle,
             },
         );
         map.insert(
@@ -841,7 +853,7 @@ mod cmd {
                 cmd: "output-show",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_output_window_show,
+                op: cmd::cmd_output_window_show,
             },
         );
         map.insert(
@@ -852,7 +864,7 @@ mod cmd {
                 cmd: "output-hide",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_output_window_hide,
+                op: cmd::cmd_output_window_hide,
             },
         );
         map.insert(
@@ -863,7 +875,7 @@ mod cmd {
                 cmd: "mul-sel",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_multi_sel,
+                op: cmd::cmd_multi_sel,
             },
         );
         map.insert(
@@ -874,7 +886,7 @@ mod cmd {
                 cmd: "mul-clear",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_multi_clear,
+                op: cmd::cmd_multi_clear,
             },
         );
         map.insert(
@@ -885,7 +897,7 @@ mod cmd {
                 cmd: "mul-show",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_multi_show,
+                op: cmd::cmd_multi_show,
             },
         );
         map.insert(
@@ -896,7 +908,7 @@ mod cmd {
                 cmd: "mul-save",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_multi_save,
+                op: cmd::cmd_multi_save,
             },
         );
         map.insert(
@@ -907,7 +919,7 @@ mod cmd {
                 cmd: "mul-copy",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_multi_copy,
+                op: cmd::cmd_multi_copy,
             },
         );
         map.insert(
@@ -918,7 +930,7 @@ mod cmd {
                 cmd: "mul-delete",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_multi_delete,
+                op: cmd::cmd_multi_delete,
             },
         );
         map.insert(
@@ -929,7 +941,7 @@ mod cmd {
                 cmd: "mul-move",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_multi_move,
+                op: cmd::cmd_multi_move,
             },
         );
         map.insert(
@@ -940,7 +952,7 @@ mod cmd {
                 cmd: "menu-back",
                 vis_hidden: true,
                 params: vec![],
-                op: cmd_menu_back,
+                op: cmd::cmd_menu_back,
             },
         );
         map.insert(
@@ -951,7 +963,7 @@ mod cmd {
                 cmd: "log",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_log_show,
+                op: cmd::cmd_log_show,
             },
         );
         map.insert(
@@ -962,7 +974,7 @@ mod cmd {
                 cmd: "log-clear",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_log_clear,
+                op: cmd::cmd_log_clear,
             },
         );
         map.insert(
@@ -973,7 +985,7 @@ mod cmd {
                 cmd: "sec-up",
                 vis_hidden: true,
                 params: vec![],
-                op: cmd_sec_up,
+                op: cmd::cmd_sec_up,
             },
         );
         map.insert(
@@ -984,7 +996,7 @@ mod cmd {
                 cmd: "sec-down",
                 vis_hidden: true,
                 params: vec![],
-                op: cmd_sec_down,
+                op: cmd::cmd_sec_down,
             },
         );
         map.insert(
@@ -995,7 +1007,7 @@ mod cmd {
                 cmd: "keybinds-show",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_show_keybinds,
+                op: cmd::cmd_show_keybinds,
             },
         );
         map.insert(
@@ -1006,7 +1018,7 @@ mod cmd {
                 cmd: "dbg-prev-clear",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_dbg_clear_preview,
+                op: cmd::cmd_dbg_clear_preview,
             },
         );
         map.insert(
@@ -1017,7 +1029,7 @@ mod cmd {
                 cmd: "edit",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_edit,
+                op: cmd::cmd_edit,
             },
         );
         map.insert(
@@ -1028,7 +1040,7 @@ mod cmd {
                 cmd: "goto",
                 vis_hidden: false,
                 params: vec!["path"],
-                op: cmd_goto,
+                op: cmd::cmd_goto,
             },
         );
         map.insert(
@@ -1039,7 +1051,7 @@ mod cmd {
                 cmd: "shell",
                 vis_hidden: false,
                 params: vec!["command"],
-                op: cmd_shell_quick,
+                op: cmd::cmd_shell_quick,
             },
         );
         map.insert(
@@ -1050,7 +1062,7 @@ mod cmd {
                 cmd: "shell-full",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd_shell_full,
+                op: cmd::cmd_shell_full,
             },
         );
 
@@ -1058,8 +1070,9 @@ mod cmd {
     }
 }
 
-// TODO: combine node_type and node_info?
-mod node_type {
+// Each item in the listing is a "Node"
+// NodeInfo holds information each node
+mod node_info {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
     use std::path::Path;
@@ -1067,6 +1080,7 @@ mod node_type {
     use mime_guess::mime;
 
     use crate::log;
+
     #[derive(Clone, PartialEq)]
     pub enum NodeType {
         File,         // A regular file
@@ -1101,19 +1115,6 @@ mod node_type {
                     return NodeType::Image;
                 }
 
-                // let image_exts = vec![
-                //     "png", "jpg", "jpeg", "gif", "bmp", "tiff", "webp", "svg", "ico", "heic",
-                // ];
-                // let ext = path
-                //     .extension()
-                //     .and_then(std::ffi::OsStr::to_str)
-                //     .unwrap_or("")
-                //     .to_lowercase();
-                //
-                // if image_exts.contains(&ext.as_str()) {
-                //     return NodeType::Image;
-                // }
-
                 NodeType::File
             } else if metadata.file_type().is_symlink() {
                 NodeType::Symlink
@@ -1122,10 +1123,7 @@ mod node_type {
             }
         }
     }
-}
 
-mod node_info {
-    use super::node_type::NodeType;
     // Information about a file or directory
     #[derive(Clone)]
     pub struct NodeInfo {
@@ -1170,6 +1168,7 @@ mod node_info {
     }
 }
 
+// Color scheme management
 mod cs {
     use crate::log;
     use ratatui::style::Color;
@@ -1369,9 +1368,10 @@ misc           white
     }
 }
 
+// Keybinding management
 mod kb {
-    use super::cmd;
-    use super::cmd::CmdName;
+    use super::cmd_data;
+    use super::cmd_data::CmdName;
     use crate::{APP_NAME, log};
     use crossterm::event::{KeyCode, KeyModifiers};
     use std::{env, fs, path::PathBuf};
@@ -1433,15 +1433,15 @@ shell       ctrl-s
     }
 
     // Needs the command list before KeyBind only points to enum
-    pub fn to_string_full(cmd_list: &cmd::CmdList, kb: &KeyBind) -> String {
+    pub fn to_string_full(cmd_list: &cmd_data::CmdList, kb: &KeyBind) -> String {
         return format!(
             "{:<12} {}\n",
-            cmd::get_cmd(cmd_list, &kb.command),
+            cmd_data::get_cmd(cmd_list, &kb.command),
             to_string_short(kb)
         );
     }
 
-    pub fn find_by_cmd(keybinds: &KeyBindList, cmd: &cmd::CmdName) -> Option<KeyBind> {
+    pub fn find_by_cmd(keybinds: &KeyBindList, cmd: &cmd_data::CmdName) -> Option<KeyBind> {
         for kb in keybinds.iter() {
             if &kb.command == cmd {
                 return Some(kb.clone());
@@ -1472,7 +1472,7 @@ shell       ctrl-s
 
     fn make_list(keybinds_str: &str) -> KeyBindList {
         let mut list = KeyBindList::new();
-        let cmd_list = cmd::make_cmd_list();
+        let cmd_list = cmd_data::make_cmd_list();
         for line in keybinds_str.lines() {
             // Ignore comments
             if line.starts_with('#') || line.trim().is_empty() {
@@ -1495,7 +1495,7 @@ shell       ctrl-s
                 code = combo_split[1];
             }
             //
-            let cmd = match cmd::cmd_name_from_str(&cmd_list, cmd) {
+            let cmd = match cmd_data::cmd_name_from_str(&cmd_list, cmd) {
                 Some(name) => name,
                 None => {
                     log!("Unknown command in {}: {}", FILE_NAME, cmd);
@@ -1541,6 +1541,7 @@ shell       ctrl-s
     }
 }
 
+// General configuration management
 mod cfg {
     use std::fs;
 
@@ -1628,8 +1629,9 @@ max_image_width 80
     }
 }
 
+// Shell command management
 mod shell_cmds {
-    use crate::cmd;
+    use crate::cmd_data;
 
     const FILE_NAME: &str = "shell_cmds.txt";
     pub const DEFAULT: &str = r#"
@@ -1668,7 +1670,8 @@ zip -r archive.zip $...
     }
 
     pub fn make_list(shell_str: &str) -> Vec<String> {
-        let shell_cmd_name = cmd::get_cmd(&cmd::make_cmd_list(), &cmd::CmdName::ShellQuick);
+        let shell_cmd_name =
+            cmd_data::get_cmd(&cmd_data::make_cmd_list(), &cmd_data::CmdName::ShellQuick);
         let mut list = Vec::new();
         for line in shell_str.lines() {
             // Ignore comments
@@ -1692,7 +1695,7 @@ enum LoopReturn {
     Ok,
 }
 
-// Main application state
+// Main application state and control methods
 struct App<'a> {
     should_quit: bool,
     input: String,
@@ -1718,7 +1721,7 @@ struct App<'a> {
     show_yesno_window: bool,
     yesno_text: String,
     yesno_result: i32, // 0 = no, 1 = yes, 2 = unset
-    cmd_list: cmd::CmdList,
+    cmd_list: cmd_data::CmdList,
     shell_cmd_list: Vec<String>,
     keybinds: kb::KeyBindList,
     cs: cs::Colors,
@@ -1742,6 +1745,7 @@ impl<'a> App<'a> {
             Err(_) => false,
         };
         // FIXME: THIS IS STUPID
+        // There is no reason to read the whole file
         let kb_check = match fs::read_to_string(&kb::get_path()) {
             Ok(_) => true,
             Err(_) => false,
@@ -1784,7 +1788,7 @@ impl<'a> App<'a> {
             show_yesno_window: false,
             yesno_text: String::new(),
             yesno_result: 2,
-            cmd_list: cmd::make_cmd_list(),
+            cmd_list: cmd_data::make_cmd_list(),
             shell_cmd_list: shell_cmds::make_list_auto(),
             keybinds: kb::make_list_auto(),
             cs: cs::Colors::make_list_auto(),
@@ -1880,8 +1884,8 @@ impl<'a> App<'a> {
     }
 
     // A simple helper which avoids needing to pass cmd_list everywhere
-    fn get_cmd(&self, name: &cmd::CmdName) -> String {
-        cmd::get_cmd(&self.cmd_list, name)
+    fn get_cmd(&self, name: &cmd_data::CmdName) -> String {
+        cmd_data::get_cmd(&self.cmd_list, name)
     }
 
     fn replace_shell_vars(&self, mut shell_cmd: String) -> String {
@@ -1936,7 +1940,7 @@ impl<'a> App<'a> {
             self.preview_content +=
                 Line::styled(format!("{}", line), Style::default().fg(self.cs.tip));
         }
-        let kb_exit = kb::find_by_cmd(&self.keybinds, &cmd::CmdName::Exit).unwrap();
+        let kb_exit = kb::find_by_cmd(&self.keybinds, &cmd_data::CmdName::Exit).unwrap();
         let kb_exit_str = kb::to_string_short(&kb_exit);
         self.preview_content += Line::from("");
         self.preview_content += Line::styled("Tips:", Style::default().fg(self.cs.header));
@@ -1956,7 +1960,7 @@ impl<'a> App<'a> {
         if self.has_bat {
             self.preview_content += Line::styled(
                 format!(
-                    "- {} 'bat' - file previews will use 'bat' for syntax highlighting",
+                    "{} 'bat' - file previews will use 'bat' for syntax highlighting",
                     nf::CHECK
                 ),
                 Style::default().fg(self.cs.ok),
@@ -1964,89 +1968,56 @@ impl<'a> App<'a> {
         } else {
             self.preview_content += Line::styled(
                 format!(
-                    "- {} 'bat' - file previews will use built-in syntax highlighting",
+                    "{} 'bat' - file previews will use built-in syntax highlighting",
                     nf::WARN
                 ),
                 Style::default().fg(self.cs.warning),
             );
         }
-        if self.found_keybinds {
-            self.preview_content += Line::styled(
-                format!(
-                    "- {} keybinds - loaded from {}",
-                    nf::CHECK,
-                    self.fpath(&kb::get_path())
-                ),
-                Style::default().fg(self.cs.ok),
-            );
-        } else {
-            self.preview_content += Line::styled(
-                format!(
-                    "- {} keybinds - no file found at {}",
-                    nf::WARN,
-                    self.fpath(&kb::get_path())
-                ),
-                Style::default().fg(self.cs.warning),
-            );
+        fn check_found_file(
+            found: bool,
+            name: &str,
+            path_str: &str,
+            cs: cs::Colors,
+        ) -> Line<'static> {
+            if found {
+                log!("{} found at {}", name, path_str);
+                Line::styled(
+                    format!("{} {} - loaded from {}", nf::CHECK, name, path_str),
+                    Style::default().fg(cs.ok),
+                )
+            } else {
+                log!("{} not found at {}", name, path_str);
+                Line::styled(
+                    format!("{} {} - not found at {}", nf::WARN, name, path_str),
+                    Style::default().fg(cs.warning),
+                )
+            }
         }
-        if self.found_cs {
-            self.preview_content += Line::styled(
-                format!(
-                    "- {} colors - loaded from {}",
-                    nf::CHECK,
-                    self.fpath(&cs::Colors::get_path())
-                ),
-                Style::default().fg(self.cs.ok),
-            );
-        } else {
-            self.preview_content += Line::styled(
-                format!(
-                    "- {} colors - no file found at {}",
-                    nf::WARN,
-                    self.fpath(&cs::Colors::get_path())
-                ),
-                Style::default().fg(self.cs.warning),
-            );
-        }
-        if self.found_cfg {
-            self.preview_content += Line::styled(
-                format!(
-                    "- {} config - loaded from {}",
-                    nf::CHECK,
-                    self.fpath(&cfg::Config::get_path()),
-                ),
-                Style::default().fg(self.cs.ok),
-            );
-        } else {
-            self.preview_content += Line::styled(
-                format!(
-                    "- {} config - no file found at {}",
-                    nf::WARN,
-                    self.fpath(&cfg::Config::get_path()),
-                ),
-                Style::default().fg(self.cs.warning),
-            );
-        }
-        if self.found_shell_cmds {
-            self.preview_content += Line::styled(
-                format!(
-                    "- {} shell commands - loaded from {}",
-                    nf::CHECK,
-                    self.fpath(&shell_cmds::get_path()),
-                ),
-                Style::default().fg(self.cs.ok),
-            );
-        } else {
-            self.preview_content += Line::styled(
-                format!(
-                    "- {} shell commands - no file found at {}",
-                    nf::WARN,
-                    self.fpath(&shell_cmds::get_path()),
-                ),
-                Style::default().fg(self.cs.warning),
-            );
-        }
-
+        self.preview_content += check_found_file(
+            self.found_keybinds,
+            "keybinds",
+            self.fpath(&kb::get_path()).as_ref(),
+            self.cs.clone(),
+        );
+        self.preview_content += check_found_file(
+            self.found_cs,
+            "colors",
+            self.fpath(&cs::Colors::get_path()).as_ref(),
+            self.cs.clone(),
+        );
+        self.preview_content += check_found_file(
+            self.found_cfg,
+            "config",
+            self.fpath(&cfg::Config::get_path()).as_ref(),
+            self.cs.clone(),
+        );
+        self.preview_content += check_found_file(
+            self.found_shell_cmds,
+            "shell commands",
+            self.fpath(&shell_cmds::get_path()).as_ref(),
+            self.cs.clone(),
+        );
         self.preview_content += Line::from("");
     }
 
@@ -2329,7 +2300,7 @@ impl<'a> App<'a> {
                 // Check if we have an internal command
                 if self.selection.is_command() {
                     let cmd_name =
-                        match cmd::cmd_name_from_str(&self.cmd_list, &self.selection.name) {
+                        match cmd_data::cmd_name_from_str(&self.cmd_list, &self.selection.name) {
                             Some(name) => name,
                             None => {
                                 self.preview_content += Line::styled(
@@ -2339,7 +2310,7 @@ impl<'a> App<'a> {
                                 return;
                             }
                         };
-                    let data = cmd::get_cmd_data(&self.cmd_list, &cmd_name).clone();
+                    let data = cmd_data::get_cmd_data(&self.cmd_list, &cmd_name).clone();
                     self.preview_content += Line::styled(
                         format!("name: {}", data.fname),
                         Style::default().fg(self.cs.tip),
@@ -2538,8 +2509,8 @@ impl<'a> App<'a> {
         }
         // Special command matching just for output window
         let cmd = match (modifiers, code) {
-            (KeyModifiers::ALT, KeyCode::Char('j')) => self.get_cmd(&cmd::CmdName::SecDown),
-            (KeyModifiers::ALT, KeyCode::Char('k')) => self.get_cmd(&cmd::CmdName::SecUp),
+            (KeyModifiers::ALT, KeyCode::Char('j')) => self.get_cmd(&cmd_data::CmdName::SecDown),
+            (KeyModifiers::ALT, KeyCode::Char('k')) => self.get_cmd(&cmd_data::CmdName::SecUp),
             _ => "".to_string(),
         };
         self.handle_cmd(&cmd.to_string());
@@ -2606,7 +2577,7 @@ impl<'a> App<'a> {
         for kb in self.keybinds.iter() {
             if kb.modifiers == modifiers && kb.code == code {
                 cmd = self.get_cmd(&kb.command).to_string();
-                let cmd_data = cmd::get_cmd_data(&self.cmd_list, &kb.command);
+                let cmd_data = cmd_data::get_cmd_data(&self.cmd_list, &kb.command);
                 if cmd_data.params.len() > 0 {
                     cmd += &format!(" {}", ASK); // Indicate that params are needed and should be asked for
                 }
@@ -2638,7 +2609,7 @@ impl<'a> App<'a> {
         } else {
             Vec::new()
         };
-        let cmd_name = match cmd::cmd_name_from_str(&self.cmd_list, &cmd) {
+        let cmd_name = match cmd_data::cmd_name_from_str(&self.cmd_list, &cmd) {
             Some(name) => name,
             None => {
                 // If the command isnt empty print the incorrect command
@@ -2651,7 +2622,7 @@ impl<'a> App<'a> {
             }
         };
         // TODO: This isnt handled correctly
-        let cmd_data = cmd::get_cmd_data(&self.cmd_list, &cmd_name);
+        let cmd_data = cmd_data::get_cmd_data(&self.cmd_list, &cmd_name);
         (cmd_data.op)(self, args);
         LoopReturn::Ok
     }
