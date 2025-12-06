@@ -119,9 +119,10 @@ mod log {
 
 // Command implementations
 mod cmd {
-    use std::{env, fs, path::PathBuf, process::Command};
-
     use crate::{APP_NAME, App, SEP, cfg, cls, cmd_data, cs, kb, log, sc, shell_cmds};
+    use clipboard::ClipboardContext;
+    use clipboard::ClipboardProvider;
+    use std::{env, fs, path::PathBuf, process::Command};
 
     pub fn exit(app: &mut App, _args: Vec<&str>) {
         app.should_quit = true;
@@ -440,6 +441,36 @@ mod cmd {
         output_window_show(app, vec![]);
     }
 
+    pub fn multi_clip_path(app: &mut App, _args: Vec<&str>) {
+        if app.multi_selection.is_empty() {
+            app.set_output(
+                "Multi-select",
+                "No items in multi selection to copy to clipboard.",
+            );
+            output_window_show(app, vec![]);
+            return;
+        }
+        let paths = app
+            .multi_selection
+            .iter()
+            .map(|p| p.to_str().unwrap())
+            .collect::<Vec<&str>>()
+            .join("\n");
+        let mut ctx: ClipboardContext = ClipboardContext::new().unwrap();
+        match ctx.set_contents(paths) {
+            Ok(_) => {
+                app.set_output("Multi-select", "Multi selection paths copied to clipboard.");
+            }
+            Err(e) => {
+                app.set_output(
+                    "Multi-select",
+                    &format!("Failed to copy to clipboard: {}", e),
+                );
+            }
+        }
+        output_window_show(app, vec![]);
+    }
+
     pub fn cmd_finder_toggle(app: &mut App, _args: Vec<&str>) {
         app.mode_cmd_finder = !app.mode_cmd_finder;
         app.update_listing();
@@ -448,7 +479,7 @@ mod cmd {
     }
 
     // Show a list of commands
-    pub fn cmd_cmd_list(app: &mut App, _args: Vec<&str>) {
+    pub fn cmd_list(app: &mut App, _args: Vec<&str>) {
         let mut text = String::new();
         // Sort by command name
         let mut vec: Vec<_> = app.cmd_list.iter().collect();
@@ -629,6 +660,7 @@ mod cmd {
         let shell = env::var("SHELL").unwrap_or("/bin/sh".to_string());
         log!("Opening shell: {}", shell);
         cls();
+        // Clear terminal before opening shell
         match Command::new(shell).status() {
             Ok(_) => {
                 app.set_output("Shell", "Shell closed.");
@@ -804,6 +836,7 @@ mod cmd_data {
         MultiCopy,
         MultiDelete,
         MultiMove,
+        MultiClipPath,
         MenuBack,
         Log,
         LogClear,
@@ -987,7 +1020,7 @@ mod cmd_data {
                 cmd: "cmd-list",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_cmd_list,
+                op: cmd::cmd_list,
             },
         );
         map.insert(
@@ -1098,6 +1131,17 @@ mod cmd_data {
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::multi_move,
+            },
+        );
+        map.insert(
+            CmdName::MultiClipPath,
+            CmdData {
+                fname: "Multi-Select Copy Paths to Clipboard",
+                description: "Copy multi-selection file paths to clipboard",
+                cmd: "mul-clip",
+                vis_hidden: false,
+                params: vec![],
+                op: cmd::multi_clip_path,
             },
         );
         map.insert(
@@ -1970,7 +2014,7 @@ impl<'a> App<'a> {
             mode_cmd_finder: false,
             show_command_window: false,
             command_input: String::new(),
-            term_clear: false,
+            term_clear: true, // Always clear on start
             show_output_window: false,
             output_title: String::new(),
             output_text: String::new(),
@@ -2825,6 +2869,11 @@ impl<'a> App<'a> {
         self.update_selection();
         self.update_preview();
         loop {
+            if self.should_quit {
+                terminal.clear()?;
+                log!("Quitting main event loop");
+                break;
+            }
             if self.term_clear {
                 terminal.clear()?;
                 self.term_clear = false;
@@ -2875,10 +2924,6 @@ impl<'a> App<'a> {
                     if sel_changed {
                         self.update_preview();
                     }
-                }
-                if self.should_quit {
-                    log!("Quitting main event loop");
-                    break;
                 }
             }
         }
