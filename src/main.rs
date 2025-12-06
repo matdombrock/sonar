@@ -1684,17 +1684,19 @@ mod cfg {
     const FILE_NAME: &str = "config.txt";
     pub const DEFAULT: &str = r#"
 # Default configuration
-cmd_on_enter    edit
+cmd_on_enter     edit
 # 0 = no limit
-list_limit      0
-force_sixel     false
-max_image_width 80
+list_limit       0
+force_sixel      false
+max_image_width  80
+responsive_break 100
 "#;
     pub struct Config {
         pub cmd_on_enter: String,
         pub list_limit: i32,
         pub force_sixel: bool,
         pub max_image_width: u16,
+        pub responsive_break: u16,
     }
     impl Config {
         pub fn new() -> Self {
@@ -1703,6 +1705,7 @@ max_image_width 80
                 list_limit: 100000,
                 force_sixel: false,
                 max_image_width: 80,
+                responsive_break: 100,
             }
         }
         pub fn get_path() -> std::path::PathBuf {
@@ -1755,6 +1758,11 @@ max_image_width 80
                     "max_image_width" => {
                         if let Ok(width) = value.parse::<u16>() {
                             config.max_image_width = width;
+                        }
+                    }
+                    "responsive_break" => {
+                        if let Ok(breakpoint) = value.parse::<u16>() {
+                            config.responsive_break = breakpoint;
                         }
                     }
                     _ => {}
@@ -2963,7 +2971,7 @@ impl<'a> App<'a> {
                 .split(popup_layout[1])[1]
         }
         let area = frame.area();
-        let threshold = 100;
+        let threshold = self.cfg.responsive_break;
 
         // Reserve one line at the bottom for the status bar
         let main_chunks = Layout::default()
