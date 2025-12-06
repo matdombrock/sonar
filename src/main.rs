@@ -6,7 +6,6 @@ use crossterm::{
 };
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
-use ratatui::style::Color as RColor;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Span, Text};
 use ratatui::{
@@ -2437,8 +2436,8 @@ impl<'a> App<'a> {
             }
         }
         // Fallback to syntect for syntax highlighting
-        fn syntect_to_ratatui_color(s: SyntectStyle) -> RColor {
-            RColor::Rgb(s.foreground.r, s.foreground.g, s.foreground.b)
+        fn syntect_to_ratatui_color(s: SyntectStyle) -> Color {
+            Color::Rgb(s.foreground.r, s.foreground.g, s.foreground.b)
         }
         let ss = SyntaxSet::load_defaults_newlines();
         // FIXME: Should only load once
