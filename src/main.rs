@@ -39,7 +39,7 @@ use syntect::parsing::SyntaxSet;
 use std::path::PathBuf;
 
 // INTERNAL MODULES
-use crate::{cmd_data::CmdName, node_info::NodeInfo, node_type::NodeType};
+use crate::{cmd::CmdName, node_info::NodeInfo, node_type::NodeType};
 
 const APP_NAME: &str = "sona";
 
@@ -116,10 +116,10 @@ mod log {
     }
 }
 
-mod cmd_data {
-    use std::collections::HashMap;
+mod cmd {
+    use std::{collections::HashMap, env, fs, path::PathBuf, process::Command};
 
-    use crate::cmd_data;
+    use crate::{APP_NAME, App, SEP, cls, cmd, kb, log, sc};
 
     #[derive(Hash, Eq, PartialEq, Debug, Clone, PartialOrd, Ord)]
     pub enum CmdName {
@@ -164,12 +164,13 @@ mod cmd_data {
         pub cmd: &'static str,
         pub vis_hidden: bool, // Hidden from visual cmd selection
         pub params: Vec<&'static str>,
+        pub op: fn(&mut App, Vec<&str>) -> (),
     }
     pub type CmdList = HashMap<CmdName, CmdData>;
     pub fn cmd_name_from_str(
-        cmd_list: &HashMap<CmdName, cmd_data::CmdData>,
+        cmd_list: &HashMap<CmdName, cmd::CmdData>,
         cmd: &str,
-    ) -> Option<cmd_data::CmdName> {
+    ) -> Option<cmd::CmdName> {
         for (name, data) in cmd_list.iter() {
             if data.cmd == cmd {
                 return Some(name.clone());
@@ -177,10 +178,7 @@ mod cmd_data {
         }
         None
     }
-    pub fn get_cmd_data(
-        cmd_list: &cmd_data::CmdList,
-        name: &cmd_data::CmdName,
-    ) -> cmd_data::CmdData {
+    pub fn get_cmd_data(cmd_list: &cmd::CmdList, name: &cmd::CmdName) -> cmd::CmdData {
         match cmd_list.get(name) {
             Some(data) => data.clone(),
             None => panic!("Command not found: {:?}", name),
@@ -188,9 +186,519 @@ mod cmd_data {
     }
 
     // Helper to get command string from CmdName
-    pub fn get_cmd(cmd_list: &cmd_data::CmdList, name: &cmd_data::CmdName) -> String {
+    pub fn get_cmd(cmd_list: &cmd::CmdList, name: &cmd::CmdName) -> String {
         get_cmd_data(cmd_list, name).cmd.to_string()
     }
+
+    pub fn cmd_exit(app: &mut App, _args: Vec<&str>) {
+        app.should_quit = true;
+    }
+
+    pub fn cmd_select(app: &mut App, _args: Vec<&str>) {
+        // Update input to empty to reset search
+        app.input = String::new();
+        app.update_results();
+        // Get selection
+        let selection = app.selection.clone();
+        // NOTE: Handle shortcuts selections
+        // Handle internal commands
+        // Handle actual selection
+        match selection.name.as_str() {
+            // Shortcuts
+            sc::EXIT => {}
+            sc::HOME => {
+                cmd::cmd_home(app, vec![]);
+                return;
+            }
+            sc::DIR_UP => {
+                cmd::cmd_dir_up(app, vec![]);
+                return;
+            }
+            sc::DIR_BACK => {
+                cmd::cmd_dir_back(app, vec![]);
+                return;
+            }
+            sc::EXP => {
+                cmd::cmd_explode(app, vec![]);
+                return;
+            }
+            sc::MENU_BACK => {
+                cmd::cmd_menu_back(app, vec![]);
+                return;
+            }
+            sc::CMDS => {
+                cmd::cmd_cmd_finder_toggle(app, vec![]);
+                return;
+            }
+            // Either an internal command, file or dir
+            _ => {
+                // Check if selection is an internal command
+                if selection.is_command() {
+                    let cmd_name = match cmd::cmd_name_from_str(&app.cmd_list, &selection.name) {
+                        Some(name) => name,
+                        None => {
+                            app.set_output("Error", "Command data not found for selected command.");
+                            cmd::cmd_output_window_show(app, vec![]);
+                            return;
+                        }
+                    };
+                    app.mode_cmd_finder = false;
+                    app.update_listing();
+                    app.update_results();
+                    // If the command has params, open command window
+                    let cmd_data = cmd::get_cmd_data(&app.cmd_list, &cmd_name);
+                    if cmd_data.params.len() > 0 {
+                        // Open command window for params
+                        app.command_input = format!("{} ", cmd_data.cmd);
+                        app.show_command_window = true;
+                        return;
+                    }
+                    app.handle_cmd(&selection.name);
+                    return;
+                }
+                // Check if selection is a shell command
+                if selection.is_shell_command() {
+                    app.mode_cmd_finder = false;
+                    app.update_listing();
+                    app.update_results();
+                    app.handle_cmd(&selection.name);
+                    return;
+                }
+                // If we have a file, run the on_select command
+                // We have a directory, enter it
+                if selection.is_file() {
+                    app.handle_cmd(app.cfg.cmd_on_select.clone().as_str());
+                    return;
+                } else if selection.is_dir() {
+                    app.append_cwd(&app.selection.name.clone().into());
+                    app.update_listing();
+                    app.update_results();
+                    app.selection_index = 0;
+                    return;
+                } else {
+                    app.set_output("Error", "Selected item is neither a file nor a directory.");
+                    cmd::cmd_output_window_show(app, vec![]);
+                    return;
+                }
+            }
+        }
+    }
+
+    pub fn cmd_home(app: &mut App, _args: Vec<&str>) {
+        app.append_cwd(&dirs::home_dir().unwrap());
+        app.update_listing();
+        app.update_results();
+        app.selection_index = 0;
+    }
+
+    pub fn cmd_dir_up(app: &mut App, _args: Vec<&str>) {
+        app.append_cwd(&"..".into());
+        app.update_listing();
+        app.update_results();
+        app.selection_index = 0;
+    }
+
+    pub fn cmd_dir_back(app: &mut App, _args: Vec<&str>) {
+        app.append_cwd(&app.lwd.clone());
+        app.update_listing();
+        app.update_results();
+        app.selection_index = 0;
+    }
+
+    pub fn cmd_explode(app: &mut App, _args: Vec<&str>) {
+        app.mode_explode = !app.mode_explode;
+        app.update_listing();
+        app.update_results();
+        app.update_selection();
+        app.update_preview();
+        app.selection_index = 0;
+    }
+
+    pub fn cmd_sel_down(app: &mut App, _args: Vec<&str>) {
+        app.selection_index += 1;
+        if app.selection_index >= app.results.len() as i32 {
+            app.selection_index = 0;
+        }
+    }
+
+    pub fn cmd_sel_up(app: &mut App, _args: Vec<&str>) {
+        app.selection_index += -1;
+        if app.selection_index < 0 && !app.results.is_empty() {
+            app.selection_index = app.results.len() as i32 - 1;
+        } else if app.results.is_empty() {
+            app.selection_index = 0;
+        }
+    }
+
+    pub fn cmd_cmd_window_toggle(app: &mut App, _args: Vec<&str>) {
+        app.show_command_window = !app.show_command_window;
+    }
+
+    pub fn cmd_output_window_toggle(app: &mut App, _args: Vec<&str>) {
+        app.show_output_window = !app.show_output_window;
+    }
+
+    pub fn cmd_output_window_show(app: &mut App, _args: Vec<&str>) {
+        app.show_output_window = true;
+    }
+
+    pub fn cmd_output_window_hide(app: &mut App, _args: Vec<&str>) {
+        app.show_output_window = false;
+    }
+
+    pub fn cmd_multi_sel(app: &mut App, _args: Vec<&str>) {
+        if !app.selection.is_file() && !app.selection.is_dir() {
+            return;
+        }
+        let mut selected_path = app.cwd.clone();
+        selected_path.push(&app.selection.name);
+        // Check if already in multi selection
+        if let Some(pos) = app.multi_selection.iter().position(|x| *x == selected_path) {
+            app.multi_selection.remove(pos);
+        } else {
+            app.multi_selection.push(selected_path);
+        }
+    }
+
+    pub fn cmd_multi_clear(app: &mut App, _args: Vec<&str>) {
+        app.multi_selection.clear();
+        app.set_output("", "Multi selection cleared.");
+        cmd::cmd_output_window_show(app, vec![]);
+    }
+
+    pub fn cmd_multi_show(app: &mut App, _args: Vec<&str>) {
+        let mut output_text = String::new();
+        if app.multi_selection.is_empty() {
+            app.set_output("Multi-select", "No items in multi selection.");
+            cmd::cmd_output_window_show(app, vec![]);
+            return;
+        }
+        for path in app.multi_selection.iter() {
+            output_text += &format!("{}\n", path.to_str().unwrap());
+        }
+        app.set_output("Multi-select", &output_text);
+        cmd::cmd_output_window_show(app, vec![]);
+    }
+
+    // Write multi selection to a file
+    pub fn cmd_multi_save(app: &mut App, _args: Vec<&str>) {
+        let tmp = env::temp_dir();
+        let file = tmp.join(APP_NAME).join("multi.txt");
+        fs::write(
+            &file,
+            app.multi_selection
+                .iter()
+                .map(|p| p.to_str().unwrap())
+                .collect::<Vec<&str>>()
+                .join("\n"),
+        )
+        .unwrap_or(());
+        app.set_output(
+            "Saved",
+            &format!(
+                "Multi selection saved to {} ({} items).",
+                file.to_str().unwrap(),
+                app.multi_selection.len()
+            ),
+        );
+        cmd::cmd_output_window_show(app, vec![]);
+    }
+
+    // Copy multi selection to the cwd
+    pub fn cmd_multi_copy(app: &mut App, _args: Vec<&str>) {
+        let mut output_text = String::new();
+        if app.multi_selection.is_empty() {
+            app.set_output("Multi-select", "No items in multi selection to copy.");
+            cmd::cmd_output_window_show(app, vec![]);
+            return;
+        }
+        for path in app.multi_selection.iter() {
+            let file_name = match path.file_name() {
+                Some(name) => name,
+                None => continue,
+            };
+            let dest_path = app.cwd.join(file_name);
+            match fs::copy(&path, &dest_path) {
+                Ok(_) => {
+                    output_text += &format!(
+                        "Copied {} to {}\n",
+                        path.to_str().unwrap(),
+                        dest_path.to_str().unwrap()
+                    );
+                }
+                Err(e) => {
+                    output_text += &format!(
+                        "Failed to copy {}: {}\n",
+                        path.to_str().unwrap(),
+                        e.to_string()
+                    );
+                }
+            }
+        }
+        app.set_output("Multi-select", &output_text);
+        cmd::cmd_output_window_show(app, vec![]);
+    }
+
+    pub fn cmd_multi_delete(app: &mut App, _args: Vec<&str>) {
+        let mut output_text = String::new();
+        if app.multi_selection.is_empty() {
+            app.set_output("Multi-select", "No items in multi selection to delete.");
+            cmd::cmd_output_window_show(app, vec![]);
+            return;
+        }
+        for path in app.multi_selection.iter() {
+            match fs::remove_file(&path) {
+                Ok(_) => {
+                    output_text += &format!("Deleted {}\n", path.to_str().unwrap());
+                }
+                Err(e) => {
+                    output_text += &format!(
+                        "Failed to delete {}: {}\n",
+                        path.to_str().unwrap(),
+                        e.to_string()
+                    );
+                }
+            }
+        }
+        app.multi_selection.clear();
+        app.set_output("Multi-select", &output_text);
+        cmd::cmd_output_window_show(app, vec![]);
+    }
+
+    pub fn cmd_multi_move(app: &mut App, _args: Vec<&str>) {
+        let mut output_text = String::new();
+        if app.multi_selection.is_empty() {
+            app.set_output("Multi-select", "No items in multi selection to move.");
+            cmd::cmd_output_window_show(app, vec![]);
+            return;
+        }
+        for path in app.multi_selection.iter() {
+            let file_name = match path.file_name() {
+                Some(name) => name,
+                None => continue,
+            };
+            let dest_path = app.cwd.join(file_name);
+            match fs::rename(&path, &dest_path) {
+                Ok(_) => {
+                    output_text += &format!(
+                        "Moved {} to {}\n",
+                        path.to_str().unwrap(),
+                        dest_path.to_str().unwrap()
+                    );
+                }
+                Err(e) => {
+                    output_text += &format!(
+                        "Failed to move {}: {}\n",
+                        path.to_str().unwrap(),
+                        e.to_string()
+                    );
+                }
+            }
+        }
+        app.multi_selection.clear();
+        app.set_output("Multi-select", &output_text);
+        cmd::cmd_output_window_show(app, vec![]);
+    }
+
+    pub fn cmd_cmd_finder_toggle(app: &mut App, _args: Vec<&str>) {
+        app.mode_cmd_finder = !app.mode_cmd_finder;
+        app.update_listing();
+        app.update_results();
+        app.selection_index = 0;
+    }
+
+    // Show a list of commands
+    pub fn cmd_cmd_list(app: &mut App, _args: Vec<&str>) {
+        let mut text = String::new();
+        // Sort by command name
+        let mut vec: Vec<_> = app.cmd_list.iter().collect();
+        vec.sort_by(|a, b| a.1.cmd.cmp(&b.1.cmd));
+        for (_name, cmd_data) in vec {
+            text += &format!("{} - {}\n", cmd_data.cmd, cmd_data.description);
+        }
+        app.set_output("Available Commands", &text);
+        cmd::cmd_output_window_show(app, vec![]);
+    }
+
+    // Deprecated?
+    pub fn cmd_menu_back(_app: &mut App, _args: Vec<&str>) {
+        // app.mode_vis_commands = false;
+        // app.update_listing();
+        // app.update_results();
+        // app.selection_index = 0;
+    }
+
+    pub fn cmd_log_show(app: &mut App, _args: Vec<&str>) {
+        let log_path = log::log_path();
+        match fs::read_to_string(&log_path) {
+            Ok(content) => {
+                // Reverse the log content to show latest entries first
+                let mut lines: Vec<&str> = content.lines().collect();
+                lines.push(SEP);
+                lines.push("Top of log");
+                lines.reverse();
+                let content = lines.join("\n");
+                app.set_output("Log", content.as_str());
+            }
+            Err(_) => {
+                app.set_output("Log", "No log file found.");
+            }
+        }
+        cmd::cmd_output_window_show(app, vec![]);
+    }
+
+    pub fn cmd_log_clear(app: &mut App, _args: Vec<&str>) {
+        let log_path = log::log_path();
+        match fs::remove_file(&log_path) {
+            Ok(_) => {
+                app.set_output("Log", "Log file cleared.");
+            }
+            Err(_) => {
+                app.set_output("Log", "No log file found to clear.");
+            }
+        }
+        cmd::cmd_output_window_show(app, vec![]);
+    }
+
+    pub fn cmd_sec_up(app: &mut App, _args: Vec<&str>) {
+        if app.show_output_window {
+            if app.scroll_off_output >= 5 {
+                app.scroll_off_output -= 5;
+            } else {
+                app.scroll_off_output = 0;
+            }
+            log!("Output scroll offset up: {}", app.scroll_off_output);
+            return;
+        }
+        if app.scroll_off_preview >= 5 {
+            app.scroll_off_preview -= 5;
+        } else {
+            app.scroll_off_preview = 0;
+        }
+        log!("Preview scroll offset up: {}", app.scroll_off_preview);
+    }
+
+    pub fn cmd_sec_down(app: &mut App, _args: Vec<&str>) {
+        if app.show_output_window {
+            let height = app.output_text.split("\n").count() as u16;
+            if app.scroll_off_output < height {
+                app.scroll_off_output += 5;
+            }
+            log!(
+                "Output scroll offset down: {}/{}",
+                app.scroll_off_output,
+                height
+            );
+            return;
+        }
+        let height = app.preview_content.lines.len() as u16;
+        if app.scroll_off_preview < height {
+            app.scroll_off_preview += 5;
+        }
+        log!(
+            "Preview scroll offset down: {}/{}",
+            app.scroll_off_preview,
+            height
+        );
+    }
+
+    pub fn cmd_show_keybinds(app: &mut App, _args: Vec<&str>) {
+        let kb_path = kb::get_path();
+        let found = app.found_keybinds;
+        let mut out = String::from(format!("Path: {}", kb_path.to_str().unwrap()));
+        if !found {
+            out += " \n\n(not found, using defaults)";
+        }
+
+        out += "\n\nKeybinds:\n";
+
+        for kb in app.keybinds.iter() {
+            out += kb::to_string_full(&app.cmd_list, kb).as_str();
+        }
+
+        app.set_output("Keybinds", &out);
+        cmd::cmd_output_window_show(app, vec![]);
+    }
+
+    // Edit the selected file
+    pub fn cmd_edit(app: &mut App, _args: Vec<&str>) {
+        let mut selected_path = app.cwd.clone();
+        selected_path.push(&app.selection.name);
+        let editor = env::var("EDITOR").unwrap_or("vi".to_string());
+        log!(
+            "Opening editor: {} {}",
+            editor,
+            selected_path.to_str().unwrap()
+        );
+        match Command::new(editor)
+            .arg(selected_path.to_str().unwrap())
+            .status()
+        {
+            Ok(_) => {}
+            Err(e) => {
+                app.set_output("Editor", &format!("Failed to open editor: {}", e));
+                cmd::cmd_output_window_show(app, vec![]);
+            }
+        }
+    }
+
+    pub fn cmd_goto(app: &mut App, args: Vec<&str>) {
+        if args.is_empty() {
+            app.set_output("Goto", "Error: No path provided.");
+            cmd::cmd_output_window_show(app, vec![]);
+            return;
+        }
+        let path = PathBuf::from(args[0]);
+        app.append_cwd(&path);
+        app.update_listing();
+        app.update_results();
+        app.selection_index = 0;
+    }
+
+    pub fn cmd_shell_quick(app: &mut App, args: Vec<&str>) {
+        // Join args into a single command string
+        let mut shell_cmd = args[0..].join(" ");
+
+        // Replace variables
+        shell_cmd = app.replace_shell_vars(shell_cmd);
+
+        // Run the command
+        log!("Running shell command: {}", shell_cmd);
+        match Command::new("sh").arg("-c").arg(shell_cmd).output() {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let combined_output = format!("{}{}", stdout, stderr);
+                app.set_output("Shell", &combined_output);
+            }
+            Err(e) => {
+                app.set_output("Shell", &format!("Failed to run command: {}", e));
+            }
+        }
+        cmd::cmd_output_window_show(app, vec![]);
+    }
+
+    pub fn cmd_shell_full(app: &mut App, _args: Vec<&str>) {
+        let shell = env::var("SHELL").unwrap_or("/bin/sh".to_string());
+        log!("Opening shell: {}", shell);
+        cls();
+        match Command::new(shell).status() {
+            Ok(_) => {
+                app.set_output("Shell", "Shell closed.");
+            }
+            Err(e) => {
+                app.set_output("Shell", &format!("Failed to open shell: {}", e));
+            }
+        }
+        cls();
+        app.term_clear = true;
+        cmd::cmd_output_window_show(app, vec![]);
+    }
+
+    pub fn cmd_dbg_clear_preview(app: &mut App, _args: Vec<&str>) {
+        app.term_clear = true;
+    }
+
     pub fn make_cmd_list() -> CmdList {
         let mut map = HashMap::new();
         map.insert(
@@ -201,6 +709,7 @@ mod cmd_data {
                 cmd: "exit",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_exit,
             },
         );
         map.insert(
@@ -211,6 +720,7 @@ mod cmd_data {
                 cmd: "home",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_home,
             },
         );
         map.insert(
@@ -221,6 +731,7 @@ mod cmd_data {
                 cmd: "sel-up",
                 vis_hidden: true,
                 params: vec![],
+                op: cmd_sel_up,
             },
         );
         map.insert(
@@ -231,6 +742,7 @@ mod cmd_data {
                 cmd: "sel-down",
                 vis_hidden: true,
                 params: vec![],
+                op: cmd_sel_down,
             },
         );
         map.insert(
@@ -241,6 +753,7 @@ mod cmd_data {
                 cmd: "dir-up",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_dir_up,
             },
         );
         map.insert(
@@ -251,6 +764,7 @@ mod cmd_data {
                 cmd: "dir-back",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_dir_back,
             },
         );
         map.insert(
@@ -261,6 +775,7 @@ mod cmd_data {
                 cmd: "explode",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_explode,
             },
         );
         map.insert(
@@ -271,6 +786,7 @@ mod cmd_data {
                 cmd: "select",
                 vis_hidden: true,
                 params: vec![],
+                op: cmd_select,
             },
         );
         map.insert(
@@ -281,6 +797,7 @@ mod cmd_data {
                 cmd: "cmd-win",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_cmd_window_toggle,
             },
         );
         map.insert(
@@ -291,6 +808,7 @@ mod cmd_data {
                 cmd: "cmd-find",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_cmd_finder_toggle,
             },
         );
         map.insert(
@@ -301,6 +819,7 @@ mod cmd_data {
                 cmd: "cmd-list",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_cmd_list,
             },
         );
         map.insert(
@@ -311,6 +830,7 @@ mod cmd_data {
                 cmd: "output-toggle",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_output_window_toggle,
             },
         );
         map.insert(
@@ -321,6 +841,7 @@ mod cmd_data {
                 cmd: "output-show",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_output_window_show,
             },
         );
         map.insert(
@@ -331,6 +852,7 @@ mod cmd_data {
                 cmd: "output-hide",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_output_window_hide,
             },
         );
         map.insert(
@@ -341,6 +863,7 @@ mod cmd_data {
                 cmd: "mul-sel",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_multi_sel,
             },
         );
         map.insert(
@@ -351,6 +874,7 @@ mod cmd_data {
                 cmd: "mul-clear",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_multi_clear,
             },
         );
         map.insert(
@@ -361,6 +885,7 @@ mod cmd_data {
                 cmd: "mul-show",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_multi_show,
             },
         );
         map.insert(
@@ -371,6 +896,7 @@ mod cmd_data {
                 cmd: "mul-save",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_multi_save,
             },
         );
         map.insert(
@@ -381,6 +907,7 @@ mod cmd_data {
                 cmd: "mul-copy",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_multi_copy,
             },
         );
         map.insert(
@@ -391,6 +918,7 @@ mod cmd_data {
                 cmd: "mul-delete",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_multi_delete,
             },
         );
         map.insert(
@@ -401,6 +929,7 @@ mod cmd_data {
                 cmd: "mul-move",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_multi_move,
             },
         );
         map.insert(
@@ -411,6 +940,7 @@ mod cmd_data {
                 cmd: "menu-back",
                 vis_hidden: true,
                 params: vec![],
+                op: cmd_menu_back,
             },
         );
         map.insert(
@@ -421,6 +951,7 @@ mod cmd_data {
                 cmd: "log",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_log_show,
             },
         );
         map.insert(
@@ -431,6 +962,7 @@ mod cmd_data {
                 cmd: "log-clear",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_log_clear,
             },
         );
         map.insert(
@@ -441,6 +973,7 @@ mod cmd_data {
                 cmd: "sec-up",
                 vis_hidden: true,
                 params: vec![],
+                op: cmd_sec_up,
             },
         );
         map.insert(
@@ -451,6 +984,7 @@ mod cmd_data {
                 cmd: "sec-down",
                 vis_hidden: true,
                 params: vec![],
+                op: cmd_sec_down,
             },
         );
         map.insert(
@@ -461,6 +995,7 @@ mod cmd_data {
                 cmd: "keybinds-show",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_show_keybinds,
             },
         );
         map.insert(
@@ -471,6 +1006,7 @@ mod cmd_data {
                 cmd: "dbg-prev-clear",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_dbg_clear_preview,
             },
         );
         map.insert(
@@ -481,6 +1017,7 @@ mod cmd_data {
                 cmd: "edit",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_edit,
             },
         );
         map.insert(
@@ -491,6 +1028,7 @@ mod cmd_data {
                 cmd: "goto",
                 vis_hidden: false,
                 params: vec!["path"],
+                op: cmd_goto,
             },
         );
         map.insert(
@@ -501,6 +1039,7 @@ mod cmd_data {
                 cmd: "shell",
                 vis_hidden: false,
                 params: vec!["command"],
+                op: cmd_shell_quick,
             },
         );
         map.insert(
@@ -511,6 +1050,7 @@ mod cmd_data {
                 cmd: "shell-full",
                 vis_hidden: false,
                 params: vec![],
+                op: cmd_shell_full,
             },
         );
 
@@ -830,8 +1370,8 @@ misc           white
 }
 
 mod kb {
-    use super::cmd_data;
-    use super::cmd_data::CmdName;
+    use super::cmd;
+    use super::cmd::CmdName;
     use crate::{APP_NAME, log};
     use crossterm::event::{KeyCode, KeyModifiers};
     use std::{env, fs, path::PathBuf};
@@ -893,15 +1433,15 @@ shell       ctrl-s
     }
 
     // Needs the command list before KeyBind only points to enum
-    pub fn to_string_full(cmd_list: &cmd_data::CmdList, kb: &KeyBind) -> String {
+    pub fn to_string_full(cmd_list: &cmd::CmdList, kb: &KeyBind) -> String {
         return format!(
             "{:<12} {}\n",
-            cmd_data::get_cmd(cmd_list, &kb.command),
+            cmd::get_cmd(cmd_list, &kb.command),
             to_string_short(kb)
         );
     }
 
-    pub fn find_by_cmd(keybinds: &KeyBindList, cmd: &cmd_data::CmdName) -> Option<KeyBind> {
+    pub fn find_by_cmd(keybinds: &KeyBindList, cmd: &cmd::CmdName) -> Option<KeyBind> {
         for kb in keybinds.iter() {
             if &kb.command == cmd {
                 return Some(kb.clone());
@@ -932,7 +1472,7 @@ shell       ctrl-s
 
     fn make_list(keybinds_str: &str) -> KeyBindList {
         let mut list = KeyBindList::new();
-        let cmd_list = cmd_data::make_cmd_list();
+        let cmd_list = cmd::make_cmd_list();
         for line in keybinds_str.lines() {
             // Ignore comments
             if line.starts_with('#') || line.trim().is_empty() {
@@ -955,7 +1495,7 @@ shell       ctrl-s
                 code = combo_split[1];
             }
             //
-            let cmd = match cmd_data::cmd_name_from_str(&cmd_list, cmd) {
+            let cmd = match cmd::cmd_name_from_str(&cmd_list, cmd) {
                 Some(name) => name,
                 None => {
                     log!("Unknown command in {}: {}", FILE_NAME, cmd);
@@ -1089,7 +1629,7 @@ max_image_width 80
 }
 
 mod shell_cmds {
-    use crate::cmd_data;
+    use crate::cmd;
 
     const FILE_NAME: &str = "shell_cmds.txt";
     pub const DEFAULT: &str = r#"
@@ -1128,8 +1668,7 @@ zip -r archive.zip $...
     }
 
     pub fn make_list(shell_str: &str) -> Vec<String> {
-        let shell_cmd_name =
-            cmd_data::get_cmd(&cmd_data::make_cmd_list(), &cmd_data::CmdName::ShellQuick);
+        let shell_cmd_name = cmd::get_cmd(&cmd::make_cmd_list(), &cmd::CmdName::ShellQuick);
         let mut list = Vec::new();
         for line in shell_str.lines() {
             // Ignore comments
@@ -1155,6 +1694,7 @@ enum LoopReturn {
 
 // Main application state
 struct App<'a> {
+    should_quit: bool,
     input: String,
     listing: Vec<NodeInfo>,
     results: Vec<NodeInfo>,
@@ -1178,7 +1718,7 @@ struct App<'a> {
     show_yesno_window: bool,
     yesno_text: String,
     yesno_result: i32, // 0 = no, 1 = yes, 2 = unset
-    cmd_list: cmd_data::CmdList,
+    cmd_list: cmd::CmdList,
     shell_cmd_list: Vec<String>,
     keybinds: kb::KeyBindList,
     cs: cs::Colors,
@@ -1220,6 +1760,7 @@ impl<'a> App<'a> {
         };
 
         Self {
+            should_quit: false,
             input: String::new(),
             listing: Vec::new(),
             results: Vec::new(),
@@ -1243,7 +1784,7 @@ impl<'a> App<'a> {
             show_yesno_window: false,
             yesno_text: String::new(),
             yesno_result: 2,
-            cmd_list: cmd_data::make_cmd_list(),
+            cmd_list: cmd::make_cmd_list(),
             shell_cmd_list: shell_cmds::make_list_auto(),
             keybinds: kb::make_list_auto(),
             cs: cs::Colors::make_list_auto(),
@@ -1339,8 +1880,8 @@ impl<'a> App<'a> {
     }
 
     // A simple helper which avoids needing to pass cmd_list everywhere
-    fn get_cmd(&self, name: &cmd_data::CmdName) -> String {
-        cmd_data::get_cmd(&self.cmd_list, name)
+    fn get_cmd(&self, name: &cmd::CmdName) -> String {
+        cmd::get_cmd(&self.cmd_list, name)
     }
 
     fn replace_shell_vars(&self, mut shell_cmd: String) -> String {
@@ -1395,7 +1936,7 @@ impl<'a> App<'a> {
             self.preview_content +=
                 Line::styled(format!("{}", line), Style::default().fg(self.cs.tip));
         }
-        let kb_exit = kb::find_by_cmd(&self.keybinds, &cmd_data::CmdName::Exit).unwrap();
+        let kb_exit = kb::find_by_cmd(&self.keybinds, &cmd::CmdName::Exit).unwrap();
         let kb_exit_str = kb::to_string_short(&kb_exit);
         self.preview_content += Line::from("");
         self.preview_content += Line::styled("Tips:", Style::default().fg(self.cs.header));
@@ -1788,7 +2329,7 @@ impl<'a> App<'a> {
                 // Check if we have an internal command
                 if self.selection.is_command() {
                     let cmd_name =
-                        match cmd_data::cmd_name_from_str(&self.cmd_list, &self.selection.name) {
+                        match cmd::cmd_name_from_str(&self.cmd_list, &self.selection.name) {
                             Some(name) => name,
                             None => {
                                 self.preview_content += Line::styled(
@@ -1798,7 +2339,7 @@ impl<'a> App<'a> {
                                 return;
                             }
                         };
-                    let data = cmd_data::get_cmd_data(&self.cmd_list, &cmd_name).clone();
+                    let data = cmd::get_cmd_data(&self.cmd_list, &cmd_name).clone();
                     self.preview_content += Line::styled(
                         format!("name: {}", data.fname),
                         Style::default().fg(self.cs.tip),
@@ -1986,19 +2527,19 @@ impl<'a> App<'a> {
     fn input_out_window(&mut self, modifiers: KeyModifiers, code: KeyCode) {
         match (modifiers, code) {
             (KeyModifiers::NONE, KeyCode::Esc) => {
-                self.cmd_output_window_hide();
+                cmd::cmd_output_window_hide(self, vec![]);
                 return;
             }
             (KeyModifiers::NONE, KeyCode::Enter) => {
-                self.cmd_output_window_hide();
+                cmd::cmd_output_window_hide(self, vec![]);
                 return;
             }
             _ => {}
         }
         // Special command matching just for output window
         let cmd = match (modifiers, code) {
-            (KeyModifiers::ALT, KeyCode::Char('j')) => self.get_cmd(&cmd_data::CmdName::SecDown),
-            (KeyModifiers::ALT, KeyCode::Char('k')) => self.get_cmd(&cmd_data::CmdName::SecUp),
+            (KeyModifiers::ALT, KeyCode::Char('j')) => self.get_cmd(&cmd::CmdName::SecDown),
+            (KeyModifiers::ALT, KeyCode::Char('k')) => self.get_cmd(&cmd::CmdName::SecUp),
             _ => "".to_string(),
         };
         self.handle_cmd(&cmd.to_string());
@@ -2065,7 +2606,7 @@ impl<'a> App<'a> {
         for kb in self.keybinds.iter() {
             if kb.modifiers == modifiers && kb.code == code {
                 cmd = self.get_cmd(&kb.command).to_string();
-                let cmd_data = cmd_data::get_cmd_data(&self.cmd_list, &kb.command);
+                let cmd_data = cmd::get_cmd_data(&self.cmd_list, &kb.command);
                 if cmd_data.params.len() > 0 {
                     cmd += &format!(" {}", ASK); // Indicate that params are needed and should be asked for
                 }
@@ -2076,519 +2617,6 @@ impl<'a> App<'a> {
             log!("cmd from mapping: {}", &cmd);
         }
         cmd.to_string()
-    }
-
-    fn cmd_select(&mut self) -> LoopReturn {
-        // Update input to empty to reset search
-        self.input = String::new();
-        self.update_results();
-        // Get selection
-        let selection = self.selection.clone();
-        // NOTE: Handle shortcuts selections
-        // Handle internal commands
-        // Handle actual selection
-        match selection.name.as_str() {
-            // Shortcuts
-            sc::EXIT => return LoopReturn::Break,
-            sc::HOME => {
-                self.cmd_home();
-                return LoopReturn::Continue;
-            }
-            sc::DIR_UP => {
-                self.cmd_dir_up();
-                return LoopReturn::Continue;
-            }
-            sc::DIR_BACK => {
-                self.cmd_dir_back();
-                return LoopReturn::Continue;
-            }
-            sc::EXP => {
-                self.cmd_explode();
-                return LoopReturn::Continue;
-            }
-            sc::MENU_BACK => {
-                self.cmd_menu_back();
-                return LoopReturn::Continue;
-            }
-            sc::CMDS => {
-                self.cmd_cmd_finder_toggle();
-                return LoopReturn::Continue;
-            }
-            // Either an internal command, file or dir
-            _ => {
-                // Check if selection is an internal command
-                if selection.is_command() {
-                    let cmd_name =
-                        match cmd_data::cmd_name_from_str(&self.cmd_list, &selection.name) {
-                            Some(name) => name,
-                            None => {
-                                self.set_output(
-                                    "Error",
-                                    "Command data not found for selected command.",
-                                );
-                                self.cmd_output_window_show();
-                                return LoopReturn::Ok;
-                            }
-                        };
-                    self.mode_cmd_finder = false;
-                    self.update_listing();
-                    self.update_results();
-                    // If the command has params, open command window
-                    let cmd_data = cmd_data::get_cmd_data(&self.cmd_list, &cmd_name);
-                    if cmd_data.params.len() > 0 {
-                        // Open command window for params
-                        self.command_input = format!("{} ", cmd_data.cmd);
-                        self.show_command_window = true;
-                        return LoopReturn::Continue;
-                    }
-                    self.handle_cmd(&selection.name);
-                    return LoopReturn::Continue;
-                }
-                // Check if selection is a shell command
-                if selection.is_shell_command() {
-                    self.mode_cmd_finder = false;
-                    self.update_listing();
-                    self.update_results();
-                    self.handle_cmd(&selection.name);
-                    return LoopReturn::Continue;
-                }
-                // If we have a file, run the on_select command
-                // We have a directory, enter it
-                if selection.is_file() {
-                    self.handle_cmd(self.cfg.cmd_on_select.clone().as_str());
-                    return LoopReturn::Continue;
-                } else if selection.is_dir() {
-                    self.append_cwd(&self.selection.name.clone().into());
-                    self.update_listing();
-                    self.update_results();
-                    self.selection_index = 0;
-                    return LoopReturn::Continue;
-                } else {
-                    self.set_output("Error", "Selected item is neither a file nor a directory.");
-                    self.cmd_output_window_show();
-                    return LoopReturn::Ok;
-                }
-            }
-        }
-    }
-
-    fn cmd_home(&mut self) {
-        self.append_cwd(&dirs::home_dir().unwrap());
-        self.update_listing();
-        self.update_results();
-        self.selection_index = 0;
-    }
-
-    fn cmd_dir_up(&mut self) {
-        self.append_cwd(&"..".into());
-        self.update_listing();
-        self.update_results();
-        self.selection_index = 0;
-    }
-
-    fn cmd_dir_back(&mut self) {
-        self.append_cwd(&self.lwd.clone());
-        self.update_listing();
-        self.update_results();
-        self.selection_index = 0;
-    }
-
-    fn cmd_explode(&mut self) {
-        self.mode_explode = !self.mode_explode;
-        self.update_listing();
-        self.update_results();
-        self.update_selection();
-        self.update_preview();
-        self.selection_index = 0;
-    }
-
-    fn cmd_sel_down(&mut self) {
-        self.selection_index += 1;
-        if self.selection_index >= self.results.len() as i32 {
-            self.selection_index = 0;
-        }
-    }
-
-    fn cmd_sel_up(&mut self) {
-        self.selection_index += -1;
-        if self.selection_index < 0 && !self.results.is_empty() {
-            self.selection_index = self.results.len() as i32 - 1;
-        } else if self.results.is_empty() {
-            self.selection_index = 0;
-        }
-    }
-
-    fn cmd_cmd_window_toggle(&mut self) {
-        self.show_command_window = !self.show_command_window;
-    }
-
-    fn cmd_output_window_toggle(&mut self) {
-        self.show_output_window = !self.show_output_window;
-    }
-
-    fn cmd_output_window_show(&mut self) {
-        self.show_output_window = true;
-    }
-
-    fn cmd_output_window_hide(&mut self) {
-        self.show_output_window = false;
-    }
-
-    fn cmd_multi_sel(&mut self) {
-        if !self.selection.is_file() && !self.selection.is_dir() {
-            return;
-        }
-        let mut selected_path = self.cwd.clone();
-        selected_path.push(&self.selection.name);
-        // Check if already in multi selection
-        if let Some(pos) = self
-            .multi_selection
-            .iter()
-            .position(|x| *x == selected_path)
-        {
-            self.multi_selection.remove(pos);
-        } else {
-            self.multi_selection.push(selected_path);
-        }
-    }
-
-    fn cmd_multi_clear(&mut self) {
-        self.multi_selection.clear();
-        self.set_output("", "Multi selection cleared.");
-        self.cmd_output_window_show();
-    }
-
-    fn cmd_multi_show(&mut self) {
-        let mut output_text = String::new();
-        if self.multi_selection.is_empty() {
-            self.set_output("Multi-select", "No items in multi selection.");
-            self.cmd_output_window_show();
-            return;
-        }
-        for path in self.multi_selection.iter() {
-            output_text += &format!("{}\n", path.to_str().unwrap());
-        }
-        self.set_output("Multi-select", &output_text);
-        self.cmd_output_window_show();
-    }
-
-    // Write multi selection to a file
-    fn cmd_multi_save(&mut self) {
-        let tmp = env::temp_dir();
-        let file = tmp.join(APP_NAME).join("multi.txt");
-        fs::write(
-            &file,
-            self.multi_selection
-                .iter()
-                .map(|p| p.to_str().unwrap())
-                .collect::<Vec<&str>>()
-                .join("\n"),
-        )
-        .unwrap_or(());
-        self.set_output(
-            "Saved",
-            &format!(
-                "Multi selection saved to {} ({} items).",
-                file.to_str().unwrap(),
-                self.multi_selection.len()
-            ),
-        );
-        self.cmd_output_window_show();
-    }
-
-    // Copy multi selection to the cwd
-    fn cmd_multi_copy(&mut self) {
-        let mut output_text = String::new();
-        if self.multi_selection.is_empty() {
-            self.set_output("Multi-select", "No items in multi selection to copy.");
-            self.cmd_output_window_show();
-            return;
-        }
-        for path in self.multi_selection.iter() {
-            let file_name = match path.file_name() {
-                Some(name) => name,
-                None => continue,
-            };
-            let dest_path = self.cwd.join(file_name);
-            match fs::copy(&path, &dest_path) {
-                Ok(_) => {
-                    output_text += &format!(
-                        "Copied {} to {}\n",
-                        path.to_str().unwrap(),
-                        dest_path.to_str().unwrap()
-                    );
-                }
-                Err(e) => {
-                    output_text += &format!(
-                        "Failed to copy {}: {}\n",
-                        path.to_str().unwrap(),
-                        e.to_string()
-                    );
-                }
-            }
-        }
-        self.set_output("Multi-select", &output_text);
-        self.cmd_output_window_show();
-    }
-
-    fn cmd_multi_delete(&mut self) {
-        let mut output_text = String::new();
-        if self.multi_selection.is_empty() {
-            self.set_output("Multi-select", "No items in multi selection to delete.");
-            self.cmd_output_window_show();
-            return;
-        }
-        for path in self.multi_selection.iter() {
-            match fs::remove_file(&path) {
-                Ok(_) => {
-                    output_text += &format!("Deleted {}\n", path.to_str().unwrap());
-                }
-                Err(e) => {
-                    output_text += &format!(
-                        "Failed to delete {}: {}\n",
-                        path.to_str().unwrap(),
-                        e.to_string()
-                    );
-                }
-            }
-        }
-        self.multi_selection.clear();
-        self.set_output("Multi-select", &output_text);
-        self.cmd_output_window_show();
-    }
-
-    fn cmd_multi_move(&mut self) {
-        let mut output_text = String::new();
-        if self.multi_selection.is_empty() {
-            self.set_output("Multi-select", "No items in multi selection to move.");
-            self.cmd_output_window_show();
-            return;
-        }
-        for path in self.multi_selection.iter() {
-            let file_name = match path.file_name() {
-                Some(name) => name,
-                None => continue,
-            };
-            let dest_path = self.cwd.join(file_name);
-            match fs::rename(&path, &dest_path) {
-                Ok(_) => {
-                    output_text += &format!(
-                        "Moved {} to {}\n",
-                        path.to_str().unwrap(),
-                        dest_path.to_str().unwrap()
-                    );
-                }
-                Err(e) => {
-                    output_text += &format!(
-                        "Failed to move {}: {}\n",
-                        path.to_str().unwrap(),
-                        e.to_string()
-                    );
-                }
-            }
-        }
-        self.multi_selection.clear();
-        self.set_output("Multi-select", &output_text);
-        self.cmd_output_window_show();
-    }
-
-    fn cmd_cmd_finder_toggle(&mut self) {
-        self.mode_cmd_finder = !self.mode_cmd_finder;
-        self.update_listing();
-        self.update_results();
-        self.selection_index = 0;
-    }
-
-    // Show a list of commands
-    fn cmd_cmd_list(&mut self) {
-        let mut text = String::new();
-        // Sort by command name
-        let mut vec: Vec<_> = self.cmd_list.iter().collect();
-        vec.sort_by(|a, b| a.1.cmd.cmp(&b.1.cmd));
-        for (_name, cmd_data) in vec {
-            text += &format!("{} - {}\n", cmd_data.cmd, cmd_data.description);
-        }
-        self.set_output("Available Commands", &text);
-        self.cmd_output_window_show();
-    }
-
-    // Deprecated?
-    fn cmd_menu_back(&mut self) {
-        // self.mode_vis_commands = false;
-        // self.update_listing();
-        // self.update_results();
-        // self.selection_index = 0;
-    }
-
-    fn cmd_log_show(&mut self) {
-        let log_path = log::log_path();
-        match fs::read_to_string(&log_path) {
-            Ok(content) => {
-                // Reverse the log content to show latest entries first
-                let mut lines: Vec<&str> = content.lines().collect();
-                lines.push(SEP);
-                lines.push("Top of log");
-                lines.reverse();
-                let content = lines.join("\n");
-                self.set_output("Log", content.as_str());
-            }
-            Err(_) => {
-                self.set_output("Log", "No log file found.");
-            }
-        }
-        self.cmd_output_window_show();
-    }
-
-    fn cmd_log_clear(&mut self) {
-        let log_path = log::log_path();
-        match fs::remove_file(&log_path) {
-            Ok(_) => {
-                self.set_output("Log", "Log file cleared.");
-            }
-            Err(_) => {
-                self.set_output("Log", "No log file found to clear.");
-            }
-        }
-        self.cmd_output_window_show();
-    }
-
-    fn cmd_sec_up(&mut self) {
-        if self.show_output_window {
-            if self.scroll_off_output >= 5 {
-                self.scroll_off_output -= 5;
-            } else {
-                self.scroll_off_output = 0;
-            }
-            log!("Output scroll offset up: {}", self.scroll_off_output);
-            return;
-        }
-        if self.scroll_off_preview >= 5 {
-            self.scroll_off_preview -= 5;
-        } else {
-            self.scroll_off_preview = 0;
-        }
-        log!("Preview scroll offset up: {}", self.scroll_off_preview);
-    }
-
-    fn cmd_sec_down(&mut self) {
-        if self.show_output_window {
-            let height = self.output_text.split("\n").count() as u16;
-            if self.scroll_off_output < height {
-                self.scroll_off_output += 5;
-            }
-            log!(
-                "Output scroll offset down: {}/{}",
-                self.scroll_off_output,
-                height
-            );
-            return;
-        }
-        let height = self.preview_content.lines.len() as u16;
-        if self.scroll_off_preview < height {
-            self.scroll_off_preview += 5;
-        }
-        log!(
-            "Preview scroll offset down: {}/{}",
-            self.scroll_off_preview,
-            height
-        );
-    }
-
-    fn cmd_show_keybinds(&mut self) {
-        let kb_path = kb::get_path();
-        let found = self.found_keybinds;
-        let mut out = String::from(format!("Path: {}", kb_path.to_str().unwrap()));
-        if !found {
-            out += " \n\n(not found, using defaults)";
-        }
-
-        out += "\n\nKeybinds:\n";
-
-        for kb in self.keybinds.iter() {
-            out += kb::to_string_full(&self.cmd_list, kb).as_str();
-        }
-
-        self.set_output("Keybinds", &out);
-        self.cmd_output_window_show();
-    }
-
-    // Edit the selected file
-    fn cmd_edit(&mut self) {
-        let mut selected_path = self.cwd.clone();
-        selected_path.push(&self.selection.name);
-        let editor = env::var("EDITOR").unwrap_or("vi".to_string());
-        log!(
-            "Opening editor: {} {}",
-            editor,
-            selected_path.to_str().unwrap()
-        );
-        match Command::new(editor)
-            .arg(selected_path.to_str().unwrap())
-            .status()
-        {
-            Ok(_) => {}
-            Err(e) => {
-                self.set_output("Editor", &format!("Failed to open editor: {}", e));
-                self.cmd_output_window_show();
-            }
-        }
-    }
-
-    fn cmd_goto(&mut self, args: Vec<&str>) {
-        if args.is_empty() {
-            self.set_output("Goto", "Error: No path provided.");
-            self.cmd_output_window_show();
-            return;
-        }
-        let path = PathBuf::from(args[0]);
-        self.append_cwd(&path);
-        self.update_listing();
-        self.update_results();
-        self.selection_index = 0;
-    }
-
-    fn cmd_shell_quick(&mut self, args: Vec<&str>) {
-        // Join args into a single command string
-        let mut shell_cmd = args[0..].join(" ");
-
-        // Replace variables
-        shell_cmd = self.replace_shell_vars(shell_cmd);
-
-        // Run the command
-        log!("Running shell command: {}", shell_cmd);
-        match Command::new("sh").arg("-c").arg(shell_cmd).output() {
-            Ok(output) => {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                let combined_output = format!("{}{}", stdout, stderr);
-                self.set_output("Shell", &combined_output);
-            }
-            Err(e) => {
-                self.set_output("Shell", &format!("Failed to run command: {}", e));
-            }
-        }
-        self.cmd_output_window_show();
-    }
-
-    fn cmd_shell_full(&mut self) {
-        let shell = env::var("SHELL").unwrap_or("/bin/sh".to_string());
-        log!("Opening shell: {}", shell);
-        cls();
-        match Command::new(shell).status() {
-            Ok(_) => {
-                self.set_output("Shell", "Shell closed.");
-            }
-            Err(e) => {
-                self.set_output("Shell", &format!("Failed to open shell: {}", e));
-            }
-        }
-        cls();
-        self.term_clear = true;
-        self.cmd_output_window_show();
-    }
-
-    fn cmd_dbg_clear_preview(&mut self) {
-        self.term_clear = true;
     }
 
     fn handle_cmd(&mut self, cmd: &str) -> LoopReturn {
@@ -2610,48 +2638,21 @@ impl<'a> App<'a> {
         } else {
             Vec::new()
         };
-        match cmd {
-            _ if cmd == self.get_cmd(&CmdName::Exit) => return LoopReturn::Break,
-            _ if cmd == self.get_cmd(&CmdName::Select) => return self.cmd_select(),
-            _ if cmd == self.get_cmd(&CmdName::SelDown) => self.cmd_sel_down(),
-            _ if cmd == self.get_cmd(&CmdName::SelUp) => self.cmd_sel_up(),
-            _ if cmd == self.get_cmd(&CmdName::DirUp) => self.cmd_dir_up(),
-            _ if cmd == self.get_cmd(&CmdName::DirBack) => self.cmd_dir_back(),
-            _ if cmd == self.get_cmd(&CmdName::Explode) => self.cmd_explode(),
-            _ if cmd == self.get_cmd(&CmdName::Home) => self.cmd_home(),
-            _ if cmd == self.get_cmd(&CmdName::CmdWinToggle) => self.cmd_cmd_window_toggle(),
-            _ if cmd == self.get_cmd(&CmdName::OutputWinToggle) => self.cmd_output_window_toggle(),
-            _ if cmd == self.get_cmd(&CmdName::OutputWinShow) => self.cmd_output_window_show(),
-            _ if cmd == self.get_cmd(&CmdName::OutputWinHide) => self.cmd_output_window_hide(),
-            _ if cmd == self.get_cmd(&CmdName::MultiSel) => self.cmd_multi_sel(),
-            _ if cmd == self.get_cmd(&CmdName::MultiClear) => self.cmd_multi_clear(),
-            _ if cmd == self.get_cmd(&CmdName::MultiShow) => self.cmd_multi_show(),
-            _ if cmd == self.get_cmd(&CmdName::MultiSave) => self.cmd_multi_save(),
-            _ if cmd == self.get_cmd(&CmdName::MultiCopy) => self.cmd_multi_copy(),
-            _ if cmd == self.get_cmd(&CmdName::MultiDelete) => self.cmd_multi_delete(),
-            _ if cmd == self.get_cmd(&CmdName::MultiMove) => self.cmd_multi_move(),
-            _ if cmd == self.get_cmd(&CmdName::CmdFinderToggle) => self.cmd_cmd_finder_toggle(),
-            _ if cmd == self.get_cmd(&CmdName::CmdList) => self.cmd_cmd_list(),
-            _ if cmd == self.get_cmd(&CmdName::MenuBack) => self.cmd_menu_back(),
-            _ if cmd == self.get_cmd(&CmdName::Log) => self.cmd_log_show(),
-            _ if cmd == self.get_cmd(&CmdName::LogClear) => self.cmd_log_clear(),
-            _ if cmd == self.get_cmd(&CmdName::SecDown) => self.cmd_sec_down(),
-            _ if cmd == self.get_cmd(&CmdName::SecUp) => self.cmd_sec_up(),
-            _ if cmd == self.get_cmd(&CmdName::KeybindsShow) => self.cmd_show_keybinds(),
-            _ if cmd == self.get_cmd(&CmdName::Edit) => self.cmd_edit(),
-            _ if cmd == self.get_cmd(&CmdName::GoTo) => self.cmd_goto(args),
-            _ if cmd == self.get_cmd(&CmdName::DbgClear) => self.cmd_dbg_clear_preview(),
-            _ if cmd == self.get_cmd(&CmdName::ShellQuick) => self.cmd_shell_quick(args),
-            _ if cmd == self.get_cmd(&CmdName::ShellFull) => self.cmd_shell_full(),
-            _ => {
+        let cmd_name = match cmd::cmd_name_from_str(&self.cmd_list, &cmd) {
+            Some(name) => name,
+            None => {
                 // If the command isnt empty print the incorrect command
                 if !cmd.is_empty() {
                     log!("No command matched: {}", cmd);
                     self.set_output("Shell", &format!("No command matched: {}", cmd));
-                    self.cmd_output_window_show();
+                    cmd::cmd_output_window_show(self, vec![]);
                 }
+                return LoopReturn::Ok;
             }
-        }
+        };
+        // TODO: This isnt handled correctly
+        let cmd_data = cmd::get_cmd_data(&self.cmd_list, &cmd_name);
+        (cmd_data.op)(self, args);
         LoopReturn::Ok
     }
 
@@ -2664,7 +2665,6 @@ impl<'a> App<'a> {
         self.update_selection();
         self.update_preview();
         loop {
-            // FIXME: THIS CAUSES FLICKERING
             if self.term_clear {
                 terminal.clear()?;
                 self.term_clear = false;
@@ -2715,6 +2715,10 @@ impl<'a> App<'a> {
                     if sel_changed {
                         self.update_preview();
                     }
+                }
+                if self.should_quit {
+                    log!("Quitting main event loop");
+                    break;
                 }
             }
         }
