@@ -123,11 +123,11 @@ mod cmd {
 
     use crate::{APP_NAME, App, SEP, cls, cmd_data, kb, log, sc};
 
-    pub fn cmd_exit(app: &mut App, _args: Vec<&str>) {
+    pub fn exit(app: &mut App, _args: Vec<&str>) {
         app.should_quit = true;
     }
 
-    pub fn cmd_select(app: &mut App, _args: Vec<&str>) {
+    pub fn select(app: &mut App, _args: Vec<&str>) {
         // Update input to empty to reset search
         app.input = String::new();
         app.update_results();
@@ -140,27 +140,27 @@ mod cmd {
             // Shortcuts
             sc::EXIT => {}
             sc::HOME => {
-                cmd_home(app, vec![]);
+                home(app, vec![]);
                 return;
             }
             sc::DIR_UP => {
-                cmd_dir_up(app, vec![]);
+                dir_up(app, vec![]);
                 return;
             }
             sc::DIR_BACK => {
-                cmd_dir_back(app, vec![]);
+                dir_back(app, vec![]);
                 return;
             }
             sc::EXP => {
-                cmd_explode(app, vec![]);
+                explode(app, vec![]);
                 return;
             }
             sc::MENU_BACK => {
-                cmd_menu_back(app, vec![]);
+                menu_back(app, vec![]);
                 return;
             }
             sc::CMDS => {
-                cmd_cmd_finder_toggle(app, vec![]);
+                cmd_finder_toggle(app, vec![]);
                 return;
             }
             // Either an internal command, file or dir
@@ -172,7 +172,7 @@ mod cmd {
                         Some(name) => name,
                         None => {
                             app.set_output("Error", "Command data not found for selected command.");
-                            cmd_output_window_show(app, vec![]);
+                            output_window_show(app, vec![]);
                             return;
                         }
                     };
@@ -211,35 +211,35 @@ mod cmd {
                     return;
                 } else {
                     app.set_output("Error", "Selected item is neither a file nor a directory.");
-                    cmd_output_window_show(app, vec![]);
+                    output_window_show(app, vec![]);
                     return;
                 }
             }
         }
     }
 
-    pub fn cmd_home(app: &mut App, _args: Vec<&str>) {
+    pub fn home(app: &mut App, _args: Vec<&str>) {
         app.append_cwd(&dirs::home_dir().unwrap());
         app.update_listing();
         app.update_results();
         app.selection_index = 0;
     }
 
-    pub fn cmd_dir_up(app: &mut App, _args: Vec<&str>) {
+    pub fn dir_up(app: &mut App, _args: Vec<&str>) {
         app.append_cwd(&"..".into());
         app.update_listing();
         app.update_results();
         app.selection_index = 0;
     }
 
-    pub fn cmd_dir_back(app: &mut App, _args: Vec<&str>) {
+    pub fn dir_back(app: &mut App, _args: Vec<&str>) {
         app.append_cwd(&app.lwd.clone());
         app.update_listing();
         app.update_results();
         app.selection_index = 0;
     }
 
-    pub fn cmd_explode(app: &mut App, _args: Vec<&str>) {
+    pub fn explode(app: &mut App, _args: Vec<&str>) {
         app.mode_explode = !app.mode_explode;
         app.update_listing();
         app.update_results();
@@ -248,14 +248,14 @@ mod cmd {
         app.selection_index = 0;
     }
 
-    pub fn cmd_sel_down(app: &mut App, _args: Vec<&str>) {
+    pub fn sel_down(app: &mut App, _args: Vec<&str>) {
         app.selection_index += 1;
         if app.selection_index >= app.results.len() as i32 {
             app.selection_index = 0;
         }
     }
 
-    pub fn cmd_sel_up(app: &mut App, _args: Vec<&str>) {
+    pub fn sel_up(app: &mut App, _args: Vec<&str>) {
         app.selection_index += -1;
         if app.selection_index < 0 && !app.results.is_empty() {
             app.selection_index = app.results.len() as i32 - 1;
@@ -264,23 +264,23 @@ mod cmd {
         }
     }
 
-    pub fn cmd_cmd_window_toggle(app: &mut App, _args: Vec<&str>) {
+    pub fn cmd_window_toggle(app: &mut App, _args: Vec<&str>) {
         app.show_command_window = !app.show_command_window;
     }
 
-    pub fn cmd_output_window_toggle(app: &mut App, _args: Vec<&str>) {
+    pub fn output_window_toggle(app: &mut App, _args: Vec<&str>) {
         app.show_output_window = !app.show_output_window;
     }
 
-    pub fn cmd_output_window_show(app: &mut App, _args: Vec<&str>) {
+    pub fn output_window_show(app: &mut App, _args: Vec<&str>) {
         app.show_output_window = true;
     }
 
-    pub fn cmd_output_window_hide(app: &mut App, _args: Vec<&str>) {
+    pub fn output_window_hide(app: &mut App, _args: Vec<&str>) {
         app.show_output_window = false;
     }
 
-    pub fn cmd_multi_sel(app: &mut App, _args: Vec<&str>) {
+    pub fn multi_sel(app: &mut App, _args: Vec<&str>) {
         if !app.selection.is_file() && !app.selection.is_dir() {
             return;
         }
@@ -294,28 +294,28 @@ mod cmd {
         }
     }
 
-    pub fn cmd_multi_clear(app: &mut App, _args: Vec<&str>) {
+    pub fn multi_clear(app: &mut App, _args: Vec<&str>) {
         app.multi_selection.clear();
         app.set_output("", "Multi selection cleared.");
-        cmd_output_window_show(app, vec![]);
+        output_window_show(app, vec![]);
     }
 
-    pub fn cmd_multi_show(app: &mut App, _args: Vec<&str>) {
+    pub fn multi_show(app: &mut App, _args: Vec<&str>) {
         let mut output_text = String::new();
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection.");
-            cmd_output_window_show(app, vec![]);
+            output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
             output_text += &format!("{}\n", path.to_str().unwrap());
         }
         app.set_output("Multi-select", &output_text);
-        cmd_output_window_show(app, vec![]);
+        output_window_show(app, vec![]);
     }
 
     // Write multi selection to a file
-    pub fn cmd_multi_save(app: &mut App, _args: Vec<&str>) {
+    pub fn multi_save(app: &mut App, _args: Vec<&str>) {
         let tmp = env::temp_dir();
         let file = tmp.join(APP_NAME).join("multi.txt");
         fs::write(
@@ -335,15 +335,15 @@ mod cmd {
                 app.multi_selection.len()
             ),
         );
-        cmd_output_window_show(app, vec![]);
+        output_window_show(app, vec![]);
     }
 
     // Copy multi selection to the cwd
-    pub fn cmd_multi_copy(app: &mut App, _args: Vec<&str>) {
+    pub fn multi_copy(app: &mut App, _args: Vec<&str>) {
         let mut output_text = String::new();
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to copy.");
-            cmd_output_window_show(app, vec![]);
+            output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
@@ -370,14 +370,14 @@ mod cmd {
             }
         }
         app.set_output("Multi-select", &output_text);
-        cmd_output_window_show(app, vec![]);
+        output_window_show(app, vec![]);
     }
 
-    pub fn cmd_multi_delete(app: &mut App, _args: Vec<&str>) {
+    pub fn multi_delete(app: &mut App, _args: Vec<&str>) {
         let mut output_text = String::new();
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to delete.");
-            cmd_output_window_show(app, vec![]);
+            output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
@@ -396,14 +396,14 @@ mod cmd {
         }
         app.multi_selection.clear();
         app.set_output("Multi-select", &output_text);
-        cmd_output_window_show(app, vec![]);
+        output_window_show(app, vec![]);
     }
 
-    pub fn cmd_multi_move(app: &mut App, _args: Vec<&str>) {
+    pub fn multi_move(app: &mut App, _args: Vec<&str>) {
         let mut output_text = String::new();
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to move.");
-            cmd_output_window_show(app, vec![]);
+            output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
@@ -431,10 +431,10 @@ mod cmd {
         }
         app.multi_selection.clear();
         app.set_output("Multi-select", &output_text);
-        cmd_output_window_show(app, vec![]);
+        output_window_show(app, vec![]);
     }
 
-    pub fn cmd_cmd_finder_toggle(app: &mut App, _args: Vec<&str>) {
+    pub fn cmd_finder_toggle(app: &mut App, _args: Vec<&str>) {
         app.mode_cmd_finder = !app.mode_cmd_finder;
         app.update_listing();
         app.update_results();
@@ -451,18 +451,18 @@ mod cmd {
             text += &format!("{} - {}\n", cmd_data.cmd, cmd_data.description);
         }
         app.set_output("Available Commands", &text);
-        cmd_output_window_show(app, vec![]);
+        output_window_show(app, vec![]);
     }
 
     // Deprecated?
-    pub fn cmd_menu_back(_app: &mut App, _args: Vec<&str>) {
+    pub fn menu_back(_app: &mut App, _args: Vec<&str>) {
         // app.mode_vis_commands = false;
         // app.update_listing();
         // app.update_results();
         // app.selection_index = 0;
     }
 
-    pub fn cmd_log_show(app: &mut App, _args: Vec<&str>) {
+    pub fn log_show(app: &mut App, _args: Vec<&str>) {
         let log_path = log::log_path();
         match fs::read_to_string(&log_path) {
             Ok(content) => {
@@ -478,10 +478,10 @@ mod cmd {
                 app.set_output("Log", "No log file found.");
             }
         }
-        cmd_output_window_show(app, vec![]);
+        output_window_show(app, vec![]);
     }
 
-    pub fn cmd_log_clear(app: &mut App, _args: Vec<&str>) {
+    pub fn log_clear(app: &mut App, _args: Vec<&str>) {
         let log_path = log::log_path();
         match fs::remove_file(&log_path) {
             Ok(_) => {
@@ -491,10 +491,10 @@ mod cmd {
                 app.set_output("Log", "No log file found to clear.");
             }
         }
-        cmd_output_window_show(app, vec![]);
+        output_window_show(app, vec![]);
     }
 
-    pub fn cmd_sec_up(app: &mut App, _args: Vec<&str>) {
+    pub fn sec_up(app: &mut App, _args: Vec<&str>) {
         if app.show_output_window {
             if app.scroll_off_output >= 5 {
                 app.scroll_off_output -= 5;
@@ -512,7 +512,7 @@ mod cmd {
         log!("Preview scroll offset up: {}", app.scroll_off_preview);
     }
 
-    pub fn cmd_sec_down(app: &mut App, _args: Vec<&str>) {
+    pub fn sec_down(app: &mut App, _args: Vec<&str>) {
         if app.show_output_window {
             let height = app.output_text.split("\n").count() as u16;
             if app.scroll_off_output < height {
@@ -536,7 +536,7 @@ mod cmd {
         );
     }
 
-    pub fn cmd_show_keybinds(app: &mut App, _args: Vec<&str>) {
+    pub fn show_keybinds(app: &mut App, _args: Vec<&str>) {
         let kb_path = kb::get_path();
         let found = app.found_keybinds;
         let mut out = String::from(format!("Path: {}", kb_path.to_str().unwrap()));
@@ -551,11 +551,11 @@ mod cmd {
         }
 
         app.set_output("Keybinds", &out);
-        cmd_output_window_show(app, vec![]);
+        output_window_show(app, vec![]);
     }
 
     // Edit the selected file
-    pub fn cmd_edit(app: &mut App, _args: Vec<&str>) {
+    pub fn edit(app: &mut App, _args: Vec<&str>) {
         let mut selected_path = app.cwd.clone();
         selected_path.push(&app.selection.name);
         let editor = env::var("EDITOR").unwrap_or("vi".to_string());
@@ -571,15 +571,15 @@ mod cmd {
             Ok(_) => {}
             Err(e) => {
                 app.set_output("Editor", &format!("Failed to open editor: {}", e));
-                cmd_output_window_show(app, vec![]);
+                output_window_show(app, vec![]);
             }
         }
     }
 
-    pub fn cmd_goto(app: &mut App, args: Vec<&str>) {
+    pub fn goto(app: &mut App, args: Vec<&str>) {
         if args.is_empty() {
             app.set_output("Goto", "Error: No path provided.");
-            cmd_output_window_show(app, vec![]);
+            output_window_show(app, vec![]);
             return;
         }
         let path = PathBuf::from(args[0]);
@@ -589,13 +589,13 @@ mod cmd {
         app.selection_index = 0;
     }
 
-    pub fn cmd_clear_input(app: &mut App, _args: Vec<&str>) {
+    pub fn clear_input(app: &mut App, _args: Vec<&str>) {
         app.input.clear();
         app.update_results();
         app.selection_index = 0;
     }
 
-    pub fn cmd_shell_quick(app: &mut App, args: Vec<&str>) {
+    pub fn shell_quick(app: &mut App, args: Vec<&str>) {
         // Join args into a single command string
         let mut shell_cmd = args[0..].join(" ");
 
@@ -615,10 +615,10 @@ mod cmd {
                 app.set_output("Shell", &format!("Failed to run command: {}", e));
             }
         }
-        cmd_output_window_show(app, vec![]);
+        output_window_show(app, vec![]);
     }
 
-    pub fn cmd_shell_full(app: &mut App, _args: Vec<&str>) {
+    pub fn shell_full(app: &mut App, _args: Vec<&str>) {
         let shell = env::var("SHELL").unwrap_or("/bin/sh".to_string());
         log!("Opening shell: {}", shell);
         cls();
@@ -632,10 +632,10 @@ mod cmd {
         }
         cls();
         app.term_clear = true;
-        cmd_output_window_show(app, vec![]);
+        output_window_show(app, vec![]);
     }
 
-    pub fn cmd_dbg_clear_preview(app: &mut App, _args: Vec<&str>) {
+    pub fn dbg_clear_preview(app: &mut App, _args: Vec<&str>) {
         app.term_clear = true;
     }
 }
@@ -729,7 +729,7 @@ mod cmd_data {
                 cmd: "exit",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_exit,
+                op: cmd::exit,
             },
         );
         map.insert(
@@ -740,7 +740,7 @@ mod cmd_data {
                 cmd: "home",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_home,
+                op: cmd::home,
             },
         );
         map.insert(
@@ -751,7 +751,7 @@ mod cmd_data {
                 cmd: "sel-up",
                 vis_hidden: true,
                 params: vec![],
-                op: cmd::cmd_sel_up,
+                op: cmd::sel_up,
             },
         );
         map.insert(
@@ -762,7 +762,7 @@ mod cmd_data {
                 cmd: "sel-down",
                 vis_hidden: true,
                 params: vec![],
-                op: cmd::cmd_sel_down,
+                op: cmd::sel_down,
             },
         );
         map.insert(
@@ -773,7 +773,7 @@ mod cmd_data {
                 cmd: "dir-up",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_dir_up,
+                op: cmd::dir_up,
             },
         );
         map.insert(
@@ -784,7 +784,7 @@ mod cmd_data {
                 cmd: "dir-back",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_dir_back,
+                op: cmd::dir_back,
             },
         );
         map.insert(
@@ -795,7 +795,7 @@ mod cmd_data {
                 cmd: "explode",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_explode,
+                op: cmd::explode,
             },
         );
         map.insert(
@@ -806,7 +806,7 @@ mod cmd_data {
                 cmd: "select",
                 vis_hidden: true,
                 params: vec![],
-                op: cmd::cmd_select,
+                op: cmd::select,
             },
         );
         map.insert(
@@ -817,7 +817,7 @@ mod cmd_data {
                 cmd: "cmd-win",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_cmd_window_toggle,
+                op: cmd::cmd_window_toggle,
             },
         );
         map.insert(
@@ -828,7 +828,7 @@ mod cmd_data {
                 cmd: "cmd-find",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_cmd_finder_toggle,
+                op: cmd::cmd_finder_toggle,
             },
         );
         map.insert(
@@ -850,7 +850,7 @@ mod cmd_data {
                 cmd: "output-toggle",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_output_window_toggle,
+                op: cmd::output_window_toggle,
             },
         );
         map.insert(
@@ -861,7 +861,7 @@ mod cmd_data {
                 cmd: "output-show",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_output_window_show,
+                op: cmd::output_window_show,
             },
         );
         map.insert(
@@ -872,7 +872,7 @@ mod cmd_data {
                 cmd: "output-hide",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_output_window_hide,
+                op: cmd::output_window_hide,
             },
         );
         map.insert(
@@ -883,7 +883,7 @@ mod cmd_data {
                 cmd: "mul-sel",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_multi_sel,
+                op: cmd::multi_sel,
             },
         );
         map.insert(
@@ -894,7 +894,7 @@ mod cmd_data {
                 cmd: "mul-clear",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_multi_clear,
+                op: cmd::multi_clear,
             },
         );
         map.insert(
@@ -905,7 +905,7 @@ mod cmd_data {
                 cmd: "mul-show",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_multi_show,
+                op: cmd::multi_show,
             },
         );
         map.insert(
@@ -916,7 +916,7 @@ mod cmd_data {
                 cmd: "mul-save",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_multi_save,
+                op: cmd::multi_save,
             },
         );
         map.insert(
@@ -927,7 +927,7 @@ mod cmd_data {
                 cmd: "mul-copy",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_multi_copy,
+                op: cmd::multi_copy,
             },
         );
         map.insert(
@@ -938,7 +938,7 @@ mod cmd_data {
                 cmd: "mul-delete",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_multi_delete,
+                op: cmd::multi_delete,
             },
         );
         map.insert(
@@ -949,7 +949,7 @@ mod cmd_data {
                 cmd: "mul-move",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_multi_move,
+                op: cmd::multi_move,
             },
         );
         map.insert(
@@ -960,7 +960,7 @@ mod cmd_data {
                 cmd: "menu-back",
                 vis_hidden: true,
                 params: vec![],
-                op: cmd::cmd_menu_back,
+                op: cmd::menu_back,
             },
         );
         map.insert(
@@ -971,7 +971,7 @@ mod cmd_data {
                 cmd: "log",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_log_show,
+                op: cmd::log_show,
             },
         );
         map.insert(
@@ -982,7 +982,7 @@ mod cmd_data {
                 cmd: "log-clear",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_log_clear,
+                op: cmd::log_clear,
             },
         );
         map.insert(
@@ -993,7 +993,7 @@ mod cmd_data {
                 cmd: "sec-up",
                 vis_hidden: true,
                 params: vec![],
-                op: cmd::cmd_sec_up,
+                op: cmd::sec_up,
             },
         );
         map.insert(
@@ -1004,7 +1004,7 @@ mod cmd_data {
                 cmd: "sec-down",
                 vis_hidden: true,
                 params: vec![],
-                op: cmd::cmd_sec_down,
+                op: cmd::sec_down,
             },
         );
         map.insert(
@@ -1015,7 +1015,7 @@ mod cmd_data {
                 cmd: "keybinds-show",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_show_keybinds,
+                op: cmd::show_keybinds,
             },
         );
         map.insert(
@@ -1026,7 +1026,7 @@ mod cmd_data {
                 cmd: "dbg-prev-clear",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_dbg_clear_preview,
+                op: cmd::dbg_clear_preview,
             },
         );
         map.insert(
@@ -1037,7 +1037,7 @@ mod cmd_data {
                 cmd: "edit",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_edit,
+                op: cmd::edit,
             },
         );
         map.insert(
@@ -1048,7 +1048,7 @@ mod cmd_data {
                 cmd: "goto",
                 vis_hidden: false,
                 params: vec!["path"],
-                op: cmd::cmd_goto,
+                op: cmd::goto,
             },
         );
         map.insert(
@@ -1059,7 +1059,7 @@ mod cmd_data {
                 cmd: "clear-input",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_clear_input,
+                op: cmd::clear_input,
             },
         );
         map.insert(
@@ -1070,7 +1070,7 @@ mod cmd_data {
                 cmd: "shell",
                 vis_hidden: false,
                 params: vec!["command"],
-                op: cmd::cmd_shell_quick,
+                op: cmd::shell_quick,
             },
         );
         map.insert(
@@ -1081,7 +1081,7 @@ mod cmd_data {
                 cmd: "shell-full",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::cmd_shell_full,
+                op: cmd::shell_full,
             },
         );
 
@@ -2517,11 +2517,11 @@ impl<'a> App<'a> {
     fn input_out_window(&mut self, modifiers: KeyModifiers, code: KeyCode) {
         match (modifiers, code) {
             (KeyModifiers::NONE, KeyCode::Esc) => {
-                cmd::cmd_output_window_hide(self, vec![]);
+                cmd::output_window_hide(self, vec![]);
                 return;
             }
             (KeyModifiers::NONE, KeyCode::Enter) => {
-                cmd::cmd_output_window_hide(self, vec![]);
+                cmd::output_window_hide(self, vec![]);
                 return;
             }
             _ => {}
@@ -2635,7 +2635,7 @@ impl<'a> App<'a> {
                 if !cmd.is_empty() {
                     log!("No command matched: {}", cmd);
                     self.set_output("Shell", &format!("No command matched: {}", cmd));
-                    cmd::cmd_output_window_show(self, vec![]);
+                    cmd::output_window_show(self, vec![]);
                 }
                 return LoopReturn::Ok;
             }
