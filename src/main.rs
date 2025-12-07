@@ -67,10 +67,12 @@ mod nf {
     pub const FILE: &str = "";
     pub const IMG: &str = "󰋩";
     pub const CMD: &str = "";
+    pub const SCMD: &str = "";
     pub const INFO: &str = "";
     pub const CHECK: &str = "";
     pub const WARN: &str = "";
     pub const BOMB: &str = "";
+    pub const DUDE: &str = "󰢚";
     // UNUSED
     // pub const B4: &str = "█";
     // pub const B3: &str = "▓";
@@ -2312,7 +2314,7 @@ impl<'a> App<'a> {
                 )
             } else if item.is_shell_command() {
                 Line::styled(
-                    format!("{}{}| {}", ms, nf::CMD, item.name),
+                    format!("{}{}| {}", ms, nf::SCMD, item.name),
                     Style::default().fg(self.cs.executable),
                 )
             } else if item.is_executable() {
@@ -2575,6 +2577,10 @@ impl<'a> App<'a> {
                         };
                     let data = cmd_data::get_cmd_data(&self.cmd_list, &cmd_name).clone();
                     self.preview_content += Line::styled(
+                        format!("{} internal command", nf::CMD),
+                        Style::default().fg(self.cs.command),
+                    );
+                    self.preview_content += Line::styled(
                         format!("name: {}", data.fname),
                         Style::default().fg(self.cs.tip),
                     );
@@ -2591,7 +2597,11 @@ impl<'a> App<'a> {
                 // Check if we have a shell command
                 if self.focused.is_shell_command() {
                     self.preview_content += Line::styled(
-                        format!("shell: {}", self.focused.name),
+                        format!("{} user shell script", nf::SCMD),
+                        Style::default().fg(self.cs.command),
+                    );
+                    self.preview_content += Line::styled(
+                        format!("cmd: {}", self.focused.name),
                         Style::default().fg(self.cs.command),
                     );
                     let replaced = self.replace_shell_vars(self.focused.name.clone());
@@ -3135,7 +3145,14 @@ impl<'a> App<'a> {
             unix_time % 60
         );
         let multi_count = self.multi_selection.len();
-        let status_text = format!(" {} | {} {} | {}", whoami, nf::MSEL, multi_count, hhmmss);
+        let status_text = format!(
+            " {} {} | {} {} | {}",
+            nf::DUDE,
+            whoami,
+            nf::MSEL,
+            multi_count,
+            hhmmss
+        );
         let status_widget =
             Paragraph::new(status_text).style(Style::default().fg(self.cs.dim).bg(Color::Black));
         frame.render_widget(status_widget, status_area);
