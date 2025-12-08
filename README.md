@@ -1,6 +1,8 @@
 # Sona
 A friendly, fuzzy find first, file manager for your terminal. 
 
+![screenshot](_doc/screenshot.png)
+
 ## Features
 - Fuzzy Find First
     - Navigate directories via fuzzy find
