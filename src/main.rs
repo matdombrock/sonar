@@ -125,10 +125,13 @@ mod queue {
 
     use tokio::task::JoinHandle;
 
+    use crate::node_info::NodeInfo;
+
     // Queue Items return a rc and a string
     pub struct QueueResData {
         pub rc: u32,
-        pub data: Option<String>,
+        pub data_str: Option<String>,
+        pub data_listing: Option<Vec<NodeInfo>>,
     }
     pub struct QueueRes {
         pub id: usize,
@@ -444,15 +447,17 @@ mod cmd {
                 match fs::copy(&path, &dest_path).await {
                     Ok(_) => queue::QueueResData {
                         rc: 0,
-                        data: Some(format!(
+                        data_str: Some(format!(
                             "Copied {} to {}",
                             path.to_string_lossy(),
                             dest_path.to_string_lossy()
                         )),
+                        data_listing: None,
                     },
                     Err(e) => queue::QueueResData {
                         rc: 1,
-                        data: Some(format!("Failed to copy {}: {}", path.to_string_lossy(), e)),
+                        data_str: Some(format!("Failed to copy {}: {}", path.to_string_lossy(), e)),
+                        data_listing: None,
                     },
                 }
             });
@@ -474,15 +479,17 @@ mod cmd {
                 match fs::remove_file(&path).await {
                     Ok(_) => queue::QueueResData {
                         rc: 0,
-                        data: Some(format!("Deleted {}", path.to_string_lossy())),
+                        data_str: Some(format!("Deleted {}", path.to_string_lossy())),
+                        data_listing: None,
                     },
                     Err(e) => queue::QueueResData {
                         rc: 1,
-                        data: Some(format!(
+                        data_str: Some(format!(
                             "Failed to delete {}: {}",
                             path.to_string_lossy(),
                             e
                         )),
+                        data_listing: None,
                     },
                 }
             });
@@ -513,15 +520,17 @@ mod cmd {
                 match fs::rename(&path, &dest_path).await {
                     Ok(_) => queue::QueueResData {
                         rc: 0,
-                        data: Some(format!(
+                        data_str: Some(format!(
                             "Moved {} to {}",
                             path.to_string_lossy(),
                             dest_path.to_string_lossy()
                         )),
+                        data_listing: None,
                     },
                     Err(e) => queue::QueueResData {
                         rc: 1,
-                        data: Some(format!("Failed to move {}: {}", path.to_string_lossy(), e)),
+                        data_str: Some(format!("Failed to move {}: {}", path.to_string_lossy(), e)),
+                        data_listing: None,
                     },
                 }
             });
@@ -2807,19 +2816,28 @@ impl<'a> App<'a> {
     }
 
     fn update_results(&mut self) {
-        let matcher = SkimMatcherV2::default();
-        let mut scored: Vec<_> = self
-            .listing
-            .iter()
-            .take(self.cfg.list_limit as usize) // Limit for performance
-            .filter_map(|item| {
-                matcher
-                    .fuzzy_match(&item.name, &self.input)
-                    .map(|score| (score, item.clone()))
-            })
-            .collect();
-        scored.sort_by(|a, b| b.0.cmp(&a.0));
-        self.results = scored.into_iter().map(|(_, item)| item).collect();
+        let limit = self.cfg.list_limit;
+        let input = self.input.clone();
+        let listing = self.listing.clone();
+        self.async_queue.add_task("fuz", async move {
+            let matcher = SkimMatcherV2::default();
+            let mut scored: Vec<_> = listing
+                .iter()
+                .take(limit as usize) // Limit for performance
+                .filter_map(|item| {
+                    matcher
+                        .fuzzy_match(&item.name, &input)
+                        .map(|score| (score, item.clone()))
+                })
+                .collect();
+            scored.sort_by(|a, b| b.0.cmp(&a.0));
+            queue::QueueResData {
+                rc: 0,
+                data_str: None,
+                data_listing: Some(scored.into_iter().map(|(_, item)| item).collect()),
+            }
+        });
+        // self.results = scored.into_iter().map(|(_, item)| item).collect();
     }
 
     fn reset_sec_scroll(&mut self) {
@@ -3044,17 +3062,23 @@ impl<'a> App<'a> {
                     }
                 }
             }
+            // Async handler
             let completed = self.async_queue.check_tasks().await;
             let mut output = String::new();
             for item in completed {
-                let data = match &item.res.data {
+                let data = match &item.res.data_str {
                     Some(d) => d.clone(),
                     None => "No data".to_string(),
                 };
-                output += &format!(
-                    "Task #{}, rc:{} '{}' -  {}",
-                    item.id, item.res.rc, item.desc, data
-                );
+                // TODO: Handling is messy data ret struct
+                if item.desc == "fuz" {
+                    self.results = item.res.data_listing.unwrap(); // This should be safe to unwrap
+                } else {
+                    output += &format!(
+                        "Task #{}, rc:{} '{}' -  {}",
+                        item.id, item.res.rc, item.desc, data
+                    );
+                }
             }
             if !output.is_empty() {
                 self.set_output("Async Tasks", &output);
