@@ -117,7 +117,7 @@ shell       ctrl-s
 
 ### Colors
 
-While the actual color values used in the TUI are decided by your terminal theme, you can define a which colors get used for which elements in your `colors.txt` file. Setting custom colors here will override the default colors but any element which does not have a custom color set will fall back to the default.
+While the actual color values used in the TUI are decided by your terminal theme, you can define which colors get used for which elements in your `colors.txt` file. Setting custom colors here will override the default colors but any element which does not have a custom color set will fall back to the default.
 
 ```
 #
