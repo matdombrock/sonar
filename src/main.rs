@@ -1767,6 +1767,7 @@ shell       ctrl-s
                 "end" => KeyCode::End,
                 "pageup" => KeyCode::PageUp,
                 "pagedown" => KeyCode::PageDown,
+                "space" => KeyCode::Char(' '),
                 c if c.len() == 1 => {
                     let ch = c.chars().next().unwrap();
                     KeyCode::Char(ch)
