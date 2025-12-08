@@ -27,11 +27,11 @@ use ratatui_image::{
     protocol::StatefulProtocol,
 };
 use regex::Regex;
-use std::io::BufRead;
 use std::{env, process::Command};
-use std::{fs, time::SystemTime};
-use std::{fs::File, io::BufReader, time::UNIX_EPOCH};
+use std::{fs, io::BufRead};
+use std::{fs::File, time::SystemTime};
 use std::{io, os::unix::fs::PermissionsExt};
+use std::{io::BufReader, time::UNIX_EPOCH};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style as SyntectStyle, ThemeSet};
 use syntect::parsing::SyntaxSet;
@@ -73,6 +73,7 @@ mod nf {
     pub const WARN: &str = "";
     pub const BOMB: &str = "";
     pub const DUDE: &str = "󰢚";
+    pub const WAIT: &str = "󱑆";
     // UNUSED
     // pub const B4: &str = "█";
     // pub const B3: &str = "▓";
@@ -119,10 +120,89 @@ mod log {
     }
 }
 
+// Async queue
+mod queue {
+
+    use tokio::task::JoinHandle;
+
+    // Queue Items return a rc and a string
+    pub struct QueueResData {
+        pub rc: u32,
+        pub data: Option<String>,
+    }
+    pub struct QueueRes {
+        pub id: usize,
+        pub desc: String,
+        pub res: QueueResData,
+    }
+    pub struct QueueItem {
+        id: usize,
+        title: String,
+        handle: JoinHandle<QueueResData>,
+    }
+    // The main queue struct
+    pub struct Queue {
+        items: Vec<QueueItem>,
+        next_id: usize,
+    }
+    impl Queue {
+        pub fn new() -> Self {
+            Queue {
+                items: Vec::new(),
+                next_id: 0,
+            }
+        }
+
+        pub fn add_task<F>(&mut self, title: &str, task: F) -> usize
+        where
+            F: std::future::Future<Output = QueueResData> + Send + 'static,
+        {
+            let title = title.to_string();
+            let handle = tokio::spawn(task);
+            let id = self.next_id;
+            self.next_id += 1;
+            self.items.push(QueueItem { id, title, handle });
+            id
+        }
+
+        pub async fn check_tasks(&mut self) -> Vec<QueueRes> {
+            let mut completed = Vec::new();
+            let mut finished_indices = Vec::new();
+
+            for (i, item) in self.items.iter().enumerate() {
+                if item.handle.is_finished() {
+                    finished_indices.push(i);
+                }
+            }
+
+            // Remove finished items and await their results
+            // Awaiting must be done after identifying finished tasks
+            // This does not block the loop
+            // Iterate in reverse to avoid shifting indices
+            for &i in finished_indices.iter().rev() {
+                let item = self.items.remove(i);
+                if let Ok(result) = item.handle.await {
+                    completed.push(QueueRes {
+                        id: item.id,
+                        desc: item.title,
+                        res: result,
+                    });
+                }
+            }
+
+            completed
+        }
+
+        pub fn pending_count(&self) -> usize {
+            self.items.len()
+        }
+    }
+}
+
 // Command implementations
 mod cmd {
-    use crate::util;
     use crate::{APP_NAME, App, SEP, cfg, cmd_data, cs, kb, log, sc, shell_cmds};
+    use crate::{queue, util};
     use clipboard::ClipboardContext;
     use clipboard::ClipboardProvider;
     use std::{env, fs, path::PathBuf, process::Command};
@@ -349,97 +429,116 @@ mod cmd {
 
     // Copy multi selection to the cwd
     pub fn sel_copy(app: &mut App, _args: Vec<&str>) {
-        let mut output_text = String::new();
+        use tokio::fs;
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to copy.");
             output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
+            let path = path.clone();
             let file_name = match path.file_name() {
-                Some(name) => name,
+                Some(name) => name.to_owned(),
                 None => continue,
             };
-            let dest_path = app.cwd.join(file_name);
-            match fs::copy(&path, &dest_path) {
-                Ok(_) => {
-                    output_text += &format!(
-                        "Copied {} to {}\n",
-                        path.to_str().unwrap(),
-                        dest_path.to_str().unwrap()
-                    );
+            let dest_path = app.cwd.join(&file_name);
+            let title = format!(
+                "Copy {} to {}",
+                path.to_string_lossy(),
+                dest_path.to_string_lossy()
+            );
+            app.async_queue.add_task(&title, async move {
+                match fs::copy(&path, &dest_path).await {
+                    Ok(_) => queue::QueueResData {
+                        rc: 0,
+                        data: Some(format!(
+                            "Copied {} to {}",
+                            path.to_string_lossy(),
+                            dest_path.to_string_lossy()
+                        )),
+                    },
+                    Err(e) => queue::QueueResData {
+                        rc: 1,
+                        data: Some(format!("Failed to copy {}: {}", path.to_string_lossy(), e)),
+                    },
                 }
-                Err(e) => {
-                    output_text += &format!(
-                        "Failed to copy {}: {}\n",
-                        path.to_str().unwrap(),
-                        e.to_string()
-                    );
-                }
-            }
+            });
         }
-        app.set_output("Multi-select", &output_text);
+        app.multi_selection.clear();
+        app.set_output("Multi-select", "Copy tasks queued.");
         output_window_show(app, vec![]);
     }
 
     pub fn sel_delete(app: &mut App, _args: Vec<&str>) {
-        let mut output_text = String::new();
+        use tokio::fs;
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to delete.");
             output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
-            match fs::remove_file(&path) {
-                Ok(_) => {
-                    output_text += &format!("Deleted {}\n", path.to_str().unwrap());
+            let path = path.clone();
+            let title = format!("Delete {}", path.to_string_lossy());
+            app.async_queue.add_task(&title, async move {
+                match fs::remove_file(&path).await {
+                    Ok(_) => queue::QueueResData {
+                        rc: 0,
+                        data: Some(format!("Deleted {}", path.to_string_lossy())),
+                    },
+                    Err(e) => queue::QueueResData {
+                        rc: 1,
+                        data: Some(format!(
+                            "Failed to delete {}: {}",
+                            path.to_string_lossy(),
+                            e
+                        )),
+                    },
                 }
-                Err(e) => {
-                    output_text += &format!(
-                        "Failed to delete {}: {}\n",
-                        path.to_str().unwrap(),
-                        e.to_string()
-                    );
-                }
-            }
+            });
         }
         app.multi_selection.clear();
-        app.set_output("Multi-select", &output_text);
+        app.set_output("Multi-select", "Delete tasks queued.");
         output_window_show(app, vec![]);
     }
 
     pub fn sel_move(app: &mut App, _args: Vec<&str>) {
-        let mut output_text = String::new();
+        use tokio::fs;
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to move.");
             output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
+            let path = path.clone();
             let file_name = match path.file_name() {
-                Some(name) => name,
+                Some(name) => name.to_owned(),
                 None => continue,
             };
-            let dest_path = app.cwd.join(file_name);
-            match fs::rename(&path, &dest_path) {
-                Ok(_) => {
-                    output_text += &format!(
-                        "Moved {} to {}\n",
-                        path.to_str().unwrap(),
-                        dest_path.to_str().unwrap()
-                    );
+            let dest_path = app.cwd.join(&file_name);
+            let title = format!(
+                "Move {} to {}",
+                path.to_string_lossy(),
+                dest_path.to_string_lossy()
+            );
+            app.async_queue.add_task(&title, async move {
+                match fs::rename(&path, &dest_path).await {
+                    Ok(_) => queue::QueueResData {
+                        rc: 0,
+                        data: Some(format!(
+                            "Moved {} to {}",
+                            path.to_string_lossy(),
+                            dest_path.to_string_lossy()
+                        )),
+                    },
+                    Err(e) => queue::QueueResData {
+                        rc: 1,
+                        data: Some(format!("Failed to move {}: {}", path.to_string_lossy(), e)),
+                    },
                 }
-                Err(e) => {
-                    output_text += &format!(
-                        "Failed to move {}: {}\n",
-                        path.to_str().unwrap(),
-                        e.to_string()
-                    );
-                }
-            }
+            });
         }
         app.multi_selection.clear();
-        app.set_output("Multi-select", &output_text);
+        app.set_output("Multi-select", "Move tasks queued.");
         output_window_show(app, vec![]);
     }
 
@@ -1965,6 +2064,7 @@ enum LoopReturn {
 
 // Main application state and control methods
 struct App<'a> {
+    async_queue: queue::Queue,
     should_quit: bool,
     input: String,
     listing: Vec<NodeInfo>,
@@ -2032,6 +2132,7 @@ impl<'a> App<'a> {
         };
 
         Self {
+            async_queue: queue::Queue::new(),
             should_quit: false,
             input: String::new(),
             listing: Vec::new(),
@@ -2900,7 +3001,7 @@ impl<'a> App<'a> {
         LoopReturn::Ok
     }
 
-    fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
+    async fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
         log!("Starting main event loop");
         // Get directory listing
         self.append_cwd(&self.cwd.clone());
@@ -2966,7 +3067,23 @@ impl<'a> App<'a> {
                     }
                 }
             }
-        }
+            let completed = self.async_queue.check_tasks().await;
+            let mut output = String::new();
+            for item in completed {
+                let data = match &item.res.data {
+                    Some(d) => d.clone(),
+                    None => "No data".to_string(),
+                };
+                output += &format!(
+                    "Task #{}, rc:{} '{}' -  {}",
+                    item.id, item.res.rc, item.desc, data
+                );
+            }
+            if !output.is_empty() {
+                self.set_output("Async Tasks", &output);
+                cmd::output_window_show(self, vec![]);
+            }
+        } // End loop
 
         Ok(())
     }
@@ -3146,11 +3263,13 @@ impl<'a> App<'a> {
         );
         let multi_count = self.multi_selection.len();
         let status_text = format!(
-            " {} {} | {} {} | {}",
+            " {} {} | {} {} | {} {} | {}",
             nf::DUDE,
             whoami,
             nf::MSEL,
             multi_count,
+            nf::WAIT,
+            self.async_queue.pending_count(),
             hhmmss
         );
         let status_widget =
@@ -3227,7 +3346,8 @@ impl<'a> App<'a> {
     }
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     log!("======= Starting application =======");
     color_eyre::install()?;
     util::cls();
@@ -3236,7 +3356,7 @@ fn main() -> Result<()> {
 
     let mut app = App::new();
 
-    app.run(&mut terminal)?;
+    app.run(&mut terminal).await?;
 
     disable_raw_mode()?;
     util::cls();
