@@ -3114,13 +3114,21 @@ impl<'a> App<'a> {
                     Some(d) => d.clone(),
                     None => "No data".to_string(),
                 };
-                // TODO: Handling is messy data ret struct
-                if item.desc == "fuz" {
+                if item.res.data_listing.is_some() {
                     self.results = item.res.data_listing.unwrap(); // This should be safe to unwrap
-                } else {
+                    // TODO: Should make a "reset_focus" function
+                    self.focus_index = 0;
+                    self.update_focused();
+                    self.update_preview();
+                } else if item.res.data_str.is_some() {
                     output += &format!(
                         "Task #{}, rc:{} '{}' -  {}",
                         item.id, item.res.rc, item.desc, data
+                    );
+                } else {
+                    output += &format!(
+                        "Task #{}, rc:{} '{}' - No data returned\n",
+                        item.id, item.res.rc, item.desc
                     );
                 }
             }
