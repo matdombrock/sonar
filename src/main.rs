@@ -600,9 +600,42 @@ mod cmd {
         let mut vec: Vec<_> = app.cmd_list.iter().collect();
         vec.sort_by(|a, b| a.1.cmd.cmp(&b.1.cmd));
         for (_name, cmd_data) in vec {
-            text += &format!("{} - {}\n", cmd_data.cmd, cmd_data.description);
+            text += &format!("{:<16} : {}\n", cmd_data.cmd, cmd_data.description);
         }
         app.set_output("Available Commands", &text);
+    }
+
+    pub fn cmd_list_dump(app: &mut App, args: Vec<&str>) {
+        if args.is_empty() {
+            app.set_output("Error", "No file path provided.");
+            return;
+        }
+        let file_path = PathBuf::from(args[0]);
+        let mut text = String::new();
+        // Sort by command name
+        let mut vec: Vec<_> = app.cmd_list.iter().collect();
+        vec.sort_by(|a, b| a.1.cmd.cmp(&b.1.cmd));
+        for (_name, cmd_data) in vec {
+            text += &format!("{:<16} : {}\n", cmd_data.cmd, cmd_data.description);
+        }
+        match fs::write(&file_path, text) {
+            Ok(_) => {
+                app.set_output(
+                    "Dumped Commands",
+                    &format!("Command list dumped to {}", file_path.to_str().unwrap()),
+                );
+            }
+            Err(e) => {
+                app.set_output(
+                    "Error",
+                    &format!(
+                        "Failed to dump command list to {}: {}",
+                        file_path.to_str().unwrap(),
+                        e
+                    ),
+                );
+            }
+        }
     }
 
     // Deprecated?
@@ -930,6 +963,7 @@ mod cmd_data {
         CmdWinToggle,
         CmdFinderToggle,
         CmdList,
+        CmdListDump,
         OutputWinToggle,
         OutputWinShow,
         OutputWinHide,
@@ -1125,6 +1159,17 @@ mod cmd_data {
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::cmd_list,
+            },
+        );
+        map.insert(
+            CmdName::CmdListDump,
+            CmdData {
+                fname: "Command List Dump",
+                description: "Dump all commands to a file",
+                cmd: "cmd-list-dump",
+                vis_hidden: false,
+                params: vec!["<file_path>"],
+                op: cmd::cmd_list_dump,
             },
         );
         map.insert(
