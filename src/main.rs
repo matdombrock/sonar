@@ -121,31 +121,35 @@ mod log {
 }
 
 // Async queue
-mod queue {
+mod aq {
 
     use tokio::task::JoinHandle;
 
     use crate::node_info::NodeInfo;
 
-    // Queue Items return a rc and a string
-    pub struct QueueResData {
+    // Holds the data that the async fns can return
+    // TODO: This is a little messy
+    // Might want to make this more generic later
+    pub struct ResData {
         pub rc: u32,
         pub data_str: Option<String>,
         pub data_listing: Option<Vec<NodeInfo>>,
     }
-    pub struct QueueRes {
+    // Returned by the queue when a task is done
+    pub struct Res {
         pub id: usize,
         pub desc: String,
-        pub res: QueueResData,
+        pub res: ResData,
     }
-    pub struct QueueItem {
+    // An item in the queue
+    pub struct Item {
         id: usize,
         title: String,
-        handle: JoinHandle<QueueResData>,
+        handle: JoinHandle<ResData>,
     }
     // The main queue struct
     pub struct Queue {
-        items: Vec<QueueItem>,
+        items: Vec<Item>,
         next_id: usize,
     }
     impl Queue {
@@ -158,17 +162,32 @@ mod queue {
 
         pub fn add_task<F>(&mut self, title: &str, task: F) -> usize
         where
-            F: std::future::Future<Output = QueueResData> + Send + 'static,
+            F: std::future::Future<Output = ResData> + Send + 'static,
         {
             let title = title.to_string();
             let handle = tokio::spawn(task);
             let id = self.next_id;
             self.next_id += 1;
-            self.items.push(QueueItem { id, title, handle });
+            self.items.push(Item { id, title, handle });
             id
         }
 
-        pub async fn check_tasks(&mut self) -> Vec<QueueRes> {
+        // Abort and remove any existing task with the same title
+        pub fn add_task_unique<F>(&mut self, title: &str, task: F) -> Option<usize>
+        where
+            F: std::future::Future<Output = ResData> + Send + 'static,
+        {
+            for item in self.items.iter_mut() {
+                if item.title == title {
+                    item.handle.abort();
+                }
+            }
+            self.items.retain(|item| item.title != title);
+
+            Some(self.add_task(title, task))
+        }
+
+        pub async fn check_tasks(&mut self) -> Vec<Res> {
             let mut completed = Vec::new();
             let mut finished_indices = Vec::new();
 
@@ -185,7 +204,7 @@ mod queue {
             for &i in finished_indices.iter().rev() {
                 let item = self.items.remove(i);
                 if let Ok(result) = item.handle.await {
-                    completed.push(QueueRes {
+                    completed.push(Res {
                         id: item.id,
                         desc: item.title,
                         res: result,
@@ -205,7 +224,7 @@ mod queue {
 // Command implementations
 mod cmd {
     use crate::{APP_NAME, App, SEP, cfg, cmd_data, cs, kb, log, sc, shell_cmds};
-    use crate::{queue, util};
+    use crate::{aq, util};
     use clipboard::ClipboardContext;
     use clipboard::ClipboardProvider;
     use std::{env, fs, path::PathBuf, process::Command};
@@ -445,7 +464,7 @@ mod cmd {
             );
             app.async_queue.add_task(&title, async move {
                 match fs::copy(&path, &dest_path).await {
-                    Ok(_) => queue::QueueResData {
+                    Ok(_) => aq::ResData {
                         rc: 0,
                         data_str: Some(format!(
                             "Copied {} to {}",
@@ -454,7 +473,7 @@ mod cmd {
                         )),
                         data_listing: None,
                     },
-                    Err(e) => queue::QueueResData {
+                    Err(e) => aq::ResData {
                         rc: 1,
                         data_str: Some(format!("Failed to copy {}: {}", path.to_string_lossy(), e)),
                         data_listing: None,
@@ -477,12 +496,12 @@ mod cmd {
             let title = format!("Delete {}", path.to_string_lossy());
             app.async_queue.add_task(&title, async move {
                 match fs::remove_file(&path).await {
-                    Ok(_) => queue::QueueResData {
+                    Ok(_) => aq::ResData {
                         rc: 0,
                         data_str: Some(format!("Deleted {}", path.to_string_lossy())),
                         data_listing: None,
                     },
-                    Err(e) => queue::QueueResData {
+                    Err(e) => aq::ResData {
                         rc: 1,
                         data_str: Some(format!(
                             "Failed to delete {}: {}",
@@ -518,7 +537,7 @@ mod cmd {
             );
             app.async_queue.add_task(&title, async move {
                 match fs::rename(&path, &dest_path).await {
-                    Ok(_) => queue::QueueResData {
+                    Ok(_) => aq::ResData {
                         rc: 0,
                         data_str: Some(format!(
                             "Moved {} to {}",
@@ -527,7 +546,7 @@ mod cmd {
                         )),
                         data_listing: None,
                     },
-                    Err(e) => queue::QueueResData {
+                    Err(e) => aq::ResData {
                         rc: 1,
                         data_str: Some(format!("Failed to move {}: {}", path.to_string_lossy(), e)),
                         data_listing: None,
@@ -1770,18 +1789,35 @@ mod cfg {
 
     const FILE_NAME: &str = "config.txt";
     pub const DEFAULT: &str = r#"
+#
 # Default configuration
+#
+
+# Command to run when you 'enter' on a file/directory
 cmd_on_enter     edit
-# 0 = no limit
-list_limit       0
+
+# How many items to show in a list - 0 = no limit
+list_limit       100
+
+# How many items can be searched at once - 0 = no limit
+find_limit       0
+
+# How many lines to preview - 0 = no limit
 preview_limit    100
+
+# Whether to force sixel image rendering (if terminal supports it)
 force_sixel      false
+
+# Maximum image width in characters
 max_image_width  80
+
+# Responsive breakpoint in characters
 responsive_break 100
 "#;
     pub struct Config {
         pub cmd_on_enter: String,
         pub list_limit: i32,
+        pub find_limit: i32,
         pub preview_limit: usize,
         pub force_sixel: bool,
         pub max_image_width: u16,
@@ -1791,7 +1827,8 @@ responsive_break 100
         pub fn new() -> Self {
             Self {
                 cmd_on_enter: "edit".to_string(),
-                list_limit: 100000,
+                list_limit: 100,
+                find_limit: 0,
                 preview_limit: 100,
                 force_sixel: false,
                 max_image_width: 80,
@@ -1836,6 +1873,11 @@ responsive_break 100
                     "list_limit" => {
                         if let Ok(limit) = value.parse::<i32>() {
                             config.list_limit = if limit == 0 { i32::MAX } else { limit };
+                        }
+                    }
+                    "find_limit" => {
+                        if let Ok(limit) = value.parse::<i32>() {
+                            config.find_limit = if limit == 0 { i32::MAX } else { limit };
                         }
                     }
                     "preview_limit" => {
@@ -2049,7 +2091,7 @@ enum LoopReturn {
 
 // Main application state and control methods
 struct App<'a> {
-    async_queue: queue::Queue,
+    async_queue: aq::Queue,
     should_quit: bool,
     input: String,
     listing: Vec<NodeInfo>,
@@ -2117,7 +2159,7 @@ impl<'a> App<'a> {
         };
 
         Self {
-            async_queue: queue::Queue::new(),
+            async_queue: aq::Queue::new(),
             should_quit: false,
             input: String::new(),
             listing: Vec::new(),
@@ -2815,11 +2857,12 @@ impl<'a> App<'a> {
         self.listing = listing;
     }
 
+    // Fuzzy finding
     fn update_results(&mut self) {
-        let limit = self.cfg.list_limit;
+        let limit = self.cfg.find_limit;
         let input = self.input.clone();
         let listing = self.listing.clone();
-        self.async_queue.add_task("fuz", async move {
+        self.async_queue.add_task_unique("fuz", async move {
             let matcher = SkimMatcherV2::default();
             let mut scored: Vec<_> = listing
                 .iter()
@@ -2831,7 +2874,7 @@ impl<'a> App<'a> {
                 })
                 .collect();
             scored.sort_by(|a, b| b.0.cmp(&a.0));
-            queue::QueueResData {
+            aq::ResData {
                 rc: 0,
                 data_str: None,
                 data_listing: Some(scored.into_iter().map(|(_, item)| item).collect()),
@@ -3062,7 +3105,7 @@ impl<'a> App<'a> {
                     }
                 }
             }
-            // Async handler
+            // Async handling
             let completed = self.async_queue.check_tasks().await;
             let mut output = String::new();
             for item in completed {
