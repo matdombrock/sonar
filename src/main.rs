@@ -27,10 +27,10 @@ use ratatui_image::{
     protocol::StatefulProtocol,
 };
 use regex::Regex;
+use std::os::unix::fs::PermissionsExt;
 use std::{env, process::Command};
 use std::{fs, io::BufRead};
 use std::{fs::File, time::SystemTime};
-use std::{io, os::unix::fs::PermissionsExt};
 use std::{io::BufReader, time::UNIX_EPOCH};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style as SyntectStyle, ThemeSet};
@@ -255,7 +255,6 @@ mod cmd {
                         Some(name) => name,
                         None => {
                             app.set_output("Error", "Command data not found for focused command.");
-                            output_window_show(app, vec![]);
                             return;
                         }
                     };
@@ -294,7 +293,6 @@ mod cmd {
                     return;
                 } else {
                     app.set_output("Error", "Selected item is neither a file nor a directory.");
-                    output_window_show(app, vec![]);
                     return;
                 }
             }
@@ -386,21 +384,18 @@ mod cmd {
     pub fn sel_clear(app: &mut App, _args: Vec<&str>) {
         app.multi_selection.clear();
         app.set_output("", "Multi selection cleared.");
-        output_window_show(app, vec![]);
     }
 
     pub fn sel_show(app: &mut App, _args: Vec<&str>) {
         let mut output_text = String::new();
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection.");
-            output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
             output_text += &format!("{}\n", path.to_str().unwrap());
         }
         app.set_output("Multi-select", &output_text);
-        output_window_show(app, vec![]);
     }
 
     // Write multi selection to a file
@@ -424,7 +419,6 @@ mod cmd {
                 app.multi_selection.len()
             ),
         );
-        output_window_show(app, vec![]);
     }
 
     // Copy multi selection to the cwd
@@ -432,7 +426,6 @@ mod cmd {
         use tokio::fs;
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to copy.");
-            output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
@@ -466,14 +459,12 @@ mod cmd {
         }
         app.multi_selection.clear();
         app.set_output("Multi-select", "Copy tasks queued.");
-        output_window_show(app, vec![]);
     }
 
     pub fn sel_delete(app: &mut App, _args: Vec<&str>) {
         use tokio::fs;
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to delete.");
-            output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
@@ -498,14 +489,12 @@ mod cmd {
         }
         app.multi_selection.clear();
         app.set_output("Multi-select", "Delete tasks queued.");
-        output_window_show(app, vec![]);
     }
 
     pub fn sel_move(app: &mut App, _args: Vec<&str>) {
         use tokio::fs;
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to move.");
-            output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
@@ -539,7 +528,6 @@ mod cmd {
         }
         app.multi_selection.clear();
         app.set_output("Multi-select", "Move tasks queued.");
-        output_window_show(app, vec![]);
     }
 
     pub fn sel_clip_path(app: &mut App, _args: Vec<&str>) {
@@ -548,7 +536,6 @@ mod cmd {
                 "Multi-select",
                 "No items in multi selection to copy to clipboard.",
             );
-            output_window_show(app, vec![]);
             return;
         }
         let paths = app
@@ -569,7 +556,6 @@ mod cmd {
                 );
             }
         }
-        output_window_show(app, vec![]);
     }
 
     pub fn cmd_finder_toggle(app: &mut App, _args: Vec<&str>) {
@@ -589,7 +575,6 @@ mod cmd {
             text += &format!("{} - {}\n", cmd_data.cmd, cmd_data.description);
         }
         app.set_output("Available Commands", &text);
-        output_window_show(app, vec![]);
     }
 
     // Deprecated?
@@ -616,7 +601,6 @@ mod cmd {
                 app.set_output("Log", "No log file found.");
             }
         }
-        output_window_show(app, vec![]);
     }
 
     pub fn log_clear(app: &mut App, _args: Vec<&str>) {
@@ -629,7 +613,6 @@ mod cmd {
                 app.set_output("Log", "No log file found to clear.");
             }
         }
-        output_window_show(app, vec![]);
     }
 
     pub fn sec_up(app: &mut App, _args: Vec<&str>) {
@@ -689,7 +672,6 @@ mod cmd {
         }
 
         app.set_output("Keybinds", &out);
-        output_window_show(app, vec![]);
     }
 
     // Edit the focused file
@@ -709,7 +691,6 @@ mod cmd {
             Ok(_) => {}
             Err(e) => {
                 app.set_output("Editor", &format!("Failed to open editor: {}", e));
-                output_window_show(app, vec![]);
             }
         }
     }
@@ -717,7 +698,6 @@ mod cmd {
     pub fn goto(app: &mut App, args: Vec<&str>) {
         if args.is_empty() {
             app.set_output("Goto", "Error: No path provided.");
-            output_window_show(app, vec![]);
             return;
         }
         let path = PathBuf::from(args[0]);
@@ -754,7 +734,6 @@ mod cmd {
                 app.set_output("Shell", &format!("Failed to run command: {}", e));
             }
         }
-        output_window_show(app, vec![]);
     }
 
     pub fn shell_full(app: &mut App, _args: Vec<&str>) {
@@ -771,7 +750,6 @@ mod cmd {
         }
         util::cls();
         app.term_clear = true;
-        output_window_show(app, vec![]);
     }
 
     pub fn config_init(app: &mut App, _args: Vec<&str>) {
@@ -837,7 +815,6 @@ mod cmd {
             }
         }
         app.set_output("Config Init", &output_text);
-        output_window_show(app, vec![]);
     }
 
     pub fn config_clear(app: &mut App, _args: Vec<&str>) {
@@ -898,7 +875,6 @@ mod cmd {
             }
         }
         app.set_output("Config Clear", &output_text);
-        output_window_show(app, vec![]);
     }
 
     pub fn dbg_clear_preview(app: &mut App, _args: Vec<&str>) {
@@ -2250,6 +2226,7 @@ impl<'a> App<'a> {
         self.output_title = title.to_string();
         self.reset_sec_scroll();
         self.output_text = text.to_string();
+        self.show_output_window = true;
     }
 
     // A simple helper which avoids needing to pass cmd_list everywhere
