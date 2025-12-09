@@ -3131,9 +3131,15 @@ impl<'a> App<'a> {
             _ => {}
         }
         // Special command matching just for output window
+        let kb_up = kb::find_by_cmd(&self.keybinds, &cmd_data::CmdName::CurUp).unwrap();
+        let kb_dn = kb::find_by_cmd(&self.keybinds, &cmd_data::CmdName::CurDown).unwrap();
+        let kb_ups = kb::find_by_cmd(&self.keybinds, &cmd_data::CmdName::SecUp).unwrap();
+        let kb_dns = kb::find_by_cmd(&self.keybinds, &cmd_data::CmdName::SecDown).unwrap();
         let cmd = match (modifiers, code) {
-            (KeyModifiers::ALT, KeyCode::Char('j')) => self.get_cmd(&cmd_data::CmdName::SecDown),
-            (KeyModifiers::ALT, KeyCode::Char('k')) => self.get_cmd(&cmd_data::CmdName::SecUp),
+            v if v == (kb_dn.modifiers, kb_dn.code) => self.get_cmd(&cmd_data::CmdName::SecDown),
+            v if v == (kb_up.modifiers, kb_up.code) => self.get_cmd(&cmd_data::CmdName::SecUp),
+            v if v == (kb_dns.modifiers, kb_dns.code) => self.get_cmd(&cmd_data::CmdName::SecDown),
+            v if v == (kb_ups.modifiers, kb_ups.code) => self.get_cmd(&cmd_data::CmdName::SecUp),
             _ => "".to_string(),
         };
         self.handle_cmd(&cmd.to_string());
