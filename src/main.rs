@@ -3627,7 +3627,7 @@ impl<'a> App<'a> {
             hhmmss
         );
         let status_widget =
-            Paragraph::new(status_text).style(Style::default().fg(self.cs.dim).bg(Color::Black));
+            Paragraph::new(status_text).style(Style::default().fg(self.cs.misc).bg(Color::Black));
         frame.render_widget(status_widget, status_area);
 
         // --- The image widget ---
