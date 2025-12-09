@@ -27,11 +27,11 @@ use ratatui_image::{
     protocol::StatefulProtocol,
 };
 use regex::Regex;
-use std::os::unix::fs::PermissionsExt;
 use std::{env, process::Command};
 use std::{fs, io::BufRead};
 use std::{fs::File, time::SystemTime};
 use std::{io::BufReader, time::UNIX_EPOCH};
+use std::{os::unix::fs::PermissionsExt, pin::Pin};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style as SyntectStyle, ThemeSet};
 use syntect::parsing::SyntaxSet;
@@ -2266,53 +2266,69 @@ impl<'a> App<'a> {
         self.cwd = new_path;
     }
 
-    fn get_directory_listing(&self, path: &PathBuf) -> Vec<NodeInfo> {
-        log!("Getting directory listing for: {}", path.to_str().unwrap());
-        let mut entries = Vec::new();
+    fn get_directory_listing<'b>(
+        path: PathBuf,
+        mode_explode: bool,
+    ) -> Pin<Box<dyn Future<Output = aq::ResData> + Send + 'b>> {
+        Box::pin(async move {
+            log!("Getting directory listing for: {}", path.to_str().unwrap());
+            let mut entries = Vec::new();
 
-        match fs::read_dir(path) {
-            Ok(read_dir) => {
-                for entry_result in read_dir {
-                    if let Ok(entry) = entry_result {
-                        let file_name = entry.file_name();
-                        let file_name_str = file_name.to_string_lossy();
-                        match entry.metadata() {
-                            Ok(metadata) => {
-                                let node_type = NodeType::find(&entry.path(), metadata.clone());
-                                if self.mode_explode {
-                                    let sub_path = entry.path();
-                                    if metadata.is_dir() {
-                                        // Recursively collect files from subdirectory
-                                        let sub_entries = self.get_directory_listing(&sub_path);
-                                        entries.extend(sub_entries);
+            match tokio::fs::read_dir(path.clone()).await {
+                Ok(mut read_dir) => {
+                    while let Some(entry_result) = read_dir.next_entry().await.transpose() {
+                        if let Ok(entry) = entry_result {
+                            let file_name = entry.file_name();
+                            let file_name_str = file_name.to_string_lossy();
+                            match entry.metadata().await {
+                                Ok(metadata) => {
+                                    let node_type = NodeType::find(&entry.path(), metadata.clone());
+                                    if mode_explode {
+                                        let sub_path = entry.path();
+                                        if metadata.is_dir() {
+                                            // Recursively collect files from subdirectory
+                                            let sub_entries =
+                                                App::get_directory_listing(sub_path, mode_explode)
+                                                    .await;
+                                            if let Some(sub_list) = sub_entries.data_listing {
+                                                entries.extend(sub_list);
+                                            }
+                                        } else {
+                                            entries.push(NodeInfo {
+                                                name: sub_path.to_str().unwrap().to_string(),
+                                                node_type,
+                                            });
+                                        }
                                     } else {
                                         entries.push(NodeInfo {
-                                            name: sub_path.to_str().unwrap().to_string(),
+                                            name: file_name_str.to_string(),
                                             node_type,
                                         });
                                     }
-                                } else {
-                                    entries.push(NodeInfo {
-                                        name: file_name_str.to_string(),
-                                        node_type,
-                                    });
                                 }
-                            }
-                            Err(_) => {
-                                // Handle metadata errors
-                                log!("Failed to get metadata for entry: {}", file_name_str);
-                                continue;
+                                Err(_) => {
+                                    log!("Failed to get metadata for entry: {}", file_name_str);
+                                    continue;
+                                }
                             }
                         }
                     }
+                    return aq::ResData {
+                        rc: 0,
+                        data_listing: Some(entries.clone()),
+                        data_str: None,
+                    };
+                }
+                Err(_) => {
+                    log!("Failed to read directory: {}", path.to_str().unwrap());
+                    return aq::ResData {
+                        rc: 0,
+                        data_listing: Some(entries.clone()),
+                        data_str: None,
+                    };
                 }
             }
-            Err(_) => {
-                // Handle directory read errors
-                log!("Failed to read directory: {}", path.to_str().unwrap());
-            }
-        }
-        entries
+        })
     }
 
     fn set_output(&mut self, title: &str, text: &str) {
@@ -2531,14 +2547,20 @@ impl<'a> App<'a> {
             let perm_line = self.fmtln_info("permissions", &format!("{:o}", permissions.mode()));
             self.preview_content += perm_line;
         }
-        let listing = self.get_directory_listing(&focused_path);
-        let count_line = self.fmtln_info("count", &listing.len().to_string());
-        self.preview_content += count_line;
-        self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
-        let pretty_listing = self.dir_list_pretty(&listing);
-        for line in pretty_listing.lines.iter().take(20) {
-            self.preview_content += Line::from(line.clone());
-        }
+        let owned_path = focused_path.clone();
+        let owned_explode = self.mode_explode;
+        self.async_queue.add_task_unique(
+            "dirlist-preview",
+            App::get_directory_listing(owned_path, owned_explode),
+        );
+        // let listing = self.get_directory_listing(&focused_path);
+        // let count_line = self.fmtln_info("count", &listing.len().to_string());
+        // self.preview_content += count_line;
+        // self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
+        // let pretty_listing = self.dir_list_pretty(&listing);
+        // for line in pretty_listing.lines.iter().take(20) {
+        //     self.preview_content += Line::from(line.clone());
+        // }
     }
 
     fn preview_file(&mut self, focused_path: &PathBuf) {
@@ -2863,44 +2885,58 @@ impl<'a> App<'a> {
             "Updating directory listing for cwd: {}",
             self.cwd.to_str().unwrap()
         );
-        let mut listing = self.get_directory_listing(&self.cwd.clone());
-        // Inserted in reverse order
-        listing.insert(
-            0,
-            NodeInfo {
-                name: sc::DIR_BACK.to_string(),
-                node_type: NodeType::Shortcut,
-            },
-        );
-        listing.insert(
-            0,
-            NodeInfo {
-                name: sc::DIR_UP.to_string(),
-                node_type: NodeType::Shortcut,
-            },
-        );
-        listing.insert(
-            0,
-            NodeInfo {
-                name: sc::CMDS.to_string(),
-                node_type: NodeType::Shortcut,
-            },
-        );
-        listing.insert(
-            0,
-            NodeInfo {
-                name: sc::EXP.to_string(),
-                node_type: NodeType::Shortcut,
-            },
-        );
-        listing.insert(
-            0,
-            NodeInfo {
-                name: sc::EXIT.to_string(),
-                node_type: NodeType::Shortcut,
-            },
-        );
-        self.listing = listing;
+        let owned_cwd = self.cwd.clone();
+        let owned_explode = self.mode_explode;
+        self.async_queue
+            .add_task_unique("dirlist-main", async move {
+                let mut listing_res = App::get_directory_listing(owned_cwd, owned_explode).await;
+                // Turn listing into listing vec
+                let mut listing = match listing_res.data_listing.take() {
+                    Some(list) => list,
+                    None => Vec::new(),
+                };
+                // Inserted in reverse order
+                listing.insert(
+                    0,
+                    NodeInfo {
+                        name: sc::DIR_BACK.to_string(),
+                        node_type: NodeType::Shortcut,
+                    },
+                );
+                listing.insert(
+                    0,
+                    NodeInfo {
+                        name: sc::DIR_UP.to_string(),
+                        node_type: NodeType::Shortcut,
+                    },
+                );
+                listing.insert(
+                    0,
+                    NodeInfo {
+                        name: sc::CMDS.to_string(),
+                        node_type: NodeType::Shortcut,
+                    },
+                );
+                listing.insert(
+                    0,
+                    NodeInfo {
+                        name: sc::EXP.to_string(),
+                        node_type: NodeType::Shortcut,
+                    },
+                );
+                listing.insert(
+                    0,
+                    NodeInfo {
+                        name: sc::EXIT.to_string(),
+                        node_type: NodeType::Shortcut,
+                    },
+                );
+                aq::ResData {
+                    rc: 0,
+                    data_str: None,
+                    data_listing: Some(listing),
+                }
+            });
     }
 
     // Fuzzy finding
@@ -3160,11 +3196,29 @@ impl<'a> App<'a> {
                     None => "No data".to_string(),
                 };
                 if item.res.data_listing.is_some() {
-                    self.results = item.res.data_listing.unwrap(); // This should be safe to unwrap
-                    // TODO: Should make a "reset_focus" function
-                    self.focus_index = 0;
-                    self.update_focused();
-                    self.update_preview();
+                    if item.desc == "dirlist-main" {
+                        log!("Updating main listing from async task");
+                        self.listing = item.res.data_listing.unwrap(); // This should be safe to unwrap
+                        self.update_results();
+                        continue; // No need to output anything
+                    } else if item.desc == "dirlist-preview" {
+                        log!("Updating preview listing from async task");
+                        let data = item.res.data_listing.unwrap();
+                        let count_line = self.fmtln_info("count", &data.len().to_string());
+                        self.preview_content += count_line;
+                        self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
+                        let pretty_listing = self.dir_list_pretty(&data);
+                        for line in pretty_listing.lines.iter().take(20) {
+                            self.preview_content += Line::from(line.clone());
+                        }
+                    } else if item.desc == "fuz" {
+                        log!("Updating fuzzy results from async task");
+                        self.results = item.res.data_listing.unwrap(); // This should be safe to unwrap
+                        // TODO: Should make a "reset_focus" function
+                        self.focus_index = 0;
+                        self.update_focused();
+                        self.update_preview();
+                    }
                 } else if item.res.data_str.is_some() {
                     output += &format!(
                         "Task #{}, rc:{} '{}' -  {}",
@@ -3342,6 +3396,18 @@ impl<'a> App<'a> {
         }
 
         // --- Status bar ---
+        // Loading indicator
+        let loading_arr = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+        let loading_index = (SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+            / 100
+            % loading_arr.len() as u128) as usize;
+        let mut loading_str = nf::WAIT.to_string();
+        if self.async_queue.pending_count() > 0 {
+            loading_str = loading_arr[loading_index].to_string();
+        }
         // FIXME: THESE SHOULD BE CACHED
         let username = env::var("USER").unwrap_or_else(|_| "unknown".to_string());
         let hostname = fs::read_to_string("/etc/hostname")
@@ -3362,12 +3428,12 @@ impl<'a> App<'a> {
         let multi_count = self.multi_selection.len();
         let status_text = format!(
             " {} {} | {} {} | {} {} | {}",
+            loading_str,
+            self.async_queue.pending_count(),
             nf::DUDE,
             whoami,
             nf::MSEL,
             multi_count,
-            nf::WAIT,
-            self.async_queue.pending_count(),
             hhmmss
         );
         let status_widget =
