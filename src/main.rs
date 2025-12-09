@@ -3475,7 +3475,8 @@ impl<'a> App<'a> {
         }
 
         // Loading indicator
-        let loading_arr = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+        // let loading_arr = ["", "", "", "", "", ""];
+        let loading_arr = ["", "", ""];
         let loading_index = (SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
