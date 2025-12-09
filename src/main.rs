@@ -27,11 +27,11 @@ use ratatui_image::{
     protocol::StatefulProtocol,
 };
 use regex::Regex;
-use std::io::BufRead;
+use std::pin::Pin;
 use std::{env, process::Command};
-use std::{fs, time::SystemTime};
-use std::{fs::File, io::BufReader, time::UNIX_EPOCH};
-use std::{io, os::unix::fs::PermissionsExt};
+use std::{fs, io::BufRead};
+use std::{fs::File, time::SystemTime};
+use std::{io::BufReader, time::UNIX_EPOCH};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style as SyntectStyle, ThemeSet};
 use syntect::parsing::SyntaxSet;
@@ -50,6 +50,14 @@ const LOGO: &str = r#"
 ██║ ╚════██║██║   ██║██║╚██╗██║██╔══██║ ██║ ██║ ██║
 ╚██╗███████║╚██████╔╝██║ ╚████║██║  ██║██╔╝██╔╝██╔╝
  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝ ╚═╝ ╚═╝ 
+"#;
+
+// Small block
+const LOADING: &str = r#"
+▌  ▞▀▖▞▀▖▛▀▖▜▘▙ ▌▞▀▖      
+▌  ▌ ▌▙▄▌▌ ▌▐ ▌▌▌▌▄▖      
+▌  ▌ ▌▌ ▌▌ ▌▐ ▌▝▌▌ ▌▗▖▗▖▗▖
+▀▀▘▝▀ ▘ ▘▀▀ ▀▘▘ ▘▝▀ ▝▘▝▘▝▘
 "#;
 
 const SEP: &str = "───────────────────────────────────────────────";
@@ -73,6 +81,7 @@ mod nf {
     pub const WARN: &str = "";
     pub const BOMB: &str = "";
     pub const DUDE: &str = "󰢚";
+    pub const WAIT: &str = "󱑆";
     // UNUSED
     // pub const B4: &str = "█";
     // pub const B3: &str = "▓";
@@ -89,6 +98,7 @@ mod sc {
     pub const MENU_BACK: &str = " menu";
     pub const EXP: &str = " explode";
     pub const CMDS: &str = " cmds";
+    pub const LOADING: &str = "󱑆 loading...";
 }
 
 // Logs to temp directory
@@ -119,10 +129,229 @@ mod log {
     }
 }
 
+mod node_meta {
+    use std::os::unix::fs::PermissionsExt;
+    use std::{path::PathBuf, time::SystemTime};
+
+    #[derive(Clone, Debug)]
+    pub struct NodeMeta {
+        pub size: u64,
+        pub modified: u32,
+        pub permissions: u32,
+        pub mime: String,
+        pub path: PathBuf,
+    }
+    impl NodeMeta {
+        pub fn empty() -> Self {
+            NodeMeta {
+                size: 0,
+                modified: 0,
+                permissions: 0,
+                mime: "unknown".to_string(),
+                path: PathBuf::new(),
+            }
+        }
+        pub fn get(path: &PathBuf) -> Self {
+            match std::fs::metadata(&path) {
+                Ok(metadata) => {
+                    let size = metadata.len();
+                    let modified = metadata
+                        .modified()
+                        .ok()
+                        .and_then(|time| time.duration_since(SystemTime::UNIX_EPOCH).ok())
+                        .map(|duration| duration.as_secs() as u32)
+                        .unwrap_or(0);
+                    let permissions = metadata.permissions().mode();
+                    let mime = if metadata.is_file() {
+                        mime_guess::from_path(&path)
+                            .first_raw()
+                            .unwrap_or("application/octet-stream")
+                            .to_string()
+                    } else {
+                        "inode/directory".to_string()
+                    };
+                    let full_path = path.clone();
+                    NodeMeta {
+                        size,
+                        modified,
+                        permissions,
+                        mime,
+                        path: full_path,
+                    }
+                }
+                Err(_) => NodeMeta {
+                    size: 0,
+                    modified: 0,
+                    permissions: 0,
+                    mime: "unknown".to_string(),
+                    path: path.clone(),
+                },
+            }
+        }
+    }
+}
+
+// Async queue
+mod aq {
+
+    use ratatui::text::Text;
+    use ratatui_image::protocol::StatefulProtocol;
+    use tokio::task::JoinHandle;
+
+    use crate::{node_info::NodeInfo, node_meta::NodeMeta};
+
+    #[derive(PartialEq, Debug)]
+    pub enum Kind {
+        ListingResult,
+        ListingDir,
+        ListingPreview,
+        ImagePreview,
+        FilePreview,
+        Misc,
+    }
+    // Holds the data that the async fns can return
+    // TODO: This is a little messy
+    // Might want to make this more generic later
+    pub struct ResData {
+        pub rc: u32,
+        pub data_str: Option<String>,
+        pub data_listing: Option<Vec<NodeInfo>>,
+        pub data_image: Option<StatefulProtocol>,
+        pub data_meta: Option<NodeMeta>,
+        pub data_file: Option<Text<'static>>,
+    }
+    impl ResData {
+        pub fn as_str(rc: u32, data: String) -> Self {
+            ResData {
+                rc,
+                data_str: Some(data),
+                data_listing: None,
+                data_image: None,
+                data_meta: None,
+                data_file: None,
+            }
+        }
+        pub fn as_listing(rc: u32, data: Vec<NodeInfo>, meta: NodeMeta) -> Self {
+            ResData {
+                rc,
+                data_str: None,
+                data_listing: Some(data),
+                data_image: None,
+                data_meta: Some(meta),
+                data_file: None,
+            }
+        }
+        pub fn as_image(rc: u32, data: StatefulProtocol, meta: NodeMeta) -> Self {
+            ResData {
+                rc,
+                data_str: None,
+                data_listing: None,
+                data_image: Some(data),
+                data_meta: Some(meta),
+                data_file: None,
+            }
+        }
+        pub fn as_file(rc: u32, data: Text<'static>, meta: NodeMeta) -> Self {
+            ResData {
+                rc,
+                data_str: None,
+                data_listing: None,
+                data_image: None,
+                data_meta: Some(meta),
+                data_file: Some(data),
+            }
+        }
+    }
+    // Returned by the queue when a task is done
+    pub struct Res {
+        pub id: usize,
+        pub kind: Kind,
+        pub res: ResData,
+    }
+    // An item in the queue
+    pub struct Item {
+        id: usize,
+        kind: Kind,
+        handle: JoinHandle<ResData>,
+    }
+    // The main queue struct
+    pub struct Queue {
+        items: Vec<Item>,
+        next_id: usize,
+    }
+    impl Queue {
+        pub fn new() -> Self {
+            Queue {
+                items: Vec::new(),
+                next_id: 0,
+            }
+        }
+
+        pub fn add_task<F>(&mut self, kind: Kind, task: F) -> usize
+        where
+            F: std::future::Future<Output = ResData> + Send + 'static,
+        {
+            let handle = tokio::spawn(task);
+            let id = self.next_id;
+            self.next_id += 1;
+            self.items.push(Item { id, kind, handle });
+            id
+        }
+
+        // Abort and remove any existing task with the same title
+        pub fn add_task_unique<F>(&mut self, kind: Kind, task: F) -> Option<usize>
+        where
+            F: std::future::Future<Output = ResData> + Send + 'static,
+        {
+            for item in self.items.iter_mut() {
+                if item.kind == kind {
+                    item.handle.abort();
+                }
+            }
+            // Remove aborted items
+            self.items.retain(|item| item.kind != kind);
+
+            Some(self.add_task(kind, task))
+        }
+
+        pub async fn check_tasks(&mut self) -> Vec<Res> {
+            let mut completed = Vec::new();
+            let mut finished_indices = Vec::new();
+
+            for (i, item) in self.items.iter().enumerate() {
+                if item.handle.is_finished() {
+                    finished_indices.push(i);
+                }
+            }
+
+            // Remove finished items and await their results
+            // Awaiting must be done after identifying finished tasks
+            // This does not block the loop
+            // Iterate in reverse to avoid shifting indices
+            for &i in finished_indices.iter().rev() {
+                let item = self.items.remove(i);
+                if let Ok(result) = item.handle.await {
+                    completed.push(Res {
+                        id: item.id,
+                        kind: item.kind,
+                        res: result,
+                    });
+                }
+            }
+
+            completed
+        }
+
+        pub fn pending_count(&self) -> usize {
+            self.items.len()
+        }
+    }
+}
+
 // Command implementations
 mod cmd {
-    use crate::util;
     use crate::{APP_NAME, App, SEP, cfg, cmd_data, cs, kb, log, sc, shell_cmds};
+    use crate::{aq, util};
     use clipboard::ClipboardContext;
     use clipboard::ClipboardProvider;
     use std::{env, fs, path::PathBuf, process::Command};
@@ -175,7 +404,6 @@ mod cmd {
                         Some(name) => name,
                         None => {
                             app.set_output("Error", "Command data not found for focused command.");
-                            output_window_show(app, vec![]);
                             return;
                         }
                     };
@@ -214,7 +442,6 @@ mod cmd {
                     return;
                 } else {
                     app.set_output("Error", "Selected item is neither a file nor a directory.");
-                    output_window_show(app, vec![]);
                     return;
                 }
             }
@@ -259,17 +486,18 @@ mod cmd {
 
     pub fn cur_down(app: &mut App, _args: Vec<&str>) {
         app.focus_index += 1;
-        if app.focus_index >= app.results.len() as i32 {
+        if app.focus_index >= app.results.len() {
             app.focus_index = 0;
         }
     }
 
     pub fn cur_up(app: &mut App, _args: Vec<&str>) {
-        app.focus_index += -1;
-        if app.focus_index < 0 && !app.results.is_empty() {
-            app.focus_index = app.results.len() as i32 - 1;
-        } else if app.results.is_empty() {
+        if app.results.is_empty() {
             app.focus_index = 0;
+        } else if app.focus_index == 0 {
+            app.focus_index = app.results.len() - 1;
+        } else {
+            app.focus_index -= 1;
         }
     }
 
@@ -306,21 +534,18 @@ mod cmd {
     pub fn sel_clear(app: &mut App, _args: Vec<&str>) {
         app.multi_selection.clear();
         app.set_output("", "Multi selection cleared.");
-        output_window_show(app, vec![]);
     }
 
     pub fn sel_show(app: &mut App, _args: Vec<&str>) {
         let mut output_text = String::new();
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection.");
-            output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
             output_text += &format!("{}\n", path.to_str().unwrap());
         }
         app.set_output("Multi-select", &output_text);
-        output_window_show(app, vec![]);
     }
 
     // Write multi selection to a file
@@ -344,103 +569,97 @@ mod cmd {
                 app.multi_selection.len()
             ),
         );
-        output_window_show(app, vec![]);
     }
 
     // Copy multi selection to the cwd
     pub fn sel_copy(app: &mut App, _args: Vec<&str>) {
-        let mut output_text = String::new();
+        use tokio::fs;
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to copy.");
-            output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
+            let path = path.clone();
             let file_name = match path.file_name() {
-                Some(name) => name,
+                Some(name) => name.to_owned(),
                 None => continue,
             };
-            let dest_path = app.cwd.join(file_name);
-            match fs::copy(&path, &dest_path) {
-                Ok(_) => {
-                    output_text += &format!(
-                        "Copied {} to {}\n",
-                        path.to_str().unwrap(),
-                        dest_path.to_str().unwrap()
-                    );
+            let dest_path = app.cwd.join(&file_name);
+            app.async_queue.add_task(aq::Kind::Misc, async move {
+                match fs::copy(&path, &dest_path).await {
+                    Ok(_) => aq::ResData::as_str(
+                        0,
+                        format!(
+                            "Copied {} to {}",
+                            path.to_string_lossy(),
+                            dest_path.to_string_lossy()
+                        ),
+                    ),
+                    Err(e) => aq::ResData::as_str(
+                        1,
+                        format!("Failed to copy {}: {}", path.to_string_lossy(), e),
+                    ),
                 }
-                Err(e) => {
-                    output_text += &format!(
-                        "Failed to copy {}: {}\n",
-                        path.to_str().unwrap(),
-                        e.to_string()
-                    );
-                }
-            }
+            });
         }
-        app.set_output("Multi-select", &output_text);
-        output_window_show(app, vec![]);
+        app.multi_selection.clear();
+        app.set_output("Multi-select", "Copy tasks queued.");
     }
 
     pub fn sel_delete(app: &mut App, _args: Vec<&str>) {
-        let mut output_text = String::new();
+        use tokio::fs;
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to delete.");
-            output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
-            match fs::remove_file(&path) {
-                Ok(_) => {
-                    output_text += &format!("Deleted {}\n", path.to_str().unwrap());
+            let path = path.clone();
+            app.async_queue.add_task(aq::Kind::Misc, async move {
+                match fs::remove_file(&path).await {
+                    Ok(_) => aq::ResData::as_str(0, format!("Deleted {}", path.to_string_lossy())),
+                    Err(e) => aq::ResData::as_str(
+                        1,
+                        format!("Failed to delete {}: {}", path.to_string_lossy(), e),
+                    ),
                 }
-                Err(e) => {
-                    output_text += &format!(
-                        "Failed to delete {}: {}\n",
-                        path.to_str().unwrap(),
-                        e.to_string()
-                    );
-                }
-            }
+            });
         }
         app.multi_selection.clear();
-        app.set_output("Multi-select", &output_text);
-        output_window_show(app, vec![]);
+        app.set_output("Multi-select", "Delete tasks queued.");
     }
 
     pub fn sel_move(app: &mut App, _args: Vec<&str>) {
-        let mut output_text = String::new();
+        use tokio::fs;
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to move.");
-            output_window_show(app, vec![]);
             return;
         }
         for path in app.multi_selection.iter() {
+            let path = path.clone();
             let file_name = match path.file_name() {
-                Some(name) => name,
+                Some(name) => name.to_owned(),
                 None => continue,
             };
-            let dest_path = app.cwd.join(file_name);
-            match fs::rename(&path, &dest_path) {
-                Ok(_) => {
-                    output_text += &format!(
-                        "Moved {} to {}\n",
-                        path.to_str().unwrap(),
-                        dest_path.to_str().unwrap()
-                    );
+            let dest_path = app.cwd.join(&file_name);
+            app.async_queue.add_task(aq::Kind::Misc, async move {
+                match fs::rename(&path, &dest_path).await {
+                    Ok(_) => aq::ResData::as_str(
+                        0,
+                        format!(
+                            "Moved {} to {}",
+                            path.to_string_lossy(),
+                            dest_path.to_string_lossy()
+                        ),
+                    ),
+                    Err(e) => aq::ResData::as_str(
+                        1,
+                        format!("Failed to move {}: {}", path.to_string_lossy(), e),
+                    ),
                 }
-                Err(e) => {
-                    output_text += &format!(
-                        "Failed to move {}: {}\n",
-                        path.to_str().unwrap(),
-                        e.to_string()
-                    );
-                }
-            }
+            });
         }
         app.multi_selection.clear();
-        app.set_output("Multi-select", &output_text);
-        output_window_show(app, vec![]);
+        app.set_output("Multi-select", "Move tasks queued.");
     }
 
     pub fn sel_clip_path(app: &mut App, _args: Vec<&str>) {
@@ -449,7 +668,6 @@ mod cmd {
                 "Multi-select",
                 "No items in multi selection to copy to clipboard.",
             );
-            output_window_show(app, vec![]);
             return;
         }
         let paths = app
@@ -470,7 +688,6 @@ mod cmd {
                 );
             }
         }
-        output_window_show(app, vec![]);
     }
 
     pub fn cmd_finder_toggle(app: &mut App, _args: Vec<&str>) {
@@ -487,10 +704,42 @@ mod cmd {
         let mut vec: Vec<_> = app.cmd_list.iter().collect();
         vec.sort_by(|a, b| a.1.cmd.cmp(&b.1.cmd));
         for (_name, cmd_data) in vec {
-            text += &format!("{} - {}\n", cmd_data.cmd, cmd_data.description);
+            text += &format!("{:<16} : {}\n", cmd_data.cmd, cmd_data.description);
         }
         app.set_output("Available Commands", &text);
-        output_window_show(app, vec![]);
+    }
+
+    pub fn cmd_list_dump(app: &mut App, args: Vec<&str>) {
+        if args.is_empty() {
+            app.set_output("Error", "No file path provided.");
+            return;
+        }
+        let file_path = PathBuf::from(args[0]);
+        let mut text = String::new();
+        // Sort by command name
+        let mut vec: Vec<_> = app.cmd_list.iter().collect();
+        vec.sort_by(|a, b| a.1.cmd.cmp(&b.1.cmd));
+        for (_name, cmd_data) in vec {
+            text += &format!("{:<16} : {}\n", cmd_data.cmd, cmd_data.description);
+        }
+        match fs::write(&file_path, text) {
+            Ok(_) => {
+                app.set_output(
+                    "Dumped Commands",
+                    &format!("Command list dumped to {}", file_path.to_str().unwrap()),
+                );
+            }
+            Err(e) => {
+                app.set_output(
+                    "Error",
+                    &format!(
+                        "Failed to dump command list to {}: {}",
+                        file_path.to_str().unwrap(),
+                        e
+                    ),
+                );
+            }
+        }
     }
 
     // Deprecated?
@@ -517,7 +766,6 @@ mod cmd {
                 app.set_output("Log", "No log file found.");
             }
         }
-        output_window_show(app, vec![]);
     }
 
     pub fn log_clear(app: &mut App, _args: Vec<&str>) {
@@ -530,7 +778,6 @@ mod cmd {
                 app.set_output("Log", "No log file found to clear.");
             }
         }
-        output_window_show(app, vec![]);
     }
 
     pub fn sec_up(app: &mut App, _args: Vec<&str>) {
@@ -590,7 +837,6 @@ mod cmd {
         }
 
         app.set_output("Keybinds", &out);
-        output_window_show(app, vec![]);
     }
 
     // Edit the focused file
@@ -610,7 +856,6 @@ mod cmd {
             Ok(_) => {}
             Err(e) => {
                 app.set_output("Editor", &format!("Failed to open editor: {}", e));
-                output_window_show(app, vec![]);
             }
         }
     }
@@ -618,7 +863,6 @@ mod cmd {
     pub fn goto(app: &mut App, args: Vec<&str>) {
         if args.is_empty() {
             app.set_output("Goto", "Error: No path provided.");
-            output_window_show(app, vec![]);
             return;
         }
         let path = PathBuf::from(args[0]);
@@ -655,7 +899,6 @@ mod cmd {
                 app.set_output("Shell", &format!("Failed to run command: {}", e));
             }
         }
-        output_window_show(app, vec![]);
     }
 
     pub fn shell_full(app: &mut App, _args: Vec<&str>) {
@@ -672,7 +915,6 @@ mod cmd {
         }
         util::cls();
         app.term_clear = true;
-        output_window_show(app, vec![]);
     }
 
     pub fn config_init(app: &mut App, _args: Vec<&str>) {
@@ -738,7 +980,6 @@ mod cmd {
             }
         }
         app.set_output("Config Init", &output_text);
-        output_window_show(app, vec![]);
     }
 
     pub fn config_clear(app: &mut App, _args: Vec<&str>) {
@@ -799,7 +1040,6 @@ mod cmd {
             }
         }
         app.set_output("Config Clear", &output_text);
-        output_window_show(app, vec![]);
     }
 
     pub fn dbg_clear_preview(app: &mut App, _args: Vec<&str>) {
@@ -827,6 +1067,7 @@ mod cmd_data {
         CmdWinToggle,
         CmdFinderToggle,
         CmdList,
+        CmdListDump,
         OutputWinToggle,
         OutputWinShow,
         OutputWinHide,
@@ -1022,6 +1263,17 @@ mod cmd_data {
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::cmd_list,
+            },
+        );
+        map.insert(
+            CmdName::CmdListDump,
+            CmdData {
+                fname: "Command List Dump",
+                description: "Dump all commands to a file",
+                cmd: "cmd-list-dump",
+                vis_hidden: false,
+                params: vec!["<file_path>"],
+                op: cmd::cmd_list_dump,
             },
         );
         map.insert(
@@ -1664,6 +1916,7 @@ shell       ctrl-s
                 "end" => KeyCode::End,
                 "pageup" => KeyCode::PageUp,
                 "pagedown" => KeyCode::PageDown,
+                "space" => KeyCode::Char(' '),
                 c if c.len() == 1 => {
                     let ch = c.chars().next().unwrap();
                     KeyCode::Char(ch)
@@ -1686,18 +1939,35 @@ mod cfg {
 
     const FILE_NAME: &str = "config.txt";
     pub const DEFAULT: &str = r#"
+#
 # Default configuration
+#
+
+# Command to run when you 'enter' on a file/directory
 cmd_on_enter     edit
-# 0 = no limit
-list_limit       0
+
+# How many items to show in a list - 0 = no limit
+list_limit       100
+
+# How many items can be searched at once - 0 = no limit
+find_limit       0
+
+# How many lines to preview - 0 = no limit
 preview_limit    100
+
+# Whether to force sixel image rendering (if terminal supports it)
 force_sixel      false
+
+# Maximum image width in characters
 max_image_width  80
+
+# Responsive breakpoint in characters
 responsive_break 100
 "#;
     pub struct Config {
         pub cmd_on_enter: String,
-        pub list_limit: i32,
+        pub list_limit: u32,
+        pub find_limit: u32,
         pub preview_limit: usize,
         pub force_sixel: bool,
         pub max_image_width: u16,
@@ -1707,7 +1977,8 @@ responsive_break 100
         pub fn new() -> Self {
             Self {
                 cmd_on_enter: "edit".to_string(),
-                list_limit: 100000,
+                list_limit: 100,
+                find_limit: 0,
                 preview_limit: 100,
                 force_sixel: false,
                 max_image_width: 80,
@@ -1750,8 +2021,13 @@ responsive_break 100
                 match key {
                     "cmd_on_enter" => config.cmd_on_enter = value.to_string(),
                     "list_limit" => {
-                        if let Ok(limit) = value.parse::<i32>() {
-                            config.list_limit = if limit == 0 { i32::MAX } else { limit };
+                        if let Ok(limit) = value.parse::<u32>() {
+                            config.list_limit = if limit == 0 { u32::MAX } else { limit };
+                        }
+                    }
+                    "find_limit" => {
+                        if let Ok(limit) = value.parse::<u32>() {
+                            config.find_limit = if limit == 0 { u32::MAX } else { limit };
                         }
                     }
                     "preview_limit" => {
@@ -1965,12 +2241,13 @@ enum LoopReturn {
 
 // Main application state and control methods
 struct App<'a> {
+    async_queue: aq::Queue,
     should_quit: bool,
     input: String,
     listing: Vec<NodeInfo>,
     results: Vec<NodeInfo>,
     focused: NodeInfo,
-    focus_index: i32,
+    focus_index: usize,
     multi_selection: Vec<PathBuf>,
     preview_content: Text<'a>,
     preview_image: Option<StatefulProtocol>,
@@ -1988,7 +2265,7 @@ struct App<'a> {
     output_text: String,
     show_yesno_window: bool,
     yesno_text: String,
-    yesno_result: i32, // 0 = no, 1 = yes, 2 = unset
+    yesno_result: u32, // 0 = no, 1 = yes, 2 = unset
     cmd_list: cmd_data::CmdList,
     shell_cmd_list: Vec<String>,
     keybinds: kb::KeyBindList,
@@ -2032,6 +2309,7 @@ impl<'a> App<'a> {
         };
 
         Self {
+            async_queue: aq::Queue::new(),
             should_quit: false,
             input: String::new(),
             listing: Vec::new(),
@@ -2092,53 +2370,63 @@ impl<'a> App<'a> {
         self.cwd = new_path;
     }
 
-    fn get_directory_listing(&self, path: &PathBuf) -> Vec<NodeInfo> {
-        log!("Getting directory listing for: {}", path.to_str().unwrap());
-        let mut entries = Vec::new();
+    fn get_directory_listing<'b>(
+        path: PathBuf,
+        mode_explode: bool,
+    ) -> Pin<Box<dyn Future<Output = aq::ResData> + Send + 'b>> {
+        Box::pin(async move {
+            log!("Getting directory listing for: {}", path.to_str().unwrap());
+            let mut entries = Vec::new();
 
-        match fs::read_dir(path) {
-            Ok(read_dir) => {
-                for entry_result in read_dir {
-                    if let Ok(entry) = entry_result {
-                        let file_name = entry.file_name();
-                        let file_name_str = file_name.to_string_lossy();
-                        match entry.metadata() {
-                            Ok(metadata) => {
-                                let node_type = NodeType::find(&entry.path(), metadata.clone());
-                                if self.mode_explode {
-                                    let sub_path = entry.path();
-                                    if metadata.is_dir() {
-                                        // Recursively collect files from subdirectory
-                                        let sub_entries = self.get_directory_listing(&sub_path);
-                                        entries.extend(sub_entries);
+            match tokio::fs::read_dir(path.clone()).await {
+                Ok(mut read_dir) => {
+                    while let Some(entry_result) = read_dir.next_entry().await.transpose() {
+                        if let Ok(entry) = entry_result {
+                            let file_name = entry.file_name();
+                            let file_name_str = file_name.to_string_lossy();
+                            match entry.metadata().await {
+                                Ok(metadata) => {
+                                    let node_type = NodeType::find(&entry.path(), metadata.clone());
+                                    if mode_explode {
+                                        let sub_path = entry.path();
+                                        if metadata.is_dir() {
+                                            // Recursively collect files from subdirectory
+                                            let sub_entries =
+                                                App::get_directory_listing(sub_path, mode_explode)
+                                                    .await;
+                                            if let Some(sub_list) = sub_entries.data_listing {
+                                                entries.extend(sub_list);
+                                            }
+                                        } else {
+                                            entries.push(NodeInfo {
+                                                name: sub_path.to_str().unwrap().to_string(),
+                                                node_type,
+                                            });
+                                        }
                                     } else {
                                         entries.push(NodeInfo {
-                                            name: sub_path.to_str().unwrap().to_string(),
+                                            name: file_name_str.to_string(),
                                             node_type,
                                         });
                                     }
-                                } else {
-                                    entries.push(NodeInfo {
-                                        name: file_name_str.to_string(),
-                                        node_type,
-                                    });
                                 }
-                            }
-                            Err(_) => {
-                                // Handle metadata errors
-                                log!("Failed to get metadata for entry: {}", file_name_str);
-                                continue;
+                                Err(_) => {
+                                    log!("Failed to get metadata for entry: {}", file_name_str);
+                                    continue;
+                                }
                             }
                         }
                     }
+                    let meta = node_meta::NodeMeta::get(&path);
+                    return aq::ResData::as_listing(0, entries.clone(), meta);
+                }
+                Err(_) => {
+                    log!("Failed to read directory: {}", path.to_str().unwrap());
+                    let meta = node_meta::NodeMeta::get(&path);
+                    return aq::ResData::as_listing(1, entries.clone(), meta);
                 }
             }
-            Err(_) => {
-                // Handle directory read errors
-                log!("Failed to read directory: {}", path.to_str().unwrap());
-            }
-        }
-        entries
+        })
     }
 
     fn set_output(&mut self, title: &str, text: &str) {
@@ -2149,6 +2437,7 @@ impl<'a> App<'a> {
         self.output_title = title.to_string();
         self.reset_sec_scroll();
         self.output_text = text.to_string();
+        self.show_output_window = true;
     }
 
     // A simple helper which avoids needing to pass cmd_list everywhere
@@ -2165,6 +2454,13 @@ impl<'a> App<'a> {
             path_all += &format!("{} ", path_str);
         }
         shell_cmd.replace("$...", &path_all.trim_end())
+    }
+
+    fn loading_line(&mut self) {
+        self.preview_content = Text::default();
+        for line in LOADING.lines() {
+            self.preview_content += Line::styled(line, Style::default().fg(self.cs.info))
+        }
     }
 
     fn fmtln_info(&self, label: &str, value: &str) -> Line<'a> {
@@ -2279,7 +2575,7 @@ impl<'a> App<'a> {
         self.preview_content += Line::from("");
     }
 
-    fn dir_list_pretty(&self, list: &Vec<NodeInfo>) -> Text<'a> {
+    fn pretty_dir_list(&self, list: &Vec<NodeInfo>) -> Text<'a> {
         let mut text = Text::default();
         for item in list.iter().take(self.cfg.list_limit as usize) {
             // Check if this item is part of the multi selection
@@ -2345,174 +2641,206 @@ impl<'a> App<'a> {
         text
     }
 
+    fn pretty_metadata(&self, metadata: &node_meta::NodeMeta) -> Text<'a> {
+        fn line(icon: &str, label: &str, value: &str, color: Color) -> Line<'static> {
+            Line::styled(
+                format!("{} {:<14}: {}", icon, label, value),
+                Style::default().fg(color),
+            )
+        }
+        let mut text = Text::default();
+        text += Line::styled(
+            format!("{} {}", nf::DIRO, metadata.path.to_str().unwrap()),
+            Style::default().fg(self.cs.dir),
+        );
+        text += line(
+            nf::INFO,
+            "permissions",
+            &format!("{}", metadata.permissions),
+            self.cs.info,
+        );
+        text += line(
+            nf::INFO,
+            "size",
+            &format!("{}", metadata.size),
+            self.cs.info,
+        );
+        text += line(
+            nf::INFO,
+            "modified",
+            &format!("{}", metadata.modified),
+            self.cs.info,
+        );
+        text += line(nf::INFO, "mime", &metadata.mime, self.cs.info);
+        text
+    }
+
     fn preview_dir(&mut self, focused_path: &PathBuf) {
-        let path_line = self.fmtln_path(&focused_path);
-        self.preview_content += path_line;
-        // Get the file metadata
-        let metadata = fs::metadata(&focused_path);
-        if let Ok(meta) = metadata {
-            // Get permissions
-            let permissions = meta.permissions();
-            let perm_line = self.fmtln_info("permissions", &format!("{:o}", permissions.mode()));
-            self.preview_content += perm_line;
-        }
-        let listing = self.get_directory_listing(&focused_path);
-        let count_line = self.fmtln_info("count", &listing.len().to_string());
-        self.preview_content += count_line;
-        self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
-        let pretty_listing = self.dir_list_pretty(&listing);
-        for line in pretty_listing.lines.iter().take(20) {
-            self.preview_content += Line::from(line.clone());
-        }
+        let owned_path = focused_path.clone();
+        let owned_explode = self.mode_explode;
+        self.async_queue.add_task_unique(
+            aq::Kind::ListingPreview,
+            App::get_directory_listing(owned_path, owned_explode),
+        );
     }
 
     fn preview_file(&mut self, focused_path: &PathBuf) {
-        let path_line = self.fmtln_path(&focused_path);
-        self.preview_content += path_line;
-        // Get the file metadata
-        let metadata = fs::metadata(&focused_path);
-        if let Ok(meta) = metadata {
-            // Get permissions
-            let permissions = meta.permissions();
-            let perm_line = self.fmtln_info("permissions", &format!("{:o}", permissions.mode()));
-            self.preview_content += perm_line;
-            // Get mime type
-            if meta.file_type().is_file() {
-                // Get mimetype using mime_guess
-                let mime = mime_guess::from_path(&focused_path).first_or_octet_stream();
-                let mime_line = self.fmtln_info("mime", &mime.to_string());
-                self.preview_content += mime_line;
-            }
-        }
+        let focused_path = focused_path.clone();
+        let cs = self.cs.clone();
+        let preview_limit = self.cfg.preview_limit;
+        let has_bat = self.has_bat;
+        let sep = SEP.to_string();
 
-        fn sanitize_content(input: &str) -> String {
-            // Regex to match ANSI escape sequences
-            let ansi_regex = Regex::new(r"\x1B\[[0-9;]*[A-Za-z]").unwrap();
-            let mut result = String::new();
-            let mut last = 0;
+        self.async_queue
+            .add_task_unique(aq::Kind::FilePreview, async move {
+                // use ansi_to_tui::IntoText;
+                // use ratatui::text::{Line, Text};
+                // use regex::Regex;
+                // use std::fs::File;
+                // use std::io::{BufRead, BufReader};
+                // use syntect::easy::HighlightLines;
+                // use syntect::highlighting::{Style as SyntectStyle, ThemeSet};
+                // use syntect::parsing::SyntaxSet;
 
-            for mat in ansi_regex.find_iter(input) {
-                // Process text before the ANSI sequence
-                let before = &input[last..mat.start()];
-                for c in before.chars() {
-                    if c.is_control() && c != '\n' && c != '\x1B' {
-                        result.push('�');
-                    } else {
-                        result.push(c);
-                    }
-                }
-                // Copy the ANSI sequence as-is
-                result.push_str(mat.as_str());
-                last = mat.end();
-            }
-            // Process any remaining text after the last ANSI sequence
-            let after = &input[last..];
-            for c in after.chars() {
-                if c.is_control() && c != '\n' && c != '\x1B' {
-                    result.push('�');
-                } else {
-                    result.push(c);
-                }
-            }
-            result
-        }
-        // Check if bat is available
-        // Use bat for preview if available
-        if self.has_bat {
-            // Use bat for preview
-            log!("Using bat for file preview");
-            if let Ok(bat_output) = Command::new("bat")
-                .arg("--color=always")
-                .arg("--style=plain")
-                .arg(format!("--line-range=:{}", self.cfg.preview_limit as i32))
-                .arg(focused_path.to_str().unwrap())
-                .output()
-            {
-                if bat_output.status.success() {
-                    self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
-                    let mut bat_content = String::from_utf8_lossy(&bat_output.stdout);
-                    bat_content = bat_content.replace("\r\n", "\n").into();
-                    // Replace tabs with spaces
-                    bat_content = bat_content.replace("\t", "    ").into();
-                    // Replace non-printable characters
-                    // NOTE: THIS SEEMS TO BE THE TRICK
-                    bat_content = sanitize_content(&bat_content.to_string()).into();
-                    let output = match bat_content.as_ref().into_text() {
-                        Ok(text) => text,
-                        Err(_) => {
-                            self.preview_content += Line::styled(
-                                "Error: Unable to convert bat output to text.",
-                                Style::default().fg(self.cs.error),
-                            );
-                            return;
+                fn sanitize_content(input: &str) -> String {
+                    let ansi_regex = Regex::new(r"\x1B\[[0-9;]*[A-Za-z]").unwrap();
+                    let mut result = String::new();
+                    let mut last = 0;
+                    for mat in ansi_regex.find_iter(input) {
+                        let before = &input[last..mat.start()];
+                        for c in before.chars() {
+                            if c.is_control() && c != '\n' && c != '\x1B' {
+                                result.push('�');
+                            } else {
+                                result.push(c);
+                            }
                         }
-                    };
-                    // NOTE: This take is redundant due to the --line-range flag
-                    for line in output.lines.iter().take(self.cfg.preview_limit) {
-                        self.preview_content += Line::from(line.clone());
+                        result.push_str(mat.as_str());
+                        last = mat.end();
                     }
-                    return;
+                    let after = &input[last..];
+                    for c in after.chars() {
+                        if c.is_control() && c != '\n' && c != '\x1B' {
+                            result.push('�');
+                        } else {
+                            result.push(c);
+                        }
+                    }
+                    result
                 }
-            }
-        }
-        // Fallback to syntect for syntax highlighting
-        fn syntect_to_ratatui_color(s: SyntectStyle) -> Color {
-            Color::Rgb(s.foreground.r, s.foreground.g, s.foreground.b)
-        }
-        let ss = SyntaxSet::load_defaults_newlines();
-        // FIXME: Should only load once
-        let ts = ThemeSet::load_defaults();
-        let syntax = ss
-            .find_syntax_for_file(&focused_path)
-            .unwrap_or(None)
-            .unwrap_or_else(|| ss.find_syntax_plain_text());
-        let mut h = HighlightLines::new(syntax, &ts.themes["base16-eighties.dark"]);
 
-        // Print syntax name
-        self.preview_content += self.fmtln_info("detected", syntax.name.as_str());
-
-        self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
-
-        fn read_n_lines(path: &PathBuf, n: usize) -> Result<String, std::io::Error> {
-            let file = File::open(path)?;
-            let reader = BufReader::new(file);
-            reader.lines().take(n).collect()
-        }
-        if let Ok(content) = read_n_lines(&focused_path, self.cfg.preview_limit) {
-            for line in content.lines().take(self.cfg.preview_limit) {
-                let ranges = h.highlight_line(line, &ss).unwrap_or_default();
-                let mut styled_line = Line::default();
-                for (style, text) in ranges {
-                    styled_line.push_span(Span::styled(
-                        text.to_string(),
-                        Style::default().fg(syntect_to_ratatui_color(style)),
-                    ));
+                fn syntect_to_ratatui_color(s: SyntectStyle) -> Color {
+                    Color::Rgb(s.foreground.r, s.foreground.g, s.foreground.b)
                 }
-                self.preview_content += styled_line;
-            }
-        } else {
-            self.preview_content += Line::styled(
-                "Err: Unable to read file content.",
-                Style::default().fg(self.cs.error),
-            );
-        }
+
+                let mut text = Text::default();
+                let meta = crate::node_meta::NodeMeta::get(&focused_path);
+
+                text += Line::styled(sep.clone(), Style::default().fg(cs.dim));
+
+                // Try bat first
+                if has_bat {
+                    if let Ok(bat_output) = std::process::Command::new("bat")
+                        .arg("--color=always")
+                        .arg("--style=plain")
+                        .arg(format!("--line-range=:{}", preview_limit))
+                        .arg(focused_path.to_str().unwrap())
+                        .output()
+                    {
+                        if bat_output.status.success() {
+                            let mut bat_content = String::from_utf8_lossy(&bat_output.stdout);
+                            bat_content = bat_content.replace("\r\n", "\n").into();
+                            bat_content = bat_content.replace("\t", "    ").into();
+                            bat_content = sanitize_content(&bat_content.to_string()).into();
+                            match bat_content.as_ref().into_text() {
+                                Ok(bat_text) => {
+                                    for line in bat_text.lines.iter().take(preview_limit) {
+                                        text += Line::from(line.clone());
+                                    }
+                                    return aq::ResData::as_file(0, text, meta);
+                                }
+                                Err(_) => {
+                                    text += Line::styled(
+                                        "Error: Unable to convert bat output to text.",
+                                        Style::default().fg(cs.error),
+                                    );
+                                    return aq::ResData::as_file(1, text, meta);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Fallback to syntect
+                let ss = SyntaxSet::load_defaults_newlines();
+                let ts = ThemeSet::load_defaults();
+                let syntax = ss
+                    .find_syntax_for_file(&focused_path)
+                    .unwrap_or(None)
+                    .unwrap_or_else(|| ss.find_syntax_plain_text());
+                let mut h = HighlightLines::new(syntax, &ts.themes["base16-eighties.dark"]);
+                text += Line::styled(
+                    format!("detected: {}", syntax.name),
+                    Style::default().fg(cs.info),
+                );
+                text += Line::styled(sep, Style::default().fg(cs.dim));
+
+                let file = File::open(&focused_path);
+                if let Ok(file) = file {
+                    let reader = BufReader::new(file);
+                    for (i, line) in reader.lines().enumerate() {
+                        if i >= preview_limit {
+                            break;
+                        }
+                        if let Ok(line) = line {
+                            let ranges = h.highlight_line(&line, &ss).unwrap_or_default();
+                            let mut styled_line = Line::default();
+                            for (style, text_part) in ranges {
+                                styled_line.push_span(Span::styled(
+                                    text_part.to_string(),
+                                    Style::default().fg(syntect_to_ratatui_color(style)),
+                                ));
+                            }
+                            text += styled_line;
+                        }
+                    }
+                } else {
+                    text += Line::styled(
+                        "Err: Unable to read file content.",
+                        Style::default().fg(cs.error),
+                    );
+                }
+
+                aq::ResData::as_file(0, text, meta)
+            });
     }
 
     fn preview_image(&mut self, focused_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-        self.preview_content = Default::default();
         let mut picker = Picker::from_fontsize((6, 12));
         if self.cfg.force_sixel {
             picker.set_protocol_type(ProtocolType::Sixel);
         } else {
             picker.set_protocol_type(ProtocolType::Halfblocks);
         }
+        self.loading_line();
 
-        // Load an image with the image crate.
-        let dyn_img = image::ImageReader::open(focused_path)?.decode()?;
+        // Clear the existing image data
+        self.preview_image = None;
 
-        // Create the Protocol which will be used by the widget.
-        let image = picker.new_resize_protocol(dyn_img);
-        self.preview_image = Some(image);
+        let focused_path = focused_path.clone();
+        self.async_queue
+            .add_task_unique(aq::Kind::ImagePreview, async move {
+                // Load an image with the image crate.
+                let dyn_img = image::ImageReader::open(&focused_path)
+                    .unwrap()
+                    .decode()
+                    .unwrap();
+
+                // Create the Protocol which will be used by the widget.
+                let image = picker.new_resize_protocol(dyn_img);
+                let meta = node_meta::NodeMeta::get(&focused_path);
+                aq::ResData::as_image(0, image, meta)
+            });
         Ok(())
     }
 
@@ -2559,6 +2887,18 @@ impl<'a> App<'a> {
                     "Exits the current visual command menu.",
                     Style::default().fg(self.cs.tip),
                 );
+            }
+            sc::LOADING => {
+                self.preview_content += self.fmtln_sc("Loading...");
+                self.loading_line();
+                self.preview_content +=
+                    Line::styled("The listing is loading.", Style::default().fg(self.cs.tip));
+                if self.mode_explode {
+                    self.preview_content += Line::styled(
+                        "Explode mode is ON. This may take a while.",
+                        Style::default().fg(self.cs.warning),
+                    );
+                }
             }
             _ => {
                 self.preview_content = Default::default();
@@ -2658,6 +2998,29 @@ impl<'a> App<'a> {
     }
 
     fn update_listing(&mut self) {
+        // Clear listing and display loading items
+        self.listing = Vec::new();
+        self.listing.insert(
+            0,
+            NodeInfo {
+                name: sc::EXP.to_string(),
+                node_type: NodeType::Shortcut,
+            },
+        );
+        self.listing.insert(
+            0,
+            NodeInfo {
+                name: sc::EXIT.to_string(),
+                node_type: NodeType::Shortcut,
+            },
+        );
+        self.listing.insert(
+            0,
+            NodeInfo {
+                name: sc::LOADING.to_string(),
+                node_type: NodeType::Shortcut,
+            },
+        );
         // Handle cmd finder
         if self.mode_cmd_finder {
             log!("Updating command listing");
@@ -2688,60 +3051,82 @@ impl<'a> App<'a> {
             "Updating directory listing for cwd: {}",
             self.cwd.to_str().unwrap()
         );
-        let mut listing = self.get_directory_listing(&self.cwd.clone());
-        // Inserted in reverse order
-        listing.insert(
-            0,
-            NodeInfo {
-                name: sc::DIR_BACK.to_string(),
-                node_type: NodeType::Shortcut,
-            },
-        );
-        listing.insert(
-            0,
-            NodeInfo {
-                name: sc::DIR_UP.to_string(),
-                node_type: NodeType::Shortcut,
-            },
-        );
-        listing.insert(
-            0,
-            NodeInfo {
-                name: sc::CMDS.to_string(),
-                node_type: NodeType::Shortcut,
-            },
-        );
-        listing.insert(
-            0,
-            NodeInfo {
-                name: sc::EXP.to_string(),
-                node_type: NodeType::Shortcut,
-            },
-        );
-        listing.insert(
-            0,
-            NodeInfo {
-                name: sc::EXIT.to_string(),
-                node_type: NodeType::Shortcut,
-            },
-        );
-        self.listing = listing;
+        let owned_cwd = self.cwd.clone();
+        let owned_explode = self.mode_explode;
+        self.async_queue
+            .add_task_unique(aq::Kind::ListingDir, async move {
+                let mut listing_res =
+                    App::get_directory_listing(owned_cwd.clone(), owned_explode).await;
+                // Turn listing into listing vec
+                let mut listing = match listing_res.data_listing.take() {
+                    Some(list) => list,
+                    None => Vec::new(),
+                };
+                // Inserted in reverse order
+                listing.insert(
+                    0,
+                    NodeInfo {
+                        name: sc::DIR_BACK.to_string(),
+                        node_type: NodeType::Shortcut,
+                    },
+                );
+                listing.insert(
+                    0,
+                    NodeInfo {
+                        name: sc::DIR_UP.to_string(),
+                        node_type: NodeType::Shortcut,
+                    },
+                );
+                listing.insert(
+                    0,
+                    NodeInfo {
+                        name: sc::CMDS.to_string(),
+                        node_type: NodeType::Shortcut,
+                    },
+                );
+                listing.insert(
+                    0,
+                    NodeInfo {
+                        name: sc::EXP.to_string(),
+                        node_type: NodeType::Shortcut,
+                    },
+                );
+                listing.insert(
+                    0,
+                    NodeInfo {
+                        name: sc::EXIT.to_string(),
+                        node_type: NodeType::Shortcut,
+                    },
+                );
+                let meta = node_meta::NodeMeta::get(&owned_cwd);
+                aq::ResData::as_listing(0, listing, meta)
+            });
     }
 
+    // Fuzzy finding
     fn update_results(&mut self) {
-        let matcher = SkimMatcherV2::default();
-        let mut scored: Vec<_> = self
-            .listing
-            .iter()
-            .take(self.cfg.list_limit as usize) // Limit for performance
-            .filter_map(|item| {
-                matcher
-                    .fuzzy_match(&item.name, &self.input)
-                    .map(|score| (score, item.clone()))
-            })
-            .collect();
-        scored.sort_by(|a, b| b.0.cmp(&a.0));
-        self.results = scored.into_iter().map(|(_, item)| item).collect();
+        let limit = self.cfg.find_limit;
+        let input = self.input.clone();
+        let listing = self.listing.clone();
+        self.async_queue
+            .add_task_unique(aq::Kind::ListingResult, async move {
+                let matcher = SkimMatcherV2::default();
+                let mut scored: Vec<_> = listing
+                    .iter()
+                    .take(limit as usize) // Limit for performance
+                    .filter_map(|item| {
+                        matcher
+                            .fuzzy_match(&item.name, &input)
+                            .map(|score| (score, item.clone()))
+                    })
+                    .collect();
+                scored.sort_by(|a, b| b.0.cmp(&a.0));
+                aq::ResData::as_listing(
+                    0,
+                    scored.into_iter().map(|(_, item)| item).collect(),
+                    node_meta::NodeMeta::empty(),
+                )
+            });
     }
 
     fn reset_sec_scroll(&mut self) {
@@ -2751,7 +3136,7 @@ impl<'a> App<'a> {
 
     fn update_focused(&mut self) -> bool {
         let old = self.focused.clone();
-        if self.focus_index < self.results.len() as i32 {
+        if self.focus_index < self.results.len() {
             self.focused = self.results[self.focus_index as usize].clone();
         } else if !self.results.is_empty() {
             self.focus_index = 0;
@@ -2900,7 +3285,7 @@ impl<'a> App<'a> {
         LoopReturn::Ok
     }
 
-    fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
+    async fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
         log!("Starting main event loop");
         // Get directory listing
         self.append_cwd(&self.cwd.clone());
@@ -2918,6 +3303,77 @@ impl<'a> App<'a> {
                 terminal.clear()?;
                 self.term_clear = false;
             }
+            // Async handling
+            let completed = self.async_queue.check_tasks().await;
+            let mut output = String::new();
+            for item in completed {
+                match item.kind {
+                    aq::Kind::ListingDir => {
+                        log!("Updating main listing from async task");
+                        self.listing = item.res.data_listing.unwrap(); // This should be safe to unwrap
+                        self.update_results();
+                    }
+                    aq::Kind::ListingPreview => {
+                        log!("Updating preview listing from async task");
+                        let data = item.res.data_listing.unwrap();
+                        let meta = item.res.data_meta.unwrap();
+                        self.preview_content = Default::default();
+                        self.preview_content = self.pretty_metadata(&meta);
+                        self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
+                        let pretty_listing = self.pretty_dir_list(&data);
+                        for line in pretty_listing.lines.iter().take(20) {
+                            self.preview_content += Line::from(line.clone());
+                        }
+                    }
+                    aq::Kind::ListingResult => {
+                        log!("Updating fuzzy results from async task");
+                        self.results = item.res.data_listing.unwrap(); // This should be safe to unwrap
+                        // TODO: Should make a "reset_focus" function
+                        self.focus_index = 0;
+                        self.update_focused();
+                        self.update_preview();
+                    }
+                    aq::Kind::ImagePreview => {
+                        log!("Image preview task completed");
+                        let meta = item.res.data_meta.unwrap();
+                        self.preview_content = Default::default();
+                        self.preview_content = self.pretty_metadata(&meta);
+                        self.preview_image = item.res.data_image;
+                    }
+                    aq::Kind::FilePreview => {
+                        log!("File preview task completed");
+                        let data_text = match &item.res.data_file {
+                            Some(d) => d.clone(),
+                            None => Text::from("No data"),
+                        };
+                        let meta = item.res.data_meta.unwrap();
+                        self.preview_content = Default::default();
+                        self.preview_content = self.pretty_metadata(&meta);
+                        for line in data_text.lines.iter().take(self.cfg.preview_limit) {
+                            self.preview_content += Line::from(line.clone());
+                        }
+                    }
+                    aq::Kind::Misc => {
+                        if item.res.data_str.is_some() {
+                            let data = match &item.res.data_str {
+                                Some(d) => d.clone(),
+                                None => "No data".to_string(),
+                            };
+                            output += &format!(
+                                "Task #{}, rc:{} '{:#?}' -  {}",
+                                item.id, item.res.rc, item.kind, data
+                            );
+                        } else {
+                            output += &format!(
+                                "Task #{}, rc:{} '{:#?}' - No data returned\n",
+                                item.id, item.res.rc, item.kind
+                            );
+                        }
+                        self.set_output("Async Tasks", &output);
+                    }
+                }
+            }
+            // Render the UI
             terminal.draw(|f| self.render(f))?;
             if event::poll(std::time::Duration::from_millis(100))? {
                 if let Event::Key(KeyEvent {
@@ -2966,7 +3422,7 @@ impl<'a> App<'a> {
                     }
                 }
             }
-        }
+        } // End loop
 
         Ok(())
     }
@@ -3046,7 +3502,7 @@ impl<'a> App<'a> {
         );
 
         // Results list
-        let mut results_pretty = self.dir_list_pretty(&self.results);
+        let mut results_pretty = self.pretty_dir_list(&self.results);
         if let Some(line) = results_pretty.lines.get_mut(self.focus_index as usize) {
             let sel_span = Span::styled(
                 format!("{}", nf::SEL),
@@ -3070,7 +3526,7 @@ impl<'a> App<'a> {
                 .border_style(Style::default().fg(self.cs.listing_border)),
         );
         let mut state = ListState::default();
-        if !self.results.is_empty() && self.focus_index >= 0 {
+        if !self.results.is_empty() {
             state.select(Some(self.focus_index as usize));
         }
 
@@ -3127,6 +3583,18 @@ impl<'a> App<'a> {
         }
 
         // --- Status bar ---
+        // Loading indicator
+        let loading_arr = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+        let loading_index = (SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+            / 100
+            % loading_arr.len() as u128) as usize;
+        let mut loading_str = nf::WAIT.to_string();
+        if self.async_queue.pending_count() > 0 {
+            loading_str = loading_arr[loading_index].to_string();
+        }
         // FIXME: THESE SHOULD BE CACHED
         let username = env::var("USER").unwrap_or_else(|_| "unknown".to_string());
         let hostname = fs::read_to_string("/etc/hostname")
@@ -3146,7 +3614,9 @@ impl<'a> App<'a> {
         );
         let multi_count = self.multi_selection.len();
         let status_text = format!(
-            " {} {} | {} {} | {}",
+            " {} {} | {} {} | {} {} | {}",
+            loading_str,
+            self.async_queue.pending_count(),
             nf::DUDE,
             whoami,
             nf::MSEL,
@@ -3154,7 +3624,7 @@ impl<'a> App<'a> {
             hhmmss
         );
         let status_widget =
-            Paragraph::new(status_text).style(Style::default().fg(self.cs.dim).bg(Color::Black));
+            Paragraph::new(status_text).style(Style::default().fg(self.cs.misc).bg(Color::Black));
         frame.render_widget(status_widget, status_area);
 
         // --- The image widget ---
@@ -3166,7 +3636,7 @@ impl<'a> App<'a> {
                 }
                 let mut new_area = Rect {
                     x: self.lay_preview_area.x + 1,
-                    y: self.lay_preview_area.y + 1,
+                    y: self.lay_preview_area.y + 10,
                     width: self.lay_preview_area.width - 2,
                     height: self.lay_preview_area.height - 2,
                 };
@@ -3227,7 +3697,8 @@ impl<'a> App<'a> {
     }
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     log!("======= Starting application =======");
     color_eyre::install()?;
     util::cls();
@@ -3236,7 +3707,7 @@ fn main() -> Result<()> {
 
     let mut app = App::new();
 
-    app.run(&mut terminal)?;
+    app.run(&mut terminal).await?;
 
     disable_raw_mode()?;
     util::cls();
