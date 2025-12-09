@@ -41,6 +41,7 @@ use crate::{node_info::NodeInfo, node_info::NodeType};
 
 const APP_NAME: &str = "sona";
 
+// ANSI Shadow
 const LOGO: &str = r#"
  ██╗███████╗ ██████╗ ███╗   ██╗ █████╗ ██╗ ██╗ ██╗ 
 ██╔╝██╔════╝██╔═══██╗████╗  ██║██╔══██╗╚██╗╚██╗╚██╗
@@ -50,12 +51,29 @@ const LOGO: &str = r#"
  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝ ╚═╝ ╚═╝ 
 "#;
 
-// Small block
 const LOADING: &str = r#"
-▌  ▞▀▖▞▀▖▛▀▖▜▘▙ ▌▞▀▖      
-▌  ▌ ▌▙▄▌▌ ▌▐ ▌▌▌▌▄▖      
-▌  ▌ ▌▌ ▌▌ ▌▐ ▌▝▌▌ ▌▗▖▗▖▗▖
-▀▀▘▝▀ ▘ ▘▀▀ ▀▘▘ ▘▝▀ ▝▘▝▘▝▘
+██╗      ██████╗  █████╗ ██████╗ ██╗███╗   ██╗ ██████╗ 
+██║     ██╔═══██╗██╔══██╗██╔══██╗██║████╗  ██║██╔════╝ 
+██║     ██║   ██║███████║██║  ██║██║██╔██╗ ██║██║  ███╗
+██║     ██║   ██║██╔══██║██║  ██║██║██║╚██╗██║██║   ██║
+███████╗╚██████╔╝██║  ██║██████╔╝██║██║ ╚████║╚██████╔╝
+╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═════╝ ╚═╝╚═╝  ╚═══╝ ╚═════╝ 
+"#;
+
+const E404: &str = r#"
+     ██╗ ██████╗ ██╗          ██╗ ██████╗ ██╗ 
+    ██╔╝██╔═══██╗╚██╗        ██╔╝██╔═══██╗╚██╗
+    ██║ ██║   ██║ ██║        ██║ ██║   ██║ ██║
+    ██║ ██║   ██║ ██║        ██║ ██║   ██║ ██║
+    ╚██╗╚██████╔╝██╔╝███████╗╚██╗╚██████╔╝██╔╝
+     ╚═╝ ╚═════╝ ╚═╝ ╚══════╝ ╚═╝ ╚═════╝ ╚═╝ 
+                                              
+        ██╗  ██╗ ██████╗ ██╗  ██╗        ██╗  
+        ██║  ██║██╔═████╗██║  ██║    ██╗██╔╝  
+        ███████║██║██╔██║███████║    ╚═╝██║   
+        ╚════██║████╔╝██║╚════██║    ██╗██║   
+             ██║╚██████╔╝     ██║    ╚═╝╚██╗  
+             ╚═╝ ╚═════╝      ╚═╝        ╚═╝  
 "#;
 
 const SEP: &str = "───────────────────────────────────────────────";
@@ -2235,8 +2253,8 @@ struct App<'a> {
     async_queue: aq::Queue,
     should_quit: bool,
     input: String,
-    listing: Vec<NodeInfo>,
-    results: Vec<NodeInfo>,
+    listing: Vec<NodeInfo>, // Full listing data
+    results: Vec<NodeInfo>, // Filtered listing data
     focused: NodeInfo,
     focus_index: usize,
     multi_selection: Vec<PathBuf>,
@@ -2953,8 +2971,18 @@ impl<'a> App<'a> {
                         Style::default().fg(self.cs.error),
                     );
                 } else if self.focused.is_unknown() {
-                    self.preview_content +=
-                        Line::styled("Unknown file type.", Style::default().fg(self.cs.error));
+                    if self.results.is_empty() {
+                        self.preview_content = Text::default();
+                        self.preview_content +=
+                            Line::styled("Nothing found...", Style::default().fg(self.cs.error));
+                        for line in E404.lines() {
+                            self.preview_content +=
+                                Line::styled(line, Style::default().fg(self.cs.warning));
+                        }
+                    } else {
+                        self.preview_content =
+                            Text::styled("Unknown file type.", Style::default().fg(self.cs.error));
+                    }
                 } else {
                     // Unknown
                     self.preview_content = Text::styled(
