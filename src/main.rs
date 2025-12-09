@@ -359,15 +359,15 @@ mod cmd {
 
     pub fn cur_down(app: &mut App, _args: Vec<&str>) {
         app.focus_index += 1;
-        if app.focus_index >= app.results.len() as i32 {
+        if app.focus_index >= app.results.len() {
             app.focus_index = 0;
         }
     }
 
     pub fn cur_up(app: &mut App, _args: Vec<&str>) {
-        app.focus_index += -1;
+        app.focus_index -= 1;
         if app.focus_index < 0 && !app.results.is_empty() {
-            app.focus_index = app.results.len() as i32 - 1;
+            app.focus_index = app.results.len() - 1;
         } else if app.results.is_empty() {
             app.focus_index = 0;
         }
@@ -1862,8 +1862,8 @@ responsive_break 100
 "#;
     pub struct Config {
         pub cmd_on_enter: String,
-        pub list_limit: i32,
-        pub find_limit: i32,
+        pub list_limit: u32,
+        pub find_limit: u32,
         pub preview_limit: usize,
         pub force_sixel: bool,
         pub max_image_width: u16,
@@ -1917,13 +1917,13 @@ responsive_break 100
                 match key {
                     "cmd_on_enter" => config.cmd_on_enter = value.to_string(),
                     "list_limit" => {
-                        if let Ok(limit) = value.parse::<i32>() {
-                            config.list_limit = if limit == 0 { i32::MAX } else { limit };
+                        if let Ok(limit) = value.parse::<u32>() {
+                            config.list_limit = if limit == 0 { u32::MAX } else { limit };
                         }
                     }
                     "find_limit" => {
-                        if let Ok(limit) = value.parse::<i32>() {
-                            config.find_limit = if limit == 0 { i32::MAX } else { limit };
+                        if let Ok(limit) = value.parse::<u32>() {
+                            config.find_limit = if limit == 0 { u32::MAX } else { limit };
                         }
                     }
                     "preview_limit" => {
@@ -2143,7 +2143,7 @@ struct App<'a> {
     listing: Vec<NodeInfo>,
     results: Vec<NodeInfo>,
     focused: NodeInfo,
-    focus_index: i32,
+    focus_index: usize,
     multi_selection: Vec<PathBuf>,
     preview_content: Text<'a>,
     preview_image: Option<StatefulProtocol>,
@@ -2161,7 +2161,7 @@ struct App<'a> {
     output_text: String,
     show_yesno_window: bool,
     yesno_text: String,
-    yesno_result: i32, // 0 = no, 1 = yes, 2 = unset
+    yesno_result: u32, // 0 = no, 1 = yes, 2 = unset
     cmd_list: cmd_data::CmdList,
     shell_cmd_list: Vec<String>,
     keybinds: kb::KeyBindList,
@@ -2621,7 +2621,7 @@ impl<'a> App<'a> {
             if let Ok(bat_output) = Command::new("bat")
                 .arg("--color=always")
                 .arg("--style=plain")
-                .arg(format!("--line-range=:{}", self.cfg.preview_limit as i32))
+                .arg(format!("--line-range=:{}", self.cfg.preview_limit))
                 .arg(focused_path.to_str().unwrap())
                 .output()
             {
@@ -2972,7 +2972,7 @@ impl<'a> App<'a> {
 
     fn update_focused(&mut self) -> bool {
         let old = self.focused.clone();
-        if self.focus_index < self.results.len() as i32 {
+        if self.focus_index < self.results.len() {
             self.focused = self.results[self.focus_index as usize].clone();
         } else if !self.results.is_empty() {
             self.focus_index = 0;
