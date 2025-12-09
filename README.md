@@ -4,6 +4,7 @@ A friendly, fuzzy find first, file manager for your terminal.
 ![screenshot](_doc/screenshot.png)
 
 ## Features
+
 - Fuzzy Find First
     - Navigate directories via fuzzy find
 - Custom Keybinds
@@ -24,8 +25,12 @@ A friendly, fuzzy find first, file manager for your terminal.
 - Discoverable commands and features
     - All commands can be found and launched via the TUI
     - No need to scour the docs
+- Plain text configuration
+    - All configuration files use a plain text format
+    - No need to learn a new syntax
 
 ## Check it out
+
 The best way to check out Sona right now is to build it yourself with `cargo`. 
 
 Clone this repo and simply run:
@@ -33,6 +38,31 @@ Clone this repo and simply run:
 ```sh
 cargo run --release
 ```
+
+## Why would I use this? How is this better than X?
+
+There are a lot of great terminal file browsers out there. The goal here is not to be the best file manager of all time (this is incidental), the goal is to make a file manager that works *exactly the way I think it should*.
+
+### Design Philosophy
+
+- Simplicity is Power
+    - By default, Sona should be natural to use for those coming from a GUI file manager.
+    - At the same time it should be highly configurable for power users who know exactly what they want.
+- Searching First
+    - We can type faster than we can hit the arrow keys repeatedly. Searching for your destination by typing its name is the fastest way to move through a file system.
+    - Moving up and down a list of items should be delegated to the secondary way of navigating / selecting.
+- Panes are Confusing
+    - File browsers that use panes to show hierarchies are confusing.
+    - Unless a directory is focused, show one directory at a time.
+
+### Others
+
+If Sona doesn't float your boat, check out these other awesome TUI file managers:
+
+- [XPLR (Rust)](https://github.com/sayanarijit/xplr)
+- [Yazy (Rust)](https://github.com/sxyazi/yazi)
+- [Broot (Rust)](https://github.com/Canop/broot)
+- [Ranger (Python)](https://github.com/Canop/broot)
 
 ## Commands
 
