@@ -127,6 +127,13 @@ mod aq {
 
     use crate::node_info::NodeInfo;
 
+    #[derive(PartialEq, Debug)]
+    pub enum Kind {
+        ListingResult,
+        ListingDir,
+        ListingPreview,
+        Misc,
+    }
     // Holds the data that the async fns can return
     // TODO: This is a little messy
     // Might want to make this more generic later
@@ -138,13 +145,13 @@ mod aq {
     // Returned by the queue when a task is done
     pub struct Res {
         pub id: usize,
-        pub desc: String,
+        pub kind: Kind,
         pub res: ResData,
     }
     // An item in the queue
     pub struct Item {
         id: usize,
-        title: String,
+        kind: Kind,
         handle: JoinHandle<ResData>,
     }
     // The main queue struct
@@ -160,31 +167,31 @@ mod aq {
             }
         }
 
-        pub fn add_task<F>(&mut self, title: &str, task: F) -> usize
+        pub fn add_task<F>(&mut self, kind: Kind, task: F) -> usize
         where
             F: std::future::Future<Output = ResData> + Send + 'static,
         {
-            let title = title.to_string();
             let handle = tokio::spawn(task);
             let id = self.next_id;
             self.next_id += 1;
-            self.items.push(Item { id, title, handle });
+            self.items.push(Item { id, kind, handle });
             id
         }
 
         // Abort and remove any existing task with the same title
-        pub fn add_task_unique<F>(&mut self, title: &str, task: F) -> Option<usize>
+        pub fn add_task_unique<F>(&mut self, kind: Kind, task: F) -> Option<usize>
         where
             F: std::future::Future<Output = ResData> + Send + 'static,
         {
             for item in self.items.iter_mut() {
-                if item.title == title {
+                if item.kind == kind {
                     item.handle.abort();
                 }
             }
-            self.items.retain(|item| item.title != title);
+            // Remove aborted items
+            self.items.retain(|item| item.kind != kind);
 
-            Some(self.add_task(title, task))
+            Some(self.add_task(kind, task))
         }
 
         pub async fn check_tasks(&mut self) -> Vec<Res> {
@@ -206,7 +213,7 @@ mod aq {
                 if let Ok(result) = item.handle.await {
                     completed.push(Res {
                         id: item.id,
-                        desc: item.title,
+                        kind: item.kind,
                         res: result,
                     });
                 }
@@ -457,12 +464,7 @@ mod cmd {
                 None => continue,
             };
             let dest_path = app.cwd.join(&file_name);
-            let title = format!(
-                "Copy {} to {}",
-                path.to_string_lossy(),
-                dest_path.to_string_lossy()
-            );
-            app.async_queue.add_task(&title, async move {
+            app.async_queue.add_task(aq::Kind::Misc, async move {
                 match fs::copy(&path, &dest_path).await {
                     Ok(_) => aq::ResData {
                         rc: 0,
@@ -493,8 +495,7 @@ mod cmd {
         }
         for path in app.multi_selection.iter() {
             let path = path.clone();
-            let title = format!("Delete {}", path.to_string_lossy());
-            app.async_queue.add_task(&title, async move {
+            app.async_queue.add_task(aq::Kind::Misc, async move {
                 match fs::remove_file(&path).await {
                     Ok(_) => aq::ResData {
                         rc: 0,
@@ -530,12 +531,7 @@ mod cmd {
                 None => continue,
             };
             let dest_path = app.cwd.join(&file_name);
-            let title = format!(
-                "Move {} to {}",
-                path.to_string_lossy(),
-                dest_path.to_string_lossy()
-            );
-            app.async_queue.add_task(&title, async move {
+            app.async_queue.add_task(aq::Kind::Misc, async move {
                 match fs::rename(&path, &dest_path).await {
                     Ok(_) => aq::ResData {
                         rc: 0,
@@ -2550,7 +2546,7 @@ impl<'a> App<'a> {
         let owned_path = focused_path.clone();
         let owned_explode = self.mode_explode;
         self.async_queue.add_task_unique(
-            "dirlist-preview",
+            aq::Kind::ListingPreview,
             App::get_directory_listing(owned_path, owned_explode),
         );
         // let listing = self.get_directory_listing(&focused_path);
@@ -2888,7 +2884,7 @@ impl<'a> App<'a> {
         let owned_cwd = self.cwd.clone();
         let owned_explode = self.mode_explode;
         self.async_queue
-            .add_task_unique("dirlist-main", async move {
+            .add_task_unique(aq::Kind::ListingDir, async move {
                 let mut listing_res = App::get_directory_listing(owned_cwd, owned_explode).await;
                 // Turn listing into listing vec
                 let mut listing = match listing_res.data_listing.take() {
@@ -2944,24 +2940,25 @@ impl<'a> App<'a> {
         let limit = self.cfg.find_limit;
         let input = self.input.clone();
         let listing = self.listing.clone();
-        self.async_queue.add_task_unique("fuz", async move {
-            let matcher = SkimMatcherV2::default();
-            let mut scored: Vec<_> = listing
-                .iter()
-                .take(limit as usize) // Limit for performance
-                .filter_map(|item| {
-                    matcher
-                        .fuzzy_match(&item.name, &input)
-                        .map(|score| (score, item.clone()))
-                })
-                .collect();
-            scored.sort_by(|a, b| b.0.cmp(&a.0));
-            aq::ResData {
-                rc: 0,
-                data_str: None,
-                data_listing: Some(scored.into_iter().map(|(_, item)| item).collect()),
-            }
-        });
+        self.async_queue
+            .add_task_unique(aq::Kind::ListingResult, async move {
+                let matcher = SkimMatcherV2::default();
+                let mut scored: Vec<_> = listing
+                    .iter()
+                    .take(limit as usize) // Limit for performance
+                    .filter_map(|item| {
+                        matcher
+                            .fuzzy_match(&item.name, &input)
+                            .map(|score| (score, item.clone()))
+                    })
+                    .collect();
+                scored.sort_by(|a, b| b.0.cmp(&a.0));
+                aq::ResData {
+                    rc: 0,
+                    data_str: None,
+                    data_listing: Some(scored.into_iter().map(|(_, item)| item).collect()),
+                }
+            });
         // self.results = scored.into_iter().map(|(_, item)| item).collect();
     }
 
@@ -3140,21 +3137,16 @@ impl<'a> App<'a> {
                 self.term_clear = false;
             }
             // Async handling
-            // FIXME: Async handling is a giant mess
             let completed = self.async_queue.check_tasks().await;
             let mut output = String::new();
             for item in completed {
-                let data = match &item.res.data_str {
-                    Some(d) => d.clone(),
-                    None => "No data".to_string(),
-                };
-                if item.res.data_listing.is_some() {
-                    if item.desc == "dirlist-main" {
+                match item.kind {
+                    aq::Kind::ListingDir => {
                         log!("Updating main listing from async task");
                         self.listing = item.res.data_listing.unwrap(); // This should be safe to unwrap
                         self.update_results();
-                        continue; // No need to output anything
-                    } else if item.desc == "dirlist-preview" {
+                    }
+                    aq::Kind::ListingPreview => {
                         log!("Updating preview listing from async task");
                         let data = item.res.data_listing.unwrap();
                         let count_line = self.fmtln_info("count", &data.len().to_string());
@@ -3164,7 +3156,8 @@ impl<'a> App<'a> {
                         for line in pretty_listing.lines.iter().take(20) {
                             self.preview_content += Line::from(line.clone());
                         }
-                    } else if item.desc == "fuz" {
+                    }
+                    aq::Kind::ListingResult => {
                         log!("Updating fuzzy results from async task");
                         self.results = item.res.data_listing.unwrap(); // This should be safe to unwrap
                         // TODO: Should make a "reset_focus" function
@@ -3172,21 +3165,25 @@ impl<'a> App<'a> {
                         self.update_focused();
                         self.update_preview();
                     }
-                } else if item.res.data_str.is_some() {
-                    output += &format!(
-                        "Task #{}, rc:{} '{}' -  {}",
-                        item.id, item.res.rc, item.desc, data
-                    );
-                } else {
-                    output += &format!(
-                        "Task #{}, rc:{} '{}' - No data returned\n",
-                        item.id, item.res.rc, item.desc
-                    );
+                    aq::Kind::Misc => {
+                        if item.res.data_str.is_some() {
+                            let data = match &item.res.data_str {
+                                Some(d) => d.clone(),
+                                None => "No data".to_string(),
+                            };
+                            output += &format!(
+                                "Task #{}, rc:{} '{:#?}' -  {}",
+                                item.id, item.res.rc, item.kind, data
+                            );
+                        } else {
+                            output += &format!(
+                                "Task #{}, rc:{} '{:#?}' - No data returned\n",
+                                item.id, item.res.rc, item.kind
+                            );
+                        }
+                        self.set_output("Async Tasks", &output);
+                    }
                 }
-            }
-            if !output.is_empty() {
-                self.set_output("Async Tasks", &output);
-                cmd::output_window_show(self, vec![]);
             }
             // Render the UI
             terminal.draw(|f| self.render(f))?;
