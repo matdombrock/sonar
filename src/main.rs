@@ -3140,6 +3140,7 @@ impl<'a> App<'a> {
                 self.term_clear = false;
             }
             // Async handling
+            // FIXME: Async handling is a giant mess
             let completed = self.async_queue.check_tasks().await;
             let mut output = String::new();
             for item in completed {
