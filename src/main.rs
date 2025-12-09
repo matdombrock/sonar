@@ -833,6 +833,11 @@ mod cmd {
     pub fn edit(app: &mut App, _args: Vec<&str>) {
         let mut focused_path = app.cwd.clone();
         focused_path.push(&app.focused.name);
+        // Check if we have a valid path
+        // If not, open the cwd
+        if !focused_path.exists() {
+            focused_path = app.cwd.clone();
+        }
         let editor = env::var("EDITOR").unwrap_or("vi".to_string());
         log!(
             "Opening editor: {} {}",
