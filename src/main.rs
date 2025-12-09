@@ -1952,7 +1952,7 @@ force_sixel      false
 max_image_width  80
 
 # Responsive breakpoint in characters
-responsive_break 100
+responsive_break 128
 "#;
     pub struct Config {
         pub cmd_on_enter: String,
@@ -3613,8 +3613,9 @@ impl<'a> App<'a> {
         }
 
         // --- Popups ---
+        let popup_width = if area.width < threshold { 90 } else { 50 };
         if self.show_command_window {
-            let popup_area = centered_rect(50, 10, area);
+            let popup_area = centered_rect(popup_width, 10, area);
             let command_str = format!("> {}|", self.command_input);
             frame.render_widget(Clear, popup_area);
             let command_paragraph = Paragraph::new(command_str)
@@ -3629,7 +3630,7 @@ impl<'a> App<'a> {
             frame.render_widget(command_paragraph, popup_area);
         }
         if self.show_output_window {
-            let popup_area = centered_rect(50, 90, area);
+            let popup_area = centered_rect(popup_width, 90, area);
             frame.render_widget(Clear, popup_area);
             let command_paragraph = Paragraph::new(self.output_text.clone())
                 .style(Style::default().bg(Color::Black))
