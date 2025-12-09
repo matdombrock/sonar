@@ -3139,54 +3139,6 @@ impl<'a> App<'a> {
                 terminal.clear()?;
                 self.term_clear = false;
             }
-            terminal.draw(|f| self.render(f))?;
-            if event::poll(std::time::Duration::from_millis(100))? {
-                if let Event::Key(KeyEvent {
-                    code, modifiers, ..
-                }) = event::read()?
-                {
-                    // Output window input handling
-                    if self.show_output_window {
-                        self.input_out_window(modifiers, code);
-                        continue;
-                    }
-                    // Command window input handling
-                    if self.show_command_window {
-                        let lr = self.input_cmd_window(modifiers, code);
-                        match lr {
-                            LoopReturn::Continue => continue,
-                            LoopReturn::Break => break,
-                            LoopReturn::Ok => {}
-                        }
-                        continue;
-                    }
-                    // Yes/No window input handling
-                    if self.show_yesno_window {
-                        self.input_yesno_window(modifiers, code);
-                        continue;
-                    }
-                    // Before key press handling
-                    let input_changed = self.input_main(modifiers, code);
-                    // Some things are not bindable
-                    if input_changed {
-                        self.update_results();
-                    }
-                    // Process key to command mselfing
-                    let cmd = self.input_keybinds(modifiers, code);
-                    // Handle commands
-                    let lr = self.handle_cmd(&cmd);
-                    match lr {
-                        LoopReturn::Continue => continue,
-                        LoopReturn::Break => break,
-                        LoopReturn::Ok => {}
-                    }
-                    // After key press handling
-                    let sel_changed = self.update_focused();
-                    if sel_changed {
-                        self.update_preview();
-                    }
-                }
-            }
             // Async handling
             let completed = self.async_queue.check_tasks().await;
             let mut output = String::new();
@@ -3234,6 +3186,55 @@ impl<'a> App<'a> {
             if !output.is_empty() {
                 self.set_output("Async Tasks", &output);
                 cmd::output_window_show(self, vec![]);
+            }
+            // Render the UI
+            terminal.draw(|f| self.render(f))?;
+            if event::poll(std::time::Duration::from_millis(100))? {
+                if let Event::Key(KeyEvent {
+                    code, modifiers, ..
+                }) = event::read()?
+                {
+                    // Output window input handling
+                    if self.show_output_window {
+                        self.input_out_window(modifiers, code);
+                        continue;
+                    }
+                    // Command window input handling
+                    if self.show_command_window {
+                        let lr = self.input_cmd_window(modifiers, code);
+                        match lr {
+                            LoopReturn::Continue => continue,
+                            LoopReturn::Break => break,
+                            LoopReturn::Ok => {}
+                        }
+                        continue;
+                    }
+                    // Yes/No window input handling
+                    if self.show_yesno_window {
+                        self.input_yesno_window(modifiers, code);
+                        continue;
+                    }
+                    // Before key press handling
+                    let input_changed = self.input_main(modifiers, code);
+                    // Some things are not bindable
+                    if input_changed {
+                        self.update_results();
+                    }
+                    // Process key to command mselfing
+                    let cmd = self.input_keybinds(modifiers, code);
+                    // Handle commands
+                    let lr = self.handle_cmd(&cmd);
+                    match lr {
+                        LoopReturn::Continue => continue,
+                        LoopReturn::Break => break,
+                        LoopReturn::Ok => {}
+                    }
+                    // After key press handling
+                    let sel_changed = self.update_focused();
+                    if sel_changed {
+                        self.update_preview();
+                    }
+                }
             }
         } // End loop
 
