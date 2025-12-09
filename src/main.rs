@@ -123,6 +123,7 @@ mod log {
 // Async queue
 mod aq {
 
+    use ratatui_image::protocol::StatefulProtocol;
     use tokio::task::JoinHandle;
 
     use crate::node_info::NodeInfo;
@@ -132,6 +133,7 @@ mod aq {
         ListingResult,
         ListingDir,
         ListingPreview,
+        Image,
         Misc,
     }
     // Holds the data that the async fns can return
@@ -141,6 +143,33 @@ mod aq {
         pub rc: u32,
         pub data_str: Option<String>,
         pub data_listing: Option<Vec<NodeInfo>>,
+        pub data_image: Option<StatefulProtocol>,
+    }
+    impl ResData {
+        pub fn as_str(rc: u32, data: String) -> Self {
+            ResData {
+                rc,
+                data_str: Some(data),
+                data_listing: None,
+                data_image: None,
+            }
+        }
+        pub fn as_listing(rc: u32, data: Vec<NodeInfo>) -> Self {
+            ResData {
+                rc,
+                data_str: None,
+                data_listing: Some(data),
+                data_image: None,
+            }
+        }
+        pub fn as_image(rc: u32, data: StatefulProtocol) -> Self {
+            ResData {
+                rc,
+                data_str: None,
+                data_listing: None,
+                data_image: Some(data),
+            }
+        }
     }
     // Returned by the queue when a task is done
     pub struct Res {
@@ -466,20 +495,18 @@ mod cmd {
             let dest_path = app.cwd.join(&file_name);
             app.async_queue.add_task(aq::Kind::Misc, async move {
                 match fs::copy(&path, &dest_path).await {
-                    Ok(_) => aq::ResData {
-                        rc: 0,
-                        data_str: Some(format!(
+                    Ok(_) => aq::ResData::as_str(
+                        0,
+                        format!(
                             "Copied {} to {}",
                             path.to_string_lossy(),
                             dest_path.to_string_lossy()
-                        )),
-                        data_listing: None,
-                    },
-                    Err(e) => aq::ResData {
-                        rc: 1,
-                        data_str: Some(format!("Failed to copy {}: {}", path.to_string_lossy(), e)),
-                        data_listing: None,
-                    },
+                        ),
+                    ),
+                    Err(e) => aq::ResData::as_str(
+                        1,
+                        format!("Failed to copy {}: {}", path.to_string_lossy(), e),
+                    ),
                 }
             });
         }
@@ -501,6 +528,7 @@ mod cmd {
                         rc: 0,
                         data_str: Some(format!("Deleted {}", path.to_string_lossy())),
                         data_listing: None,
+                        data_image: None,
                     },
                     Err(e) => aq::ResData {
                         rc: 1,
@@ -510,6 +538,7 @@ mod cmd {
                             e
                         )),
                         data_listing: None,
+                        data_image: None,
                     },
                 }
             });
@@ -533,20 +562,18 @@ mod cmd {
             let dest_path = app.cwd.join(&file_name);
             app.async_queue.add_task(aq::Kind::Misc, async move {
                 match fs::rename(&path, &dest_path).await {
-                    Ok(_) => aq::ResData {
-                        rc: 0,
-                        data_str: Some(format!(
+                    Ok(_) => aq::ResData::as_str(
+                        0,
+                        format!(
                             "Moved {} to {}",
                             path.to_string_lossy(),
                             dest_path.to_string_lossy()
-                        )),
-                        data_listing: None,
-                    },
-                    Err(e) => aq::ResData {
-                        rc: 1,
-                        data_str: Some(format!("Failed to move {}: {}", path.to_string_lossy(), e)),
-                        data_listing: None,
-                    },
+                        ),
+                    ),
+                    Err(e) => aq::ResData::as_str(
+                        1,
+                        format!("Failed to move {}: {}", path.to_string_lossy(), e),
+                    ),
                 }
             });
         }
@@ -2309,19 +2336,11 @@ impl<'a> App<'a> {
                             }
                         }
                     }
-                    return aq::ResData {
-                        rc: 0,
-                        data_listing: Some(entries.clone()),
-                        data_str: None,
-                    };
+                    return aq::ResData::as_listing(0, entries.clone());
                 }
                 Err(_) => {
                     log!("Failed to read directory: {}", path.to_str().unwrap());
-                    return aq::ResData {
-                        rc: 0,
-                        data_listing: Some(entries.clone()),
-                        data_str: None,
-                    };
+                    return aq::ResData::as_listing(1, entries.clone());
                 }
             }
         })
@@ -2927,11 +2946,7 @@ impl<'a> App<'a> {
                         node_type: NodeType::Shortcut,
                     },
                 );
-                aq::ResData {
-                    rc: 0,
-                    data_str: None,
-                    data_listing: Some(listing),
-                }
+                aq::ResData::as_listing(0, listing)
             });
     }
 
@@ -2953,13 +2968,8 @@ impl<'a> App<'a> {
                     })
                     .collect();
                 scored.sort_by(|a, b| b.0.cmp(&a.0));
-                aq::ResData {
-                    rc: 0,
-                    data_str: None,
-                    data_listing: Some(scored.into_iter().map(|(_, item)| item).collect()),
-                }
+                aq::ResData::as_listing(0, scored.into_iter().map(|(_, item)| item).collect())
             });
-        // self.results = scored.into_iter().map(|(_, item)| item).collect();
     }
 
     fn reset_sec_scroll(&mut self) {
@@ -3164,6 +3174,10 @@ impl<'a> App<'a> {
                         self.focus_index = 0;
                         self.update_focused();
                         self.update_preview();
+                    }
+                    aq::Kind::Image => {
+                        log!("Image preview task completed");
+                        // Image preview handling not yet implemented
                     }
                     aq::Kind::Misc => {
                         if item.res.data_str.is_some() {
