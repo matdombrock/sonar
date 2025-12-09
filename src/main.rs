@@ -2485,6 +2485,7 @@ impl<'a> App<'a> {
     }
 
     fn welcome_message(&mut self) {
+        self.preview_content = Text::default();
         self.preview_content += self.fmtln_sc("Exit the application");
         self.preview_content += Line::from("");
         for (i, line) in LOGO.lines().enumerate() {
@@ -2693,15 +2694,6 @@ impl<'a> App<'a> {
 
         self.async_queue
             .add_task_unique(aq::Kind::FilePreview, async move {
-                // use ansi_to_tui::IntoText;
-                // use ratatui::text::{Line, Text};
-                // use regex::Regex;
-                // use std::fs::File;
-                // use std::io::{BufRead, BufReader};
-                // use syntect::easy::HighlightLines;
-                // use syntect::highlighting::{Style as SyntectStyle, ThemeSet};
-                // use syntect::parsing::SyntaxSet;
-
                 fn sanitize_content(input: &str) -> String {
                     let ansi_regex = Regex::new(r"\x1B\[[0-9;]*[A-Za-z]").unwrap();
                     let mut result = String::new();
@@ -2846,26 +2838,29 @@ impl<'a> App<'a> {
 
     fn update_preview(&mut self) {
         log!("Updating preview for item: {}", self.focused.name);
-        self.preview_content = Default::default();
         self.reset_sec_scroll();
         match self.focused.name.as_str() {
             sc::EXIT => {
                 self.welcome_message();
             }
             sc::HOME => {
+                self.preview_content = Text::default();
                 self.preview_content += self.fmtln_path(&dirs::home_dir().unwrap());
                 self.preview_content += self.fmtln_sc("Go to the home directory");
             }
             sc::DIR_UP => {
                 let up_path = self.cwd.parent().unwrap_or(&self.cwd);
+                self.preview_content = Text::default();
                 self.preview_content += self.fmtln_path(&up_path.to_path_buf());
                 self.preview_content += self.fmtln_sc("Go up to the parent directory");
             }
             sc::DIR_BACK => {
+                self.preview_content = Text::default();
                 self.preview_content += self.fmtln_path(&self.lwd);
                 self.preview_content += self.fmtln_sc("Go back to the last working directory");
             }
             sc::EXP => {
+                self.preview_content = Text::default();
                 self.preview_content += self.fmtln_sc("Toggle explode mode");
                 self.preview_content += Line::styled(
                     "Shows all files in subdirectories under the current directory.",
@@ -2875,6 +2870,7 @@ impl<'a> App<'a> {
                 self.preview_content += self.fmtln_info("explode mode", status);
             }
             sc::CMDS => {
+                self.preview_content = Text::default();
                 self.preview_content += self.fmtln_sc("Show visual commands");
                 self.preview_content += Line::styled(
                     "Toggles a visual command menu in the listing.",
@@ -2882,6 +2878,7 @@ impl<'a> App<'a> {
                 );
             }
             sc::MENU_BACK => {
+                self.preview_content = Text::default();
                 self.preview_content += self.fmtln_sc("Go back to the previous menu");
                 self.preview_content += Line::styled(
                     "Exits the current visual command menu.",
@@ -2889,6 +2886,7 @@ impl<'a> App<'a> {
                 );
             }
             sc::LOADING => {
+                self.preview_content = Text::default();
                 self.preview_content += self.fmtln_sc("Loading...");
                 self.loading_line();
                 self.preview_content +=
@@ -2901,7 +2899,6 @@ impl<'a> App<'a> {
                 }
             }
             _ => {
-                self.preview_content = Default::default();
                 // Check if we have an internal command
                 if self.focused.is_command() {
                     let cmd_name =
@@ -2916,6 +2913,7 @@ impl<'a> App<'a> {
                             }
                         };
                     let data = cmd_data::get_cmd_data(&self.cmd_list, &cmd_name).clone();
+                    self.preview_content = Default::default();
                     self.preview_content += Line::styled(
                         format!("{} internal command", nf::CMD),
                         Style::default().fg(self.cs.command),
@@ -2936,6 +2934,7 @@ impl<'a> App<'a> {
                 }
                 // Check if we have a shell command
                 if self.focused.is_shell_command() {
+                    self.preview_content = Default::default();
                     self.preview_content += Line::styled(
                         format!("{} user shell script", nf::SCMD),
                         Style::default().fg(self.cs.command),
@@ -2962,18 +2961,14 @@ impl<'a> App<'a> {
                 } else if self.focused.is_file() {
                     self.preview_file(&focused_path);
                 } else if self.focused.is_image() {
-                    self.preview_content += Line::styled(
-                        "Image file preview not yet supported.",
-                        Style::default().fg(self.cs.error),
-                    );
                     let _ = self.preview_image(&focused_path);
                 } else if self.focused.is_executable() {
-                    self.preview_content += Line::styled(
+                    self.preview_content = Text::styled(
                         "Executable file preview not yet supported.",
                         Style::default().fg(self.cs.error),
                     );
                 } else if self.focused.is_shortcut() {
-                    self.preview_content += Line::styled(
+                    self.preview_content = Text::styled(
                         "Shortcut preview not supported.",
                         Style::default().fg(self.cs.error),
                     );
@@ -2982,7 +2977,7 @@ impl<'a> App<'a> {
                         Line::styled("Unknown file type.", Style::default().fg(self.cs.error));
                 } else {
                     // Unknown
-                    self.preview_content += Line::styled(
+                    self.preview_content = Text::styled(
                         "Error: Focused node type cant be detected",
                         Style::default().fg(self.cs.error),
                     );
