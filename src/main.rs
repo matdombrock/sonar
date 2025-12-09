@@ -6,20 +6,14 @@ use crossterm::{
 };
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
-use ratatui::style::{Color, Style};
-use ratatui::text::{Span, Text};
 use ratatui::{
     Frame, Terminal,
-    layout::{Constraint, Rect},
+    backend::CrosstermBackend,
+    layout::{Constraint, Direction, Layout, Rect},
     prelude::Backend,
-    text::Line,
-    widgets::{Clear, Wrap},
-};
-use ratatui::{backend::CrosstermBackend, layout::Layout};
-use ratatui::{
-    // Might want ListItem
-    layout::Direction,
-    widgets::{Block, Borders, List, ListState, Paragraph},
+    style::{Color, Style},
+    text::{Line, Span, Text},
+    widgets::{Block, Borders, Clear, List, ListState, Paragraph, Wrap},
 };
 use ratatui_image::{
     StatefulImage,
@@ -27,16 +21,20 @@ use ratatui_image::{
     protocol::StatefulProtocol,
 };
 use regex::Regex;
-use std::pin::Pin;
-use std::{env, process::Command};
-use std::{fs, io::BufRead};
-use std::{fs::File, time::SystemTime};
-use std::{io::BufReader, time::UNIX_EPOCH};
-use syntect::easy::HighlightLines;
-use syntect::highlighting::{Style as SyntectStyle, ThemeSet};
-use syntect::parsing::SyntaxSet;
-// Might want Path
-use std::path::PathBuf;
+use std::{
+    env, fs,
+    fs::File,
+    io::{BufRead, BufReader},
+    path::PathBuf,
+    pin::Pin,
+    process::Command,
+    time::{SystemTime, UNIX_EPOCH},
+};
+use syntect::{
+    easy::HighlightLines,
+    highlighting::{Style as SyntectStyle, ThemeSet},
+    parsing::SyntaxSet,
+};
 
 // INTERNAL MODULES
 use crate::{node_info::NodeInfo, node_info::NodeType};
@@ -2239,7 +2237,6 @@ mod node_info {
 // I think all we need is a way to break
 enum LoopReturn {
     Continue,
-    Break,
     Ok,
 }
 
@@ -3411,7 +3408,6 @@ impl<'a> App<'a> {
                         let lr = self.input_cmd_window(modifiers, code);
                         match lr {
                             LoopReturn::Continue => continue,
-                            LoopReturn::Break => break,
                             LoopReturn::Ok => {}
                         }
                         continue;
@@ -3433,7 +3429,6 @@ impl<'a> App<'a> {
                     let lr = self.handle_cmd(&cmd);
                     match lr {
                         LoopReturn::Continue => continue,
-                        LoopReturn::Break => break,
                         LoopReturn::Ok => {}
                     }
                     // After key press handling
