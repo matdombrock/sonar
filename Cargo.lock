@@ -664,25 +664,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
-name = "fuz"
-version = "0.1.0"
-dependencies = [
- "ansi-to-tui",
- "clipboard",
- "color-eyre",
- "crossterm 0.29.0",
- "dirs",
- "fuzzy-matcher",
- "image",
- "mime_guess",
- "ratatui",
- "ratatui-image",
- "regex",
- "syntect",
- "tokio",
-]
-
-[[package]]
 name = "fuzzy-matcher"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1801,6 +1782,25 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+
+[[package]]
+name = "sona"
+version = "0.1.0"
+dependencies = [
+ "ansi-to-tui",
+ "clipboard",
+ "color-eyre",
+ "crossterm 0.29.0",
+ "dirs",
+ "fuzzy-matcher",
+ "image",
+ "mime_guess",
+ "ratatui",
+ "ratatui-image",
+ "regex",
+ "syntect",
+ "tokio",
+]
 
 [[package]]
 name = "stable_deref_trait"
