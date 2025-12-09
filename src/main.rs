@@ -3606,7 +3606,7 @@ impl<'a> App<'a> {
                 }
                 let mut new_area = Rect {
                     x: self.lay_preview_area.x + 1,
-                    y: self.lay_preview_area.y + 10,
+                    y: self.lay_preview_area.y + 5,
                     width: self.lay_preview_area.width - 2,
                     height: self.lay_preview_area.height - 2,
                 };
