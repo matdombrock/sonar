@@ -27,11 +27,11 @@ use ratatui_image::{
     protocol::StatefulProtocol,
 };
 use regex::Regex;
+use std::pin::Pin;
 use std::{env, process::Command};
 use std::{fs, io::BufRead};
 use std::{fs::File, time::SystemTime};
 use std::{io::BufReader, time::UNIX_EPOCH};
-use std::{os::unix::fs::PermissionsExt, pin::Pin};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style as SyntectStyle, ThemeSet};
 use syntect::parsing::SyntaxSet;
@@ -98,6 +98,7 @@ mod sc {
     pub const MENU_BACK: &str = " menu";
     pub const EXP: &str = " explode";
     pub const CMDS: &str = " cmds";
+    pub const LOADING: &str = "󱑆 loading...";
 }
 
 // Logs to temp directory
@@ -2890,6 +2891,18 @@ impl<'a> App<'a> {
                     Style::default().fg(self.cs.tip),
                 );
             }
+            sc::LOADING => {
+                self.preview_content += self.fmtln_sc("Loading...");
+                self.loading_line();
+                self.preview_content +=
+                    Line::styled("The listing is loading.", Style::default().fg(self.cs.tip));
+                if self.mode_explode {
+                    self.preview_content += Line::styled(
+                        "Explode mode is ON. This may take a while.",
+                        Style::default().fg(self.cs.warning),
+                    );
+                }
+            }
             _ => {
                 self.preview_content = Default::default();
                 // Check if we have an internal command
@@ -2988,6 +3001,29 @@ impl<'a> App<'a> {
     }
 
     fn update_listing(&mut self) {
+        // Clear listing and display loading items
+        self.listing = Vec::new();
+        self.listing.insert(
+            0,
+            NodeInfo {
+                name: sc::EXP.to_string(),
+                node_type: NodeType::Shortcut,
+            },
+        );
+        self.listing.insert(
+            0,
+            NodeInfo {
+                name: sc::EXIT.to_string(),
+                node_type: NodeType::Shortcut,
+            },
+        );
+        self.listing.insert(
+            0,
+            NodeInfo {
+                name: sc::LOADING.to_string(),
+                node_type: NodeType::Shortcut,
+            },
+        );
         // Handle cmd finder
         if self.mode_cmd_finder {
             log!("Updating command listing");
