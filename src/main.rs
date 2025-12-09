@@ -270,8 +270,8 @@ mod aq {
     }
     // An item in the queue
     pub struct Item {
-        id: usize,
-        kind: Kind,
+        pub id: usize,
+        pub kind: Kind,
         handle: JoinHandle<ResData>,
     }
     // The main queue struct
@@ -344,6 +344,10 @@ mod aq {
 
         pub fn pending_count(&self) -> usize {
             self.items.len()
+        }
+
+        pub fn get_pending(&self) -> Vec<&Item> {
+            self.items.iter().collect()
         }
     }
 }
@@ -2280,6 +2284,9 @@ struct App<'a> {
     has_bat: bool,
     // Layout vals - read only
     lay_preview_area: Rect,
+    //
+    loading_preview: bool,
+    loading_listing: bool,
 }
 
 impl<'a> App<'a> {
@@ -2345,6 +2352,8 @@ impl<'a> App<'a> {
             found_shell_cmds: shell_cmds_ehck,
             has_bat: bat_check,
             lay_preview_area: Rect::default(),
+            loading_preview: false,
+            loading_listing: false,
         }
     }
 
@@ -3280,6 +3289,91 @@ impl<'a> App<'a> {
         LoopReturn::Ok
     }
 
+    async fn handle_async(&mut self) {
+        self.loading_listing = false;
+        self.loading_preview = false;
+        let pending = self.async_queue.get_pending();
+        for p in pending {
+            match p.kind {
+                aq::Kind::ListingResult => self.loading_listing = true,
+                aq::Kind::ListingDir => self.loading_listing = true,
+                aq::Kind::ListingPreview => self.loading_preview = true,
+                aq::Kind::FilePreview => self.loading_preview = true,
+                aq::Kind::ImagePreview => self.loading_preview = true,
+                aq::Kind::Misc => { /* Handle misc pending tasks if needed */ }
+            }
+        }
+        let completed = self.async_queue.check_tasks().await;
+        let mut output = String::new();
+        for item in completed {
+            match item.kind {
+                aq::Kind::ListingDir => {
+                    log!("Updating main listing from async task");
+                    self.listing = item.res.data_listing.unwrap(); // This should be safe to unwrap
+                    self.update_results();
+                }
+                aq::Kind::ListingResult => {
+                    log!("Updating fuzzy results from async task");
+                    self.results = item.res.data_listing.unwrap(); // This should be safe to unwrap
+                    // TODO: Should make a "reset_focus" function
+                    self.focus_index = 0;
+                    self.update_focused();
+                    self.update_preview();
+                }
+                aq::Kind::ListingPreview => {
+                    log!("Updating preview listing from async task");
+                    let data = item.res.data_listing.unwrap();
+                    let meta = item.res.data_meta.unwrap();
+                    self.preview_content = Default::default();
+                    self.preview_content = self.pretty_metadata(&meta);
+                    self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
+                    let pretty_listing = self.pretty_dir_list(&data);
+                    for line in pretty_listing.lines.iter().take(20) {
+                        self.preview_content += Line::from(line.clone());
+                    }
+                }
+                aq::Kind::ImagePreview => {
+                    log!("Image preview task completed");
+                    let meta = item.res.data_meta.unwrap();
+                    self.preview_content = Default::default();
+                    self.preview_content = self.pretty_metadata(&meta);
+                    self.preview_image = item.res.data_image;
+                }
+                aq::Kind::FilePreview => {
+                    log!("File preview task completed");
+                    let data_text = match &item.res.data_file {
+                        Some(d) => d.clone(),
+                        None => Text::from("No data"),
+                    };
+                    let meta = item.res.data_meta.unwrap();
+                    self.preview_content = Default::default();
+                    self.preview_content = self.pretty_metadata(&meta);
+                    for line in data_text.lines.iter().take(self.cfg.preview_limit) {
+                        self.preview_content += Line::from(line.clone());
+                    }
+                }
+                aq::Kind::Misc => {
+                    if item.res.data_str.is_some() {
+                        let data = match &item.res.data_str {
+                            Some(d) => d.clone(),
+                            None => "No data".to_string(),
+                        };
+                        output += &format!(
+                            "Task #{}, rc:{} '{:#?}' -  {}",
+                            item.id, item.res.rc, item.kind, data
+                        );
+                    } else {
+                        output += &format!(
+                            "Task #{}, rc:{} '{:#?}' - No data returned\n",
+                            item.id, item.res.rc, item.kind
+                        );
+                    }
+                    self.set_output("Async Tasks", &output);
+                }
+            }
+        }
+    }
+
     async fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
         log!("Starting main event loop");
         // Get directory listing
@@ -3299,75 +3393,7 @@ impl<'a> App<'a> {
                 self.term_clear = false;
             }
             // Async handling
-            let completed = self.async_queue.check_tasks().await;
-            let mut output = String::new();
-            for item in completed {
-                match item.kind {
-                    aq::Kind::ListingDir => {
-                        log!("Updating main listing from async task");
-                        self.listing = item.res.data_listing.unwrap(); // This should be safe to unwrap
-                        self.update_results();
-                    }
-                    aq::Kind::ListingPreview => {
-                        log!("Updating preview listing from async task");
-                        let data = item.res.data_listing.unwrap();
-                        let meta = item.res.data_meta.unwrap();
-                        self.preview_content = Default::default();
-                        self.preview_content = self.pretty_metadata(&meta);
-                        self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
-                        let pretty_listing = self.pretty_dir_list(&data);
-                        for line in pretty_listing.lines.iter().take(20) {
-                            self.preview_content += Line::from(line.clone());
-                        }
-                    }
-                    aq::Kind::ListingResult => {
-                        log!("Updating fuzzy results from async task");
-                        self.results = item.res.data_listing.unwrap(); // This should be safe to unwrap
-                        // TODO: Should make a "reset_focus" function
-                        self.focus_index = 0;
-                        self.update_focused();
-                        self.update_preview();
-                    }
-                    aq::Kind::ImagePreview => {
-                        log!("Image preview task completed");
-                        let meta = item.res.data_meta.unwrap();
-                        self.preview_content = Default::default();
-                        self.preview_content = self.pretty_metadata(&meta);
-                        self.preview_image = item.res.data_image;
-                    }
-                    aq::Kind::FilePreview => {
-                        log!("File preview task completed");
-                        let data_text = match &item.res.data_file {
-                            Some(d) => d.clone(),
-                            None => Text::from("No data"),
-                        };
-                        let meta = item.res.data_meta.unwrap();
-                        self.preview_content = Default::default();
-                        self.preview_content = self.pretty_metadata(&meta);
-                        for line in data_text.lines.iter().take(self.cfg.preview_limit) {
-                            self.preview_content += Line::from(line.clone());
-                        }
-                    }
-                    aq::Kind::Misc => {
-                        if item.res.data_str.is_some() {
-                            let data = match &item.res.data_str {
-                                Some(d) => d.clone(),
-                                None => "No data".to_string(),
-                            };
-                            output += &format!(
-                                "Task #{}, rc:{} '{:#?}' -  {}",
-                                item.id, item.res.rc, item.kind, data
-                            );
-                        } else {
-                            output += &format!(
-                                "Task #{}, rc:{} '{:#?}' - No data returned\n",
-                                item.id, item.res.rc, item.kind
-                            );
-                        }
-                        self.set_output("Async Tasks", &output);
-                    }
-                }
-            }
+            self.handle_async().await; // Should not block
             // Render the UI
             terminal.draw(|f| self.render(f))?;
             if event::poll(std::time::Duration::from_millis(100))? {
@@ -3447,6 +3473,15 @@ impl<'a> App<'a> {
                 )
                 .split(popup_layout[1])[1]
         }
+
+        // Loading indicator
+        let loading_arr = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+        let loading_index = (SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+            % loading_arr.len() as u128) as usize;
+
         let area = frame.area();
         let threshold = self.cfg.responsive_break;
 
@@ -3513,7 +3548,17 @@ impl<'a> App<'a> {
         } else {
             "".to_string()
         };
-        let list_title = format!("|{}{} ", util::fpath(&self.cwd), explode_str);
+        let loading_str_listing = if self.loading_listing {
+            loading_arr[loading_index].to_string()
+        } else {
+            "".to_string()
+        };
+        let list_title = format!(
+            "|{}{} {}",
+            util::fpath(&self.cwd),
+            explode_str,
+            loading_str_listing
+        );
         let list_widget = List::new(results_pretty).block(
             Block::default()
                 .title(list_title)
@@ -3526,10 +3571,20 @@ impl<'a> App<'a> {
         }
 
         // Preview box
+        let loading_str_preview = if self.loading_preview {
+            loading_arr[loading_index].to_string()
+        } else {
+            "".to_string()
+        };
         let preview_widget = Paragraph::new(self.preview_content.clone())
             .block(
                 Block::default()
-                    .title(format!("{} m(0)_(0)m | {} ", nf::LOOK, self.focused.name))
+                    .title(format!(
+                        "{} m(0)_(0)m | {} {} ",
+                        nf::LOOK,
+                        self.focused.name,
+                        loading_str_preview
+                    ))
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(self.cs.preview_border)),
             )
@@ -3578,17 +3633,9 @@ impl<'a> App<'a> {
         }
 
         // --- Status bar ---
-        // Loading indicator
-        let loading_arr = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-        let loading_index = (SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis()
-            / 100
-            % loading_arr.len() as u128) as usize;
-        let mut loading_str = nf::WAIT.to_string();
+        let mut loading_str_status = nf::WAIT.to_string();
         if self.async_queue.pending_count() > 0 {
-            loading_str = loading_arr[loading_index].to_string();
+            loading_str_status = loading_arr[loading_index].to_string();
         }
         // FIXME: THESE SHOULD BE CACHED
         let username = env::var("USER").unwrap_or_else(|_| "unknown".to_string());
@@ -3610,7 +3657,7 @@ impl<'a> App<'a> {
         let multi_count = self.multi_selection.len();
         let status_text = format!(
             " {} {} | {} {} | {} {} | {}",
-            loading_str,
+            loading_str_status,
             self.async_queue.pending_count(),
             nf::DUDE,
             whoami,
