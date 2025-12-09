@@ -39,6 +39,17 @@ Clone this repo and simply run:
 cargo run --release
 ```
 
+### Install
+
+```sh
+cargo install --path .
+```
+
+> [!TIP]
+> Ensure `.cargo/bin` in in your path.
+> 
+> `export PATH="$HOME/.cargo/bin:$PATH"`
+
 ## Why would I use this? How is this better than X?
 
 There are a lot of great terminal file browsers out there. The goal here is not to be the best file manager of all time (this is incidental), the goal is to make a file manager that works *exactly the way I think it should*.
