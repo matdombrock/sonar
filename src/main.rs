@@ -2264,9 +2264,6 @@ struct App<'a> {
     show_output_window: bool,
     output_title: String,
     output_text: String,
-    show_yesno_window: bool,
-    yesno_text: String,
-    yesno_result: u32, // 0 = no, 1 = yes, 2 = unset
     cmd_list: cmd_data::CmdList,
     shell_cmd_list: Vec<String>,
     keybinds: kb::KeyBindList,
@@ -2330,9 +2327,6 @@ impl<'a> App<'a> {
             show_output_window: false,
             output_title: String::new(),
             output_text: String::new(),
-            show_yesno_window: false,
-            yesno_text: String::new(),
-            yesno_result: 2,
             cmd_list: cmd_data::make_cmd_list(),
             shell_cmd_list: shell_cmds::make_list_auto(),
             keybinds: kb::make_list_auto(),
@@ -3194,22 +3188,6 @@ impl<'a> App<'a> {
         LoopReturn::Ok
     }
 
-    // TODO: This doesnt really make sense because command cant wait for it
-    fn input_yesno_window(&mut self, modifiers: KeyModifiers, code: KeyCode) {
-        self.yesno_result = 2; // Reset
-        match (modifiers, code) {
-            (KeyModifiers::NONE, KeyCode::Char('y')) => {
-                self.show_yesno_window = false;
-                self.yesno_result = 1;
-            }
-            (KeyModifiers::NONE, KeyCode::Char('n')) => {
-                self.show_yesno_window = false;
-                self.yesno_result = 0;
-            }
-            _ => {}
-        }
-    }
-
     // Returns true if input changed
     fn input_main(&mut self, modifiers: KeyModifiers, code: KeyCode) -> bool {
         match (modifiers, code) {
@@ -3404,11 +3382,6 @@ impl<'a> App<'a> {
                             LoopReturn::Continue => continue,
                             LoopReturn::Ok => {}
                         }
-                        continue;
-                    }
-                    // Yes/No window input handling
-                    if self.show_yesno_window {
-                        self.input_yesno_window(modifiers, code);
                         continue;
                     }
                     // Before key press handling
@@ -3704,20 +3677,6 @@ impl<'a> App<'a> {
                 .wrap(Wrap { trim: false })
                 .scroll((self.scroll_off_output as u16, self.scroll_off_output as u16));
             frame.render_widget(command_paragraph, popup_area);
-        }
-        if self.show_yesno_window {
-            let popup_area = centered_rect(30, 10, area);
-            frame.render_widget(Clear, popup_area);
-            let yesno_paragraph = Paragraph::new(self.yesno_text.clone())
-                .style(Style::default().bg(Color::Black))
-                .block(
-                    Block::default()
-                        .title(format!("{} Confirm (y/n)", nf::WARN))
-                        .borders(Borders::ALL)
-                        .border_style(Style::default().fg(Color::Red))
-                        .style(Style::default().bg(Color::Black)),
-                );
-            frame.render_widget(yesno_paragraph, popup_area);
         }
     }
 }
