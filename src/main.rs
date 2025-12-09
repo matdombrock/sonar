@@ -22,10 +22,10 @@ use ratatui_image::{
 };
 use regex::Regex;
 use std::{
-    env, fs,
-    fs::File,
+    env,
+    fs::{self, File},
     io::{BufRead, BufReader},
-    path::PathBuf,
+    path::{Path, PathBuf},
     pin::Pin,
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
@@ -2284,6 +2284,8 @@ struct App<'a> {
     //
     loading_preview: bool,
     loading_listing: bool,
+    //
+    whoami: String,
 }
 
 impl<'a> App<'a> {
@@ -2293,24 +2295,17 @@ impl<'a> App<'a> {
             Ok(output) => output.status.success(),
             Err(_) => false,
         };
-        // FIXME: THIS IS STUPID
-        // There is no reason to read the whole file
-        let kb_check = match fs::read_to_string(&kb::get_path()) {
-            Ok(_) => true,
-            Err(_) => false,
-        };
-        let cs_check = match fs::read_to_string(&cs::Colors::get_path()) {
-            Ok(_) => true,
-            Err(_) => false,
-        };
-        let cfg_check = match fs::read_to_string(&cfg::Config::get_path()) {
-            Ok(_) => true,
-            Err(_) => false,
-        };
-        let shell_cmds_ehck = match fs::read_to_string(&shell_cmds::get_path()) {
-            Ok(_) => true,
-            Err(_) => false,
-        };
+        let kb_check = Path::new(&kb::get_path()).exists();
+        let cs_check = Path::new(&cs::Colors::get_path()).exists();
+        let cfg_check = Path::new(&cfg::Config::get_path()).exists();
+        let shell_cmds_check = Path::new(&shell_cmds::get_path()).exists();
+
+        let username = env::var("USER").unwrap_or_else(|_| "unknown".to_string());
+        let hostname = fs::read_to_string("/etc/hostname")
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|_| "unknown".to_string());
+
+        let whoami = format!("{}@{}", username, hostname);
 
         Self {
             async_queue: aq::Queue::new(),
@@ -2346,11 +2341,12 @@ impl<'a> App<'a> {
             found_keybinds: kb_check,
             found_cs: cs_check,
             found_cfg: cfg_check,
-            found_shell_cmds: shell_cmds_ehck,
+            found_shell_cmds: shell_cmds_check,
             has_bat: bat_check,
             lay_preview_area: Rect::default(),
             loading_preview: false,
             loading_listing: false,
+            whoami,
         }
     }
 
@@ -2514,7 +2510,6 @@ impl<'a> App<'a> {
             Style::default().fg(self.cs.tip),
         );
         // System Information
-        // TODO: This is not very dry
         self.preview_content += Line::from("");
         self.preview_content +=
             Line::styled("System Information:", Style::default().fg(self.cs.header));
@@ -3280,7 +3275,6 @@ impl<'a> App<'a> {
                 return LoopReturn::Ok;
             }
         };
-        // TODO: This isnt handled correctly
         let cmd_data = cmd_data::get_cmd_data(&self.cmd_list, &cmd_name);
         (cmd_data.op)(self, args);
         LoopReturn::Ok
@@ -3633,13 +3627,6 @@ impl<'a> App<'a> {
         if self.async_queue.pending_count() > 0 {
             loading_str_status = loading_arr[loading_index].to_string();
         }
-        // FIXME: THESE SHOULD BE CACHED
-        let username = env::var("USER").unwrap_or_else(|_| "unknown".to_string());
-        let hostname = fs::read_to_string("/etc/hostname")
-            .map(|s| s.trim().to_string())
-            .unwrap_or_else(|_| "unknown".to_string());
-
-        let whoami = format!("{}@{}", username, hostname);
         let unix_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -3656,7 +3643,7 @@ impl<'a> App<'a> {
             loading_str_status,
             self.async_queue.pending_count(),
             nf::DUDE,
-            whoami,
+            self.whoami,
             nf::MSEL,
             multi_count,
             hhmmss
