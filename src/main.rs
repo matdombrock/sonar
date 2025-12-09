@@ -817,7 +817,7 @@ mod cmd {
         let found = app.found_keybinds;
         let mut out = String::from(format!("Path: {}", kb_path.to_str().unwrap()));
         if !found {
-            out += " \n\n(not found, using defaults)";
+            out += " \n(not found, using defaults)";
         }
 
         out += "\n\nKeybinds:\n";
