@@ -52,6 +52,14 @@ const LOGO: &str = r#"
  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝ ╚═╝ ╚═╝ 
 "#;
 
+// Small block
+const LOADING: &str = r#"
+▌  ▞▀▖▞▀▖▛▀▖▜▘▙ ▌▞▀▖      
+▌  ▌ ▌▙▄▌▌ ▌▐ ▌▌▌▌▄▖      
+▌  ▌ ▌▌ ▌▌ ▌▐ ▌▝▌▌ ▌▗▖▗▖▗▖
+▀▀▘▝▀ ▘ ▘▀▀ ▀▘▘ ▘▝▀ ▝▘▝▘▝▘
+"#;
+
 const SEP: &str = "───────────────────────────────────────────────";
 
 const ASK: &str = "{ASK}";
@@ -185,6 +193,7 @@ mod node_meta {
 // Async queue
 mod aq {
 
+    use ratatui::text::Text;
     use ratatui_image::protocol::StatefulProtocol;
     use tokio::task::JoinHandle;
 
@@ -196,6 +205,7 @@ mod aq {
         ListingDir,
         ListingPreview,
         ImagePreview,
+        FilePreview,
         Misc,
     }
     // Holds the data that the async fns can return
@@ -207,6 +217,7 @@ mod aq {
         pub data_listing: Option<Vec<NodeInfo>>,
         pub data_image: Option<StatefulProtocol>,
         pub data_meta: Option<NodeMeta>,
+        pub data_file: Option<Text<'static>>,
     }
     impl ResData {
         pub fn as_str(rc: u32, data: String) -> Self {
@@ -216,6 +227,7 @@ mod aq {
                 data_listing: None,
                 data_image: None,
                 data_meta: None,
+                data_file: None,
             }
         }
         pub fn as_listing(rc: u32, data: Vec<NodeInfo>, meta: NodeMeta) -> Self {
@@ -225,6 +237,7 @@ mod aq {
                 data_listing: Some(data),
                 data_image: None,
                 data_meta: Some(meta),
+                data_file: None,
             }
         }
         pub fn as_image(rc: u32, data: StatefulProtocol, meta: NodeMeta) -> Self {
@@ -234,6 +247,17 @@ mod aq {
                 data_listing: None,
                 data_image: Some(data),
                 data_meta: Some(meta),
+                data_file: None,
+            }
+        }
+        pub fn as_file(rc: u32, data: Text<'static>, meta: NodeMeta) -> Self {
+            ResData {
+                rc,
+                data_str: None,
+                data_listing: None,
+                data_image: None,
+                data_meta: Some(meta),
+                data_file: Some(data),
             }
         }
     }
@@ -2431,6 +2455,13 @@ impl<'a> App<'a> {
         shell_cmd.replace("$...", &path_all.trim_end())
     }
 
+    fn loading_line(&mut self) {
+        self.preview_content = Text::default();
+        for line in LOADING.lines() {
+            self.preview_content += Line::styled(line, Style::default().fg(self.cs.dim))
+        }
+    }
+
     fn fmtln_info(&self, label: &str, value: &str) -> Line<'a> {
         Line::styled(
             format!("{} {:<12}: {}", nf::INFO, label, value),
@@ -2644,16 +2675,7 @@ impl<'a> App<'a> {
     }
 
     fn preview_dir(&mut self, focused_path: &PathBuf) {
-        let path_line = self.fmtln_path(&focused_path);
-        self.preview_content += path_line;
-        // Get the file metadata
-        let metadata = fs::metadata(&focused_path);
-        if let Ok(meta) = metadata {
-            // Get permissions
-            let permissions = meta.permissions();
-            let perm_line = self.fmtln_info("permissions", &format!("{:o}", permissions.mode()));
-            self.preview_content += perm_line;
-        }
+        self.loading_line();
         let owned_path = focused_path.clone();
         let owned_explode = self.mode_explode;
         self.async_queue.add_task_unique(
@@ -2663,135 +2685,136 @@ impl<'a> App<'a> {
     }
 
     fn preview_file(&mut self, focused_path: &PathBuf) {
-        let path_line = self.fmtln_path(&focused_path);
-        self.preview_content += path_line;
-        // Get the file metadata
-        let metadata = fs::metadata(&focused_path);
-        if let Ok(meta) = metadata {
-            // Get permissions
-            let permissions = meta.permissions();
-            let perm_line = self.fmtln_info("permissions", &format!("{:o}", permissions.mode()));
-            self.preview_content += perm_line;
-            // Get mime type
-            if meta.file_type().is_file() {
-                // Get mimetype using mime_guess
-                let mime = mime_guess::from_path(&focused_path).first_or_octet_stream();
-                let mime_line = self.fmtln_info("mime", &mime.to_string());
-                self.preview_content += mime_line;
-            }
-        }
+        self.loading_line();
 
-        fn sanitize_content(input: &str) -> String {
-            // Regex to match ANSI escape sequences
-            let ansi_regex = Regex::new(r"\x1B\[[0-9;]*[A-Za-z]").unwrap();
-            let mut result = String::new();
-            let mut last = 0;
+        let focused_path = focused_path.clone();
+        let cs = self.cs.clone();
+        let preview_limit = self.cfg.preview_limit;
+        let has_bat = self.has_bat;
+        let sep = SEP.to_string();
 
-            for mat in ansi_regex.find_iter(input) {
-                // Process text before the ANSI sequence
-                let before = &input[last..mat.start()];
-                for c in before.chars() {
-                    if c.is_control() && c != '\n' && c != '\x1B' {
-                        result.push('�');
-                    } else {
-                        result.push(c);
-                    }
-                }
-                // Copy the ANSI sequence as-is
-                result.push_str(mat.as_str());
-                last = mat.end();
-            }
-            // Process any remaining text after the last ANSI sequence
-            let after = &input[last..];
-            for c in after.chars() {
-                if c.is_control() && c != '\n' && c != '\x1B' {
-                    result.push('�');
-                } else {
-                    result.push(c);
-                }
-            }
-            result
-        }
-        // Check if bat is available
-        // Use bat for preview if available
-        if self.has_bat {
-            // Use bat for preview
-            log!("Using bat for file preview");
-            if let Ok(bat_output) = Command::new("bat")
-                .arg("--color=always")
-                .arg("--style=plain")
-                .arg(format!("--line-range=:{}", self.cfg.preview_limit))
-                .arg(focused_path.to_str().unwrap())
-                .output()
-            {
-                if bat_output.status.success() {
-                    self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
-                    let mut bat_content = String::from_utf8_lossy(&bat_output.stdout);
-                    bat_content = bat_content.replace("\r\n", "\n").into();
-                    // Replace tabs with spaces
-                    bat_content = bat_content.replace("\t", "    ").into();
-                    // Replace non-printable characters
-                    // NOTE: THIS SEEMS TO BE THE TRICK
-                    bat_content = sanitize_content(&bat_content.to_string()).into();
-                    let output = match bat_content.as_ref().into_text() {
-                        Ok(text) => text,
-                        Err(_) => {
-                            self.preview_content += Line::styled(
-                                "Error: Unable to convert bat output to text.",
-                                Style::default().fg(self.cs.error),
-                            );
-                            return;
+        self.async_queue
+            .add_task_unique(aq::Kind::FilePreview, async move {
+                // use ansi_to_tui::IntoText;
+                // use ratatui::text::{Line, Text};
+                // use regex::Regex;
+                // use std::fs::File;
+                // use std::io::{BufRead, BufReader};
+                // use syntect::easy::HighlightLines;
+                // use syntect::highlighting::{Style as SyntectStyle, ThemeSet};
+                // use syntect::parsing::SyntaxSet;
+
+                fn sanitize_content(input: &str) -> String {
+                    let ansi_regex = Regex::new(r"\x1B\[[0-9;]*[A-Za-z]").unwrap();
+                    let mut result = String::new();
+                    let mut last = 0;
+                    for mat in ansi_regex.find_iter(input) {
+                        let before = &input[last..mat.start()];
+                        for c in before.chars() {
+                            if c.is_control() && c != '\n' && c != '\x1B' {
+                                result.push('�');
+                            } else {
+                                result.push(c);
+                            }
                         }
-                    };
-                    // NOTE: This take is redundant due to the --line-range flag
-                    for line in output.lines.iter().take(self.cfg.preview_limit) {
-                        self.preview_content += Line::from(line.clone());
+                        result.push_str(mat.as_str());
+                        last = mat.end();
                     }
-                    return;
+                    let after = &input[last..];
+                    for c in after.chars() {
+                        if c.is_control() && c != '\n' && c != '\x1B' {
+                            result.push('�');
+                        } else {
+                            result.push(c);
+                        }
+                    }
+                    result
                 }
-            }
-        }
-        // Fallback to syntect for syntax highlighting
-        fn syntect_to_ratatui_color(s: SyntectStyle) -> Color {
-            Color::Rgb(s.foreground.r, s.foreground.g, s.foreground.b)
-        }
-        let ss = SyntaxSet::load_defaults_newlines();
-        // FIXME: Should only load once
-        let ts = ThemeSet::load_defaults();
-        let syntax = ss
-            .find_syntax_for_file(&focused_path)
-            .unwrap_or(None)
-            .unwrap_or_else(|| ss.find_syntax_plain_text());
-        let mut h = HighlightLines::new(syntax, &ts.themes["base16-eighties.dark"]);
 
-        // Print syntax name
-        self.preview_content += self.fmtln_info("detected", syntax.name.as_str());
-
-        self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
-
-        fn read_n_lines(path: &PathBuf, n: usize) -> Result<String, std::io::Error> {
-            let file = File::open(path)?;
-            let reader = BufReader::new(file);
-            reader.lines().take(n).collect()
-        }
-        if let Ok(content) = read_n_lines(&focused_path, self.cfg.preview_limit) {
-            for line in content.lines().take(self.cfg.preview_limit) {
-                let ranges = h.highlight_line(line, &ss).unwrap_or_default();
-                let mut styled_line = Line::default();
-                for (style, text) in ranges {
-                    styled_line.push_span(Span::styled(
-                        text.to_string(),
-                        Style::default().fg(syntect_to_ratatui_color(style)),
-                    ));
+                fn syntect_to_ratatui_color(s: SyntectStyle) -> Color {
+                    Color::Rgb(s.foreground.r, s.foreground.g, s.foreground.b)
                 }
-                self.preview_content += styled_line;
-            }
-        } else {
-            self.preview_content += Line::styled(
-                "Err: Unable to read file content.",
-                Style::default().fg(self.cs.error),
-            );
-        }
+
+                let mut text = Text::default();
+                let meta = crate::node_meta::NodeMeta::get(&focused_path);
+
+                text += Line::styled(sep.clone(), Style::default().fg(cs.dim));
+
+                // Try bat first
+                if has_bat {
+                    if let Ok(bat_output) = std::process::Command::new("bat")
+                        .arg("--color=always")
+                        .arg("--style=plain")
+                        .arg(format!("--line-range=:{}", preview_limit))
+                        .arg(focused_path.to_str().unwrap())
+                        .output()
+                    {
+                        if bat_output.status.success() {
+                            let mut bat_content = String::from_utf8_lossy(&bat_output.stdout);
+                            bat_content = bat_content.replace("\r\n", "\n").into();
+                            bat_content = bat_content.replace("\t", "    ").into();
+                            bat_content = sanitize_content(&bat_content.to_string()).into();
+                            match bat_content.as_ref().into_text() {
+                                Ok(bat_text) => {
+                                    for line in bat_text.lines.iter().take(preview_limit) {
+                                        text += Line::from(line.clone());
+                                    }
+                                    return aq::ResData::as_file(0, text, meta);
+                                }
+                                Err(_) => {
+                                    text += Line::styled(
+                                        "Error: Unable to convert bat output to text.",
+                                        Style::default().fg(cs.error),
+                                    );
+                                    return aq::ResData::as_file(1, text, meta);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Fallback to syntect
+                let ss = SyntaxSet::load_defaults_newlines();
+                let ts = ThemeSet::load_defaults();
+                let syntax = ss
+                    .find_syntax_for_file(&focused_path)
+                    .unwrap_or(None)
+                    .unwrap_or_else(|| ss.find_syntax_plain_text());
+                let mut h = HighlightLines::new(syntax, &ts.themes["base16-eighties.dark"]);
+                text += Line::styled(
+                    format!("detected: {}", syntax.name),
+                    Style::default().fg(cs.info),
+                );
+                text += Line::styled(sep, Style::default().fg(cs.dim));
+
+                let file = File::open(&focused_path);
+                if let Ok(file) = file {
+                    let reader = BufReader::new(file);
+                    for (i, line) in reader.lines().enumerate() {
+                        if i >= preview_limit {
+                            break;
+                        }
+                        if let Ok(line) = line {
+                            let ranges = h.highlight_line(&line, &ss).unwrap_or_default();
+                            let mut styled_line = Line::default();
+                            for (style, text_part) in ranges {
+                                styled_line.push_span(Span::styled(
+                                    text_part.to_string(),
+                                    Style::default().fg(syntect_to_ratatui_color(style)),
+                                ));
+                            }
+                            text += styled_line;
+                        }
+                    }
+                } else {
+                    text += Line::styled(
+                        "Err: Unable to read file content.",
+                        Style::default().fg(cs.error),
+                    );
+                }
+
+                aq::ResData::as_file(0, text, meta)
+            });
     }
 
     fn preview_image(&mut self, focused_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
@@ -2801,11 +2824,10 @@ impl<'a> App<'a> {
         } else {
             picker.set_protocol_type(ProtocolType::Halfblocks);
         }
+        self.loading_line();
+
         // Clear the existing image data
         self.preview_image = None;
-
-        self.preview_content +=
-            Line::styled("Loading image preview...", Style::default().fg(self.cs.tip));
 
         let focused_path = focused_path.clone();
         self.async_queue
@@ -3285,6 +3307,19 @@ impl<'a> App<'a> {
                         self.preview_content = self.pretty_metadata(&meta);
                         self.preview_image = item.res.data_image;
                     }
+                    aq::Kind::FilePreview => {
+                        log!("File preview task completed");
+                        let data_text = match &item.res.data_file {
+                            Some(d) => d.clone(),
+                            None => Text::from("No data"),
+                        };
+                        let meta = item.res.data_meta.unwrap();
+                        self.preview_content = Default::default();
+                        self.preview_content = self.pretty_metadata(&meta);
+                        for line in data_text.lines.iter().take(self.cfg.preview_limit) {
+                            self.preview_content += Line::from(line.clone());
+                        }
+                    }
                     aq::Kind::Misc => {
                         if item.res.data_str.is_some() {
                             let data = match &item.res.data_str {
@@ -3458,7 +3493,7 @@ impl<'a> App<'a> {
                 .border_style(Style::default().fg(self.cs.listing_border)),
         );
         let mut state = ListState::default();
-        if !self.results.is_empty() && self.focus_index >= 0 {
+        if !self.results.is_empty() {
             state.select(Some(self.focus_index as usize));
         }
 
