@@ -401,11 +401,12 @@ mod cmd {
     }
 
     pub fn cur_up(app: &mut App, _args: Vec<&str>) {
-        app.focus_index -= 1;
-        if app.focus_index < 0 && !app.results.is_empty() {
-            app.focus_index = app.results.len() - 1;
-        } else if app.results.is_empty() {
+        if app.results.is_empty() {
             app.focus_index = 0;
+        } else if app.focus_index == 0 {
+            app.focus_index = app.results.len() - 1;
+        } else {
+            app.focus_index -= 1;
         }
     }
 
@@ -2718,13 +2719,26 @@ impl<'a> App<'a> {
         } else {
             picker.set_protocol_type(ProtocolType::Halfblocks);
         }
+        // Clear the existing image data
+        self.preview_image = None;
 
-        // Load an image with the image crate.
-        let dyn_img = image::ImageReader::open(focused_path)?.decode()?;
+        self.preview_content = Default::default();
+        self.preview_content +=
+            Line::styled("Loading image preview...", Style::default().fg(self.cs.tip));
 
-        // Create the Protocol which will be used by the widget.
-        let image = picker.new_resize_protocol(dyn_img);
-        self.preview_image = Some(image);
+        let focused_path = focused_path.clone();
+        self.async_queue
+            .add_task_unique(aq::Kind::Image, async move {
+                // Load an image with the image crate.
+                let dyn_img = image::ImageReader::open(focused_path)
+                    .unwrap()
+                    .decode()
+                    .unwrap();
+
+                // Create the Protocol which will be used by the widget.
+                let image = picker.new_resize_protocol(dyn_img);
+                aq::ResData::as_image(0, image)
+            });
         Ok(())
     }
 
@@ -3177,7 +3191,7 @@ impl<'a> App<'a> {
                     }
                     aq::Kind::Image => {
                         log!("Image preview task completed");
-                        // Image preview handling not yet implemented
+                        self.preview_image = item.res.data_image;
                     }
                     aq::Kind::Misc => {
                         if item.res.data_str.is_some() {
