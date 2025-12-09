@@ -2676,7 +2676,6 @@ impl<'a> App<'a> {
     }
 
     fn preview_dir(&mut self, focused_path: &PathBuf) {
-        self.loading_line();
         let owned_path = focused_path.clone();
         let owned_explode = self.mode_explode;
         self.async_queue.add_task_unique(
@@ -2686,8 +2685,6 @@ impl<'a> App<'a> {
     }
 
     fn preview_file(&mut self, focused_path: &PathBuf) {
-        self.loading_line();
-
         let focused_path = focused_path.clone();
         let cs = self.cs.clone();
         let preview_limit = self.cfg.preview_limit;
