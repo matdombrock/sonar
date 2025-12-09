@@ -120,20 +120,82 @@ mod log {
     }
 }
 
+mod node_meta {
+    use std::os::unix::fs::PermissionsExt;
+    use std::{path::PathBuf, time::SystemTime};
+
+    #[derive(Clone, Debug)]
+    pub struct NodeMeta {
+        pub size: u64,
+        pub modified: u32,
+        pub permissions: u32,
+        pub mime: String,
+        pub path: PathBuf,
+    }
+    impl NodeMeta {
+        pub fn empty() -> Self {
+            NodeMeta {
+                size: 0,
+                modified: 0,
+                permissions: 0,
+                mime: "unknown".to_string(),
+                path: PathBuf::new(),
+            }
+        }
+        pub fn get(path: &PathBuf) -> Self {
+            match std::fs::metadata(&path) {
+                Ok(metadata) => {
+                    let size = metadata.len();
+                    let modified = metadata
+                        .modified()
+                        .ok()
+                        .and_then(|time| time.duration_since(SystemTime::UNIX_EPOCH).ok())
+                        .map(|duration| duration.as_secs() as u32)
+                        .unwrap_or(0);
+                    let permissions = metadata.permissions().mode();
+                    let mime = if metadata.is_file() {
+                        mime_guess::from_path(&path)
+                            .first_raw()
+                            .unwrap_or("application/octet-stream")
+                            .to_string()
+                    } else {
+                        "inode/directory".to_string()
+                    };
+                    let full_path = path.clone();
+                    NodeMeta {
+                        size,
+                        modified,
+                        permissions,
+                        mime,
+                        path: full_path,
+                    }
+                }
+                Err(_) => NodeMeta {
+                    size: 0,
+                    modified: 0,
+                    permissions: 0,
+                    mime: "unknown".to_string(),
+                    path: path.clone(),
+                },
+            }
+        }
+    }
+}
+
 // Async queue
 mod aq {
 
     use ratatui_image::protocol::StatefulProtocol;
     use tokio::task::JoinHandle;
 
-    use crate::node_info::NodeInfo;
+    use crate::{node_info::NodeInfo, node_meta::NodeMeta};
 
     #[derive(PartialEq, Debug)]
     pub enum Kind {
         ListingResult,
         ListingDir,
         ListingPreview,
-        Image,
+        ImagePreview,
         Misc,
     }
     // Holds the data that the async fns can return
@@ -144,6 +206,7 @@ mod aq {
         pub data_str: Option<String>,
         pub data_listing: Option<Vec<NodeInfo>>,
         pub data_image: Option<StatefulProtocol>,
+        pub data_meta: Option<NodeMeta>,
     }
     impl ResData {
         pub fn as_str(rc: u32, data: String) -> Self {
@@ -152,22 +215,25 @@ mod aq {
                 data_str: Some(data),
                 data_listing: None,
                 data_image: None,
+                data_meta: None,
             }
         }
-        pub fn as_listing(rc: u32, data: Vec<NodeInfo>) -> Self {
+        pub fn as_listing(rc: u32, data: Vec<NodeInfo>, meta: NodeMeta) -> Self {
             ResData {
                 rc,
                 data_str: None,
                 data_listing: Some(data),
                 data_image: None,
+                data_meta: Some(meta),
             }
         }
-        pub fn as_image(rc: u32, data: StatefulProtocol) -> Self {
+        pub fn as_image(rc: u32, data: StatefulProtocol, meta: NodeMeta) -> Self {
             ResData {
                 rc,
                 data_str: None,
                 data_listing: None,
                 data_image: Some(data),
+                data_meta: Some(meta),
             }
         }
     }
@@ -525,22 +591,11 @@ mod cmd {
             let path = path.clone();
             app.async_queue.add_task(aq::Kind::Misc, async move {
                 match fs::remove_file(&path).await {
-                    Ok(_) => aq::ResData {
-                        rc: 0,
-                        data_str: Some(format!("Deleted {}", path.to_string_lossy())),
-                        data_listing: None,
-                        data_image: None,
-                    },
-                    Err(e) => aq::ResData {
-                        rc: 1,
-                        data_str: Some(format!(
-                            "Failed to delete {}: {}",
-                            path.to_string_lossy(),
-                            e
-                        )),
-                        data_listing: None,
-                        data_image: None,
-                    },
+                    Ok(_) => aq::ResData::as_str(0, format!("Deleted {}", path.to_string_lossy())),
+                    Err(e) => aq::ResData::as_str(
+                        1,
+                        format!("Failed to delete {}: {}", path.to_string_lossy(), e),
+                    ),
                 }
             });
         }
@@ -2337,11 +2392,13 @@ impl<'a> App<'a> {
                             }
                         }
                     }
-                    return aq::ResData::as_listing(0, entries.clone());
+                    let meta = node_meta::NodeMeta::get(&path);
+                    return aq::ResData::as_listing(0, entries.clone(), meta);
                 }
                 Err(_) => {
                     log!("Failed to read directory: {}", path.to_str().unwrap());
-                    return aq::ResData::as_listing(1, entries.clone());
+                    let meta = node_meta::NodeMeta::get(&path);
+                    return aq::ResData::as_listing(1, entries.clone(), meta);
                 }
             }
         })
@@ -2486,7 +2543,7 @@ impl<'a> App<'a> {
         self.preview_content += Line::from("");
     }
 
-    fn dir_list_pretty(&self, list: &Vec<NodeInfo>) -> Text<'a> {
+    fn pretty_dir_list(&self, list: &Vec<NodeInfo>) -> Text<'a> {
         let mut text = Text::default();
         for item in list.iter().take(self.cfg.list_limit as usize) {
             // Check if this item is part of the multi selection
@@ -2552,6 +2609,40 @@ impl<'a> App<'a> {
         text
     }
 
+    fn pretty_metadata(&self, metadata: &node_meta::NodeMeta) -> Text<'a> {
+        fn line(icon: &str, label: &str, value: &str, color: Color) -> Line<'static> {
+            Line::styled(
+                format!("{} {:<14}: {}", icon, label, value),
+                Style::default().fg(color),
+            )
+        }
+        let mut text = Text::default();
+        text += Line::styled(
+            format!("{} {}", nf::DIRO, metadata.path.to_str().unwrap()),
+            Style::default().fg(self.cs.dir),
+        );
+        text += line(
+            nf::INFO,
+            "permissions",
+            &format!("{}", metadata.permissions),
+            self.cs.info,
+        );
+        text += line(
+            nf::INFO,
+            "size",
+            &format!("{}", metadata.size),
+            self.cs.info,
+        );
+        text += line(
+            nf::INFO,
+            "modified",
+            &format!("{}", metadata.modified),
+            self.cs.info,
+        );
+        text += line(nf::INFO, "mime", &metadata.mime, self.cs.info);
+        text
+    }
+
     fn preview_dir(&mut self, focused_path: &PathBuf) {
         let path_line = self.fmtln_path(&focused_path);
         self.preview_content += path_line;
@@ -2569,14 +2660,6 @@ impl<'a> App<'a> {
             aq::Kind::ListingPreview,
             App::get_directory_listing(owned_path, owned_explode),
         );
-        // let listing = self.get_directory_listing(&focused_path);
-        // let count_line = self.fmtln_info("count", &listing.len().to_string());
-        // self.preview_content += count_line;
-        // self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
-        // let pretty_listing = self.dir_list_pretty(&listing);
-        // for line in pretty_listing.lines.iter().take(20) {
-        //     self.preview_content += Line::from(line.clone());
-        // }
     }
 
     fn preview_file(&mut self, focused_path: &PathBuf) {
@@ -2712,7 +2795,6 @@ impl<'a> App<'a> {
     }
 
     fn preview_image(&mut self, focused_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-        self.preview_content = Default::default();
         let mut picker = Picker::from_fontsize((6, 12));
         if self.cfg.force_sixel {
             picker.set_protocol_type(ProtocolType::Sixel);
@@ -2722,22 +2804,22 @@ impl<'a> App<'a> {
         // Clear the existing image data
         self.preview_image = None;
 
-        self.preview_content = Default::default();
         self.preview_content +=
             Line::styled("Loading image preview...", Style::default().fg(self.cs.tip));
 
         let focused_path = focused_path.clone();
         self.async_queue
-            .add_task_unique(aq::Kind::Image, async move {
+            .add_task_unique(aq::Kind::ImagePreview, async move {
                 // Load an image with the image crate.
-                let dyn_img = image::ImageReader::open(focused_path)
+                let dyn_img = image::ImageReader::open(&focused_path)
                     .unwrap()
                     .decode()
                     .unwrap();
 
                 // Create the Protocol which will be used by the widget.
                 let image = picker.new_resize_protocol(dyn_img);
-                aq::ResData::as_image(0, image)
+                let meta = node_meta::NodeMeta::get(&focused_path);
+                aq::ResData::as_image(0, image, meta)
             });
         Ok(())
     }
@@ -2918,7 +3000,8 @@ impl<'a> App<'a> {
         let owned_explode = self.mode_explode;
         self.async_queue
             .add_task_unique(aq::Kind::ListingDir, async move {
-                let mut listing_res = App::get_directory_listing(owned_cwd, owned_explode).await;
+                let mut listing_res =
+                    App::get_directory_listing(owned_cwd.clone(), owned_explode).await;
                 // Turn listing into listing vec
                 let mut listing = match listing_res.data_listing.take() {
                     Some(list) => list,
@@ -2960,7 +3043,8 @@ impl<'a> App<'a> {
                         node_type: NodeType::Shortcut,
                     },
                 );
-                aq::ResData::as_listing(0, listing)
+                let meta = node_meta::NodeMeta::get(&owned_cwd);
+                aq::ResData::as_listing(0, listing, meta)
             });
     }
 
@@ -2982,7 +3066,11 @@ impl<'a> App<'a> {
                     })
                     .collect();
                 scored.sort_by(|a, b| b.0.cmp(&a.0));
-                aq::ResData::as_listing(0, scored.into_iter().map(|(_, item)| item).collect())
+                aq::ResData::as_listing(
+                    0,
+                    scored.into_iter().map(|(_, item)| item).collect(),
+                    node_meta::NodeMeta::empty(),
+                )
             });
     }
 
@@ -3173,10 +3261,11 @@ impl<'a> App<'a> {
                     aq::Kind::ListingPreview => {
                         log!("Updating preview listing from async task");
                         let data = item.res.data_listing.unwrap();
-                        let count_line = self.fmtln_info("count", &data.len().to_string());
-                        self.preview_content += count_line;
+                        let meta = item.res.data_meta.unwrap();
+                        self.preview_content = Default::default();
+                        self.preview_content = self.pretty_metadata(&meta);
                         self.preview_content += Line::styled(SEP, Style::default().fg(self.cs.dim));
-                        let pretty_listing = self.dir_list_pretty(&data);
+                        let pretty_listing = self.pretty_dir_list(&data);
                         for line in pretty_listing.lines.iter().take(20) {
                             self.preview_content += Line::from(line.clone());
                         }
@@ -3189,8 +3278,11 @@ impl<'a> App<'a> {
                         self.update_focused();
                         self.update_preview();
                     }
-                    aq::Kind::Image => {
+                    aq::Kind::ImagePreview => {
                         log!("Image preview task completed");
+                        let meta = item.res.data_meta.unwrap();
+                        self.preview_content = Default::default();
+                        self.preview_content = self.pretty_metadata(&meta);
                         self.preview_image = item.res.data_image;
                     }
                     aq::Kind::Misc => {
@@ -3342,7 +3434,7 @@ impl<'a> App<'a> {
         );
 
         // Results list
-        let mut results_pretty = self.dir_list_pretty(&self.results);
+        let mut results_pretty = self.pretty_dir_list(&self.results);
         if let Some(line) = results_pretty.lines.get_mut(self.focus_index as usize) {
             let sel_span = Span::styled(
                 format!("{}", nf::SEL),
@@ -3476,7 +3568,7 @@ impl<'a> App<'a> {
                 }
                 let mut new_area = Rect {
                     x: self.lay_preview_area.x + 1,
-                    y: self.lay_preview_area.y + 1,
+                    y: self.lay_preview_area.y + 10,
                     width: self.lay_preview_area.width - 2,
                     height: self.lay_preview_area.height - 2,
                 };
