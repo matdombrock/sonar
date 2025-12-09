@@ -789,7 +789,6 @@ mod cmd {
             } else {
                 app.scroll_off_output = 0;
             }
-            log!("Output scroll offset up: {}", app.scroll_off_output);
             return;
         }
         if app.scroll_off_preview >= 5 {
@@ -797,7 +796,6 @@ mod cmd {
         } else {
             app.scroll_off_preview = 0;
         }
-        log!("Preview scroll offset up: {}", app.scroll_off_preview);
     }
 
     pub fn sec_down(app: &mut App, _args: Vec<&str>) {
@@ -806,22 +804,12 @@ mod cmd {
             if app.scroll_off_output < height {
                 app.scroll_off_output += 5;
             }
-            log!(
-                "Output scroll offset down: {}/{}",
-                app.scroll_off_output,
-                height
-            );
             return;
         }
         let height = app.preview_content.lines.len() as u16;
         if app.scroll_off_preview < height {
             app.scroll_off_preview += 5;
         }
-        log!(
-            "Preview scroll offset down: {}/{}",
-            app.scroll_off_preview,
-            height
-        );
     }
 
     pub fn show_keybinds(app: &mut App, _args: Vec<&str>) {
@@ -2146,8 +2134,6 @@ mod node_info {
 
     use mime_guess::mime;
 
-    use crate::log;
-
     #[derive(Clone, PartialEq)]
     pub enum NodeType {
         File,         // A regular file
@@ -2175,7 +2161,6 @@ mod node_info {
                 // // SLOW
                 let file_type = mime_guess::from_path(path).first_or_octet_stream();
                 if file_type.type_() == mime::IMAGE {
-                    log!("Detected image mime type: {}", file_type.essence_str());
                     return NodeType::Image;
                 }
 
@@ -2345,7 +2330,6 @@ impl<'a> App<'a> {
     }
 
     fn append_cwd(&mut self, path: &PathBuf) {
-        log!("Changing directory to: {}", path.to_str().unwrap());
         let new_path = if path.to_str().unwrap() == ".." {
             self.cwd.parent().unwrap_or(&self.cwd).to_path_buf()
         } else {
@@ -2371,7 +2355,6 @@ impl<'a> App<'a> {
         mode_explode: bool,
     ) -> Pin<Box<dyn Future<Output = aq::ResData> + Send + 'b>> {
         Box::pin(async move {
-            log!("Getting directory listing for: {}", path.to_str().unwrap());
             let mut entries = Vec::new();
 
             match tokio::fs::read_dir(path.clone()).await {
@@ -2531,13 +2514,11 @@ impl<'a> App<'a> {
             cs: cs::Colors,
         ) -> Line<'static> {
             if found {
-                log!("{} found at {}", name, path_str);
                 Line::styled(
                     format!("{} {} - loaded from {}", nf::CHECK, name, path_str),
                     Style::default().fg(cs.ok),
                 )
             } else {
-                log!("{} not found at {}", name, path_str);
                 Line::styled(
                     format!("{} {} - not found at {}", nf::WARN, name, path_str),
                     Style::default().fg(cs.warning),
@@ -2832,7 +2813,6 @@ impl<'a> App<'a> {
     }
 
     fn update_preview(&mut self) {
-        log!("Updating preview for item: {}", self.focused.name);
         self.reset_sec_scroll();
         match self.focused.name.as_str() {
             sc::EXIT => {
@@ -3013,7 +2993,6 @@ impl<'a> App<'a> {
         );
         // Handle cmd finder
         if self.mode_cmd_finder {
-            log!("Updating command listing");
             self.listing.clear();
             // Shell commands
             for shell_cmd in self.shell_cmd_list.iter() {
@@ -3037,10 +3016,6 @@ impl<'a> App<'a> {
             return;
         }
         // Normal directory listing
-        log!(
-            "Updating directory listing for cwd: {}",
-            self.cwd.to_str().unwrap()
-        );
         let owned_cwd = self.cwd.clone();
         let owned_explode = self.mode_explode;
         self.async_queue
@@ -3175,7 +3150,6 @@ impl<'a> App<'a> {
             (KeyModifiers::NONE, KeyCode::Enter) => {
                 // Handle commands
                 let cmd = self.command_input.clone();
-                log!("cmd: {}", &cmd);
                 self.command_input = String::new();
                 self.show_command_window = false;
                 return self.handle_cmd(&cmd);
@@ -3215,9 +3189,6 @@ impl<'a> App<'a> {
                 }
                 break;
             }
-        }
-        if !cmd.is_empty() {
-            log!("cmd from mapping: {}", &cmd);
         }
         cmd.to_string()
     }
@@ -3277,12 +3248,10 @@ impl<'a> App<'a> {
         for item in completed {
             match item.kind {
                 aq::Kind::ListingDir => {
-                    log!("Updating main listing from async task");
                     self.listing = item.res.data_listing.unwrap(); // This should be safe to unwrap
                     self.update_results();
                 }
                 aq::Kind::ListingResult => {
-                    log!("Updating fuzzy results from async task");
                     self.results = item.res.data_listing.unwrap(); // This should be safe to unwrap
                     // TODO: Should make a "reset_focus" function
                     self.focus_index = 0;
@@ -3290,7 +3259,6 @@ impl<'a> App<'a> {
                     self.update_preview();
                 }
                 aq::Kind::ListingPreview => {
-                    log!("Updating preview listing from async task");
                     let data = item.res.data_listing.unwrap();
                     let meta = item.res.data_meta.unwrap();
                     self.preview_content = Default::default();
@@ -3302,14 +3270,12 @@ impl<'a> App<'a> {
                     }
                 }
                 aq::Kind::ImagePreview => {
-                    log!("Image preview task completed");
                     let meta = item.res.data_meta.unwrap();
                     self.preview_content = Default::default();
                     self.preview_content = self.pretty_metadata(&meta);
                     self.preview_image = item.res.data_image;
                 }
                 aq::Kind::FilePreview => {
-                    log!("File preview task completed");
                     let data_text = match &item.res.data_file {
                         Some(d) => d.clone(),
                         None => Text::from("No data"),
