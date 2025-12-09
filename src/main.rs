@@ -2458,7 +2458,7 @@ impl<'a> App<'a> {
     fn loading_line(&mut self) {
         self.preview_content = Text::default();
         for line in LOADING.lines() {
-            self.preview_content += Line::styled(line, Style::default().fg(self.cs.dim))
+            self.preview_content += Line::styled(line, Style::default().fg(self.cs.info))
         }
     }
 
