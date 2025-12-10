@@ -849,13 +849,7 @@ mod cmd {
 
     // Edit the focused file
     pub fn edit(app: &mut App, _args: Vec<&str>) {
-        let mut focused_path = app.cwd.clone();
-        focused_path.push(&app.focused.name);
-        // Check if we have a valid path
-        // If not, open the cwd
-        if !focused_path.exists() {
-            focused_path = app.cwd.clone();
-        }
+        let focused_path = app.find_focused_path();
         let editor = env::var("EDITOR").unwrap_or("vi".to_string());
         log!(
             "Opening editor: {} {}",
@@ -870,6 +864,25 @@ mod cmd {
             Err(e) => {
                 app.set_output("Editor", &format!("Failed to open editor: {}", e));
             }
+        }
+    }
+
+    pub fn os_open(app: &mut App, _args: Vec<&str>) {
+        let focused_path = app.find_focused_path();
+
+        let result = if cfg!(target_os = "windows") {
+            Command::new("cmd")
+                .args(&["/C", "start", "", &focused_path.to_string_lossy()])
+                .spawn()
+        } else if cfg!(target_os = "macos") {
+            Command::new("open").arg(&focused_path).spawn()
+        } else {
+            // Assume Linux/Unix
+            Command::new("xdg-open").arg(&focused_path).spawn()
+        };
+
+        if let Err(e) = result {
+            app.set_output("Open", &format!("Failed to open: {}", e));
         }
     }
 
@@ -1100,6 +1113,7 @@ mod cmd_data {
         KeybindsShow,
         DbgClear,
         Edit,
+        OsOpen,
         GoTo,
         InputClear,
         ShellQuick,
@@ -1496,6 +1510,17 @@ mod cmd_data {
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::edit,
+            },
+        );
+        map.insert(
+            CmdName::OsOpen,
+            CmdData {
+                fname: "OS Open",
+                description: "Open the focused file or directory with the default OS application",
+                cmd: "os-open",
+                vis_hidden: false,
+                params: vec![],
+                op: cmd::os_open,
             },
         );
         map.insert(
@@ -2371,6 +2396,26 @@ impl<'a> App<'a> {
         };
         self.lwd = self.cwd.clone();
         self.cwd = new_path;
+    }
+
+    // If no focused, use cwd
+    fn find_focused_path(&self) -> PathBuf {
+        let mut focused_path = self.cwd.clone();
+
+        // Use the first multi selection as the focused path
+        if !self.multi_selection.is_empty() {
+            focused_path = self.multi_selection[0].clone();
+            return focused_path;
+        }
+
+        // If no multi selection, use focused
+        focused_path.push(&self.focused.name);
+        // If focused is not a path, use cwd
+        if !focused_path.exists() {
+            focused_path = self.cwd.clone();
+        }
+
+        focused_path
     }
 
     fn get_directory_listing<'b>(
