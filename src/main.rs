@@ -952,6 +952,8 @@ mod cmd {
 
     pub fn shell_full(app: &mut App, _args: Vec<&str>) {
         let shell = env::var("SHELL").unwrap_or("/bin/sh".to_string());
+        // Set the real program cwd
+        env::set_current_dir(&app.cwd).unwrap_or(());
         log!("Opening shell: {}", shell);
         util::cls();
         match Command::new(shell).status() {
@@ -2459,6 +2461,10 @@ impl<'a> App<'a> {
         }
     }
 
+    // Update cwd based on given path
+    // Handles relative paths, absolute paths, home dir (~), and parent dir (..)
+    // TODO: Should this actually change the env dir as well?
+    // This would prevent issues with shell commands run from the app
     fn append_cwd(&mut self, path: &PathBuf) {
         let new_path = if path.to_str().unwrap() == ".." {
             self.cwd.parent().unwrap_or(&self.cwd).to_path_buf()
