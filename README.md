@@ -1,4 +1,4 @@
-# Sona
+# Sonar
 A friendly, fuzzy find first, file manager for your terminal. 
 
 ![screenshot](_doc/screenshot.png)
@@ -31,7 +31,7 @@ A friendly, fuzzy find first, file manager for your terminal.
 
 ## Check it out
 
-The best way to check out Sona right now is to build it yourself with `cargo`. 
+The best way to check out Sonar right now is to build it yourself with `cargo`. 
 
 Clone this repo and simply run:
 
@@ -57,7 +57,7 @@ There are a lot of great terminal file browsers out there. The goal here is not 
 ### Design Philosophy
 
 - Simplicity is Power
-    - By default, Sona should be natural to use for those coming from a GUI file manager.
+    - By default, Sonar should be natural to use for those coming from a GUI file manager.
     - At the same time it should be highly configurable for power users who know exactly what they want.
 - Searching First
     - We can type faster than we can hit the arrow keys repeatedly. Searching for your destination by typing its name is the fastest way to move through a file system.
@@ -68,7 +68,7 @@ There are a lot of great terminal file browsers out there. The goal here is not 
 
 ### Others
 
-If Sona doesn't float your boat, check out these other awesome TUI file managers:
+If Sonar doesn't float your boat, check out these other awesome TUI file managers:
 
 - [XPLR (Rust)](https://github.com/sayanarijit/xplr)
 - [Yazy (Rust)](https://github.com/sxyazi/yazi)
@@ -77,7 +77,7 @@ If Sona doesn't float your boat, check out these other awesome TUI file managers
 
 ## Commands
 
-Commands are how you interact with Sona. Most useful commands have a default keybinding but they can be remapped and called manually as needed. 
+Commands are how you interact with Sonar. Most useful commands have a default keybinding but they can be remapped and called manually as needed. 
 
 ```
 cmd-find         : Toggle the fuzzy command finder
@@ -188,7 +188,7 @@ misc           white
 
 ### General Configuration
 
-General config options are stored in the `config.txt` file. These options control the behavior of Sona. Options which are not set here fall back to the default values.  
+General config options are stored in the `config.txt` file. These options control the behavior of Sonar. Options which are not set here fall back to the default values.  
 
 ```
 #
