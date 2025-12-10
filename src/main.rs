@@ -1855,20 +1855,21 @@ os-open     ctrl-o
     }
     pub type KeyBindList = Vec<KeyBind>;
 
-    pub fn to_strings(kb: &KeyBind) -> (String, String) {
-        let modifier = match kb.modifiers {
-            KeyModifiers::ALT => "alt",
-            KeyModifiers::CONTROL => "ctrl",
-            KeyModifiers::SHIFT => "shift",
-            KeyModifiers::NONE => "none",
-            _ => "UNKNOWN",
-        };
-        let code_str = match &kb.code {
-            KeyCode::Char(c) => c.to_string(),
-            _ => kb.code.to_string(),
-        };
-        (modifier.to_string(), code_str.to_lowercase())
-    }
+    // Unused
+    // pub fn to_strings(kb: &KeyBind) -> (String, String) {
+    //     let modifier = match kb.modifiers {
+    //         KeyModifiers::ALT => "alt",
+    //         KeyModifiers::CONTROL => "ctrl",
+    //         KeyModifiers::SHIFT => "shift",
+    //         KeyModifiers::NONE => "none",
+    //         _ => "UNKNOWN",
+    //     };
+    //     let code_str = match &kb.code {
+    //         KeyCode::Char(c) => c.to_string(),
+    //         _ => kb.code.to_string(),
+    //     };
+    //     (modifier.to_string(), code_str.to_lowercase())
+    // }
 
     // Short string like "ctrl-a"
     pub fn to_string_short(kb: &KeyBind) -> String {
@@ -2622,7 +2623,7 @@ impl<'a> App<'a> {
         } else {
             self.preview_content += Line::styled(
                 format!(
-                    "{} 'bat' - file previews will use built-in syntax highlighting",
+                    "{} bat - file previews will use built-in syntax highlighting",
                     nf::WARN
                 ),
                 Style::default().fg(self.cs.warning),
