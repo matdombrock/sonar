@@ -33,13 +33,19 @@ A friendly, fuzzy find first, file manager for your terminal.
 
 The best way to check out Sonar right now is to build it yourself with `cargo`. 
 
-Clone this repo and simply run:
+### Clone this repo
+
+```sh
+git clone git@github.com:matdombrock/sonar.git
+```
+
+### Run it
 
 ```sh
 cargo run --release
 ```
 
-### Install
+### Install it
 
 ```sh
 cargo install --path .
@@ -50,7 +56,7 @@ cargo install --path .
 > 
 > `export PATH="$HOME/.cargo/bin:$PATH"`
 
-## Why would I use this? How is this better than X?
+## Why would I use this? How is this better than ...
 
 There are a lot of great terminal file browsers out there. The goal here is not to be the best file manager of all time (this is incidental), the goal is to make a file manager that works *exactly the way I think it should*.
 
