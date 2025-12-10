@@ -12,21 +12,7 @@
 - Seer?
 
 ## Todo Bug / Incomplete
-- Vis commands doesnt update selection at fist (same for cmd finder)
-- Directories do not refresh after commands change them (mul-copy)
 - multi select edit should offer to do something
 - when exploded there is really no need to check for mimetypes
 - Images need to draw inside preview
-
-
-## Notes
-
-## VS FF
-- Multi-select across dirs
-- Floating/extra windows
-- Resume location
-
-## VS Yazi
-- Search first
-- Panes are confusing
 

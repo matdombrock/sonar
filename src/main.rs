@@ -9,6 +9,7 @@ use fuzzy_matcher::skim::SkimMatcherV2;
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
+    crossterm::terminal,
     layout::{Constraint, Direction, Layout, Rect},
     prelude::Backend,
     style::{Color, Style},
@@ -3543,6 +3544,11 @@ impl<'a> App<'a> {
         Ok(())
     }
     fn render(&mut self, frame: &mut Frame) {
+        fn lines_to_percent(lines: usize) -> u16 {
+            let term_height = terminal::size().map(|(_, h)| h as usize).unwrap_or(24);
+            let percent = (lines as f32 / term_height as f32) * 100.0;
+            percent.min(100.0) as u16
+        }
         fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
             let popup_layout = Layout::default()
                 .direction(Direction::Vertical)
@@ -3576,6 +3582,7 @@ impl<'a> App<'a> {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis()
+            / self.cfg.input_poll as u128
             % loading_arr.len() as u128) as usize;
 
         let area = frame.area();
@@ -3782,7 +3789,7 @@ impl<'a> App<'a> {
         // --- Popups ---
         let popup_width = if area.width < threshold { 90 } else { 50 };
         if self.show_command_window {
-            let popup_area = centered_rect(popup_width, 10, area);
+            let popup_area = centered_rect(popup_width, lines_to_percent(3), area);
             let command_str = format!("> {}|", self.command_input);
             frame.render_widget(Clear, popup_area);
             let command_paragraph = Paragraph::new(command_str)
