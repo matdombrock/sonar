@@ -98,6 +98,7 @@ mod nf {
     pub const BOMB: &str = "";
     pub const DUDE: &str = "󰢚";
     pub const WAIT: &str = "󱑆";
+    pub const EYEN: &str = "󰈉";
     // UNUSED
     // pub const B4: &str = "█";
     // pub const B3: &str = "▓";
@@ -834,7 +835,7 @@ mod cmd {
         }
     }
 
-    pub fn show_keybinds(app: &mut App, _args: Vec<&str>) {
+    pub fn keybinds_show(app: &mut App, _args: Vec<&str>) {
         let kb_path = kb::get_path();
         let found = app.found_keybinds;
         let mut out = String::from(format!("Path: {}", kb_path.to_str().unwrap()));
@@ -849,6 +850,13 @@ mod cmd {
         }
 
         app.set_output("Keybinds", &out);
+    }
+
+    pub fn hidden_toggle(app: &mut App, _args: Vec<&str>) {
+        app.cfg.show_hidden = !app.cfg.show_hidden;
+        app.update_listing();
+        app.update_results();
+        app.focus_index = 0;
     }
 
     // Edit the focused file
@@ -1131,6 +1139,7 @@ mod cmd_data {
         Edit,
         OsOpen,
         GoTo,
+        HiddenToggle,
         InputClear,
         ShellQuick,
         ShellFull,
@@ -1503,7 +1512,7 @@ mod cmd_data {
                 cmd: "keybinds-show",
                 vis_hidden: false,
                 params: vec![],
-                op: cmd::show_keybinds,
+                op: cmd::keybinds_show,
             },
         );
         map.insert(
@@ -1548,6 +1557,17 @@ mod cmd_data {
                 vis_hidden: false,
                 params: vec!["path"],
                 op: cmd::goto,
+            },
+        );
+        map.insert(
+            CmdName::HiddenToggle,
+            CmdData {
+                fname: "Hidden Toggle",
+                description: "Toggle showing hidden files and directories",
+                cmd: "hidden-toggle",
+                vis_hidden: false,
+                params: vec![],
+                op: cmd::hidden_toggle,
             },
         );
         map.insert(
@@ -1824,31 +1844,32 @@ mod kb {
 # Default keybinds
 #
 
-exit        esc
-exit        ctrl-q
-home        alt-h
-cur-up      up
-cur-up      ctrl-k
-cur-down    down
-cur-down    ctrl-j
-sel         tab
-dir-up      ctrl-h
-dir-back    ctrl-u
-explode     ctrl-x
-edit        ctrl-e
-goto        ctrl-g
-enter       enter
-enter       ctrl-l
-cmd-win     ctrl-w
-cmd-find    ctrl-t 
-cmd-list    ctrl-i
-sec-up      alt-k
-sec-up      ctrl-up
-sec-down    alt-j
-sec-down    ctrl-down
-input-clear ctrl-z
-shell       ctrl-s
-os-open     ctrl-o
+exit           esc
+exit           ctrl-q
+home           alt-g
+cur-up         up
+cur-up         ctrl-k
+cur-down       down
+cur-down       ctrl-j
+sel            tab
+dir-up         ctrl-h
+dir-back       ctrl-u
+explode        ctrl-x
+edit           ctrl-e
+goto           ctrl-g
+enter          enter
+enter          ctrl-l
+cmd-win        ctrl-w
+cmd-find       ctrl-t 
+cmd-list       ctrl-i
+sec-up         alt-k
+sec-up         ctrl-up
+sec-down       alt-j
+sec-down       ctrl-down
+input-clear    ctrl-z
+shell          ctrl-s
+os-open        ctrl-o
+hidden-toggle  alt-h
 "#;
     #[derive(Clone)]
     pub struct KeyBind {
@@ -2040,6 +2061,9 @@ responsive_break 96
 # Input polling interval in milliseconds
 # Higher value = lower CPU usage, lower value = more responsive input
 input_poll       10
+
+# Whether to show hidden files by default
+# show_hidden    true
 "#;
     pub struct Config {
         pub cmd_on_enter: String,
@@ -2050,6 +2074,7 @@ input_poll       10
         pub max_image_width: u16,
         pub responsive_break: u16,
         pub input_poll: u64,
+        pub show_hidden: bool,
     }
     impl Config {
         pub fn new() -> Self {
@@ -2062,6 +2087,7 @@ input_poll       10
                 max_image_width: 80,
                 responsive_break: 100,
                 input_poll: 10,
+                show_hidden: true,
             }
         }
         pub fn get_path() -> std::path::PathBuf {
@@ -2134,6 +2160,13 @@ input_poll       10
                     "input_poll" => {
                         if let Ok(poll) = value.parse::<u64>() {
                             config.input_poll = poll;
+                        }
+                    }
+                    "show_hidden" => {
+                        if value.to_lowercase() == "true" {
+                            config.show_hidden = true;
+                        } else {
+                            config.show_hidden = false;
                         }
                     }
                     _ => {}
@@ -2471,6 +2504,7 @@ impl<'a> App<'a> {
     fn get_directory_listing<'b>(
         path: PathBuf,
         mode_explode: bool,
+        show_hidden: bool,
     ) -> Pin<Box<dyn Future<Output = aq::ResData> + Send + 'b>> {
         Box::pin(async move {
             let mut entries = Vec::new();
@@ -2488,19 +2522,30 @@ impl<'a> App<'a> {
                                         let sub_path = entry.path();
                                         if metadata.is_dir() {
                                             // Recursively collect files from subdirectory
-                                            let sub_entries =
-                                                App::get_directory_listing(sub_path, mode_explode)
-                                                    .await;
+                                            let sub_entries = App::get_directory_listing(
+                                                sub_path,
+                                                mode_explode,
+                                                show_hidden,
+                                            )
+                                            .await;
                                             if let Some(sub_list) = sub_entries.data_listing {
                                                 entries.extend(sub_list);
                                             }
                                         } else {
+                                            if show_hidden == false
+                                                && file_name_str.starts_with('.')
+                                            {
+                                                continue;
+                                            }
                                             entries.push(NodeInfo {
                                                 name: sub_path.to_str().unwrap().to_string(),
                                                 node_type,
                                             });
                                         }
                                     } else {
+                                        if show_hidden == false && file_name_str.starts_with('.') {
+                                            continue;
+                                        }
                                         entries.push(NodeInfo {
                                             name: file_name_str.to_string(),
                                             node_type,
@@ -2690,7 +2735,7 @@ impl<'a> App<'a> {
             let kb_short = kb::to_string_short(&kb);
             let cmd_name = cmd_data::get_cmd(&self.cmd_list, &kb.command);
             let kb_span = Span::styled(
-                format!("{:<12}", cmd_name),
+                format!("{:<16}", cmd_name),
                 Style::default().fg(self.cs.command),
             );
             let cmd_span = Span::styled(format!(" {}", kb_short), Style::default().fg(self.cs.tip));
@@ -2803,9 +2848,10 @@ impl<'a> App<'a> {
     fn preview_dir(&mut self, focused_path: &PathBuf) {
         let owned_path = focused_path.clone();
         let owned_explode = self.mode_explode;
+        let owned_hidden = self.cfg.show_hidden;
         self.async_queue.add_task_unique(
             aq::Kind::ListingPreview,
-            App::get_directory_listing(owned_path, owned_explode),
+            App::get_directory_listing(owned_path, owned_explode, owned_hidden),
         );
     }
 
@@ -3176,10 +3222,12 @@ impl<'a> App<'a> {
         // Normal directory listing
         let owned_cwd = self.cwd.clone();
         let owned_explode = self.mode_explode;
+        let owned_hidden = self.cfg.show_hidden;
         self.async_queue
             .add_task_unique(aq::Kind::ListingDir, async move {
                 let mut listing_res =
-                    App::get_directory_listing(owned_cwd.clone(), owned_explode).await;
+                    App::get_directory_listing(owned_cwd.clone(), owned_explode, owned_hidden)
+                        .await;
                 // Turn listing into listing vec
                 let mut listing = match listing_res.data_listing.take() {
                     Some(list) => list,
@@ -3625,7 +3673,7 @@ impl<'a> App<'a> {
         let input_widget = Paragraph::new(input_line).block(
             Block::default()
                 .title(format!(
-                    " {})))  [ {} / {} ]",
+                    "┤{})))  [ {} / {} ]",
                     APP_NAME.to_uppercase(),
                     self.results.len(),
                     self.listing.len(),
@@ -3647,7 +3695,12 @@ impl<'a> App<'a> {
             *line = new_line;
         }
         let explode_str = if self.mode_explode {
-            format!(" [{} exp]", nf::BOMB)
+            format!("[{}]", nf::BOMB)
+        } else {
+            "".to_string()
+        };
+        let hidden_str = if !self.cfg.show_hidden {
+            format!("[{}]", nf::EYEN)
         } else {
             "".to_string()
         };
@@ -3657,9 +3710,10 @@ impl<'a> App<'a> {
             "".to_string()
         };
         let list_title = format!(
-            "|{}{} {}",
-            util::fpath(&self.cwd),
+            "|{}{}{} {}",
             explode_str,
+            hidden_str,
+            util::fpath(&self.cwd),
             loading_str_listing
         );
         let list_widget = List::new(results_pretty).block(

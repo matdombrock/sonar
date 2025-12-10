@@ -8,6 +8,7 @@
 - Hide preview window
     - If preview window hidden dont generate preview or meta
 - Toggle hidden files
+- Show selection in cmd window
 - Mouse support?
 - Seer?
 
