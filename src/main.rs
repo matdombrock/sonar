@@ -67,7 +67,6 @@ const E404: &str = r#"
         ╚════██║████╔╝██║╚════██║██╗██║     
              ██║╚██████╔╝     ██║╚═╝╚██╗    
              ╚═╝ ╚═════╝      ╚═╝    ╚═╝    
-                                            
      ██╗██╗  ██╗██╗          ██╗██╗  ██╗██╗ 
     ██╔╝╚██╗██╔╝╚██╗        ██╔╝╚██╗██╔╝╚██╗
     ██║  ╚███╔╝  ██║        ██║  ╚███╔╝  ██║
@@ -1852,6 +1851,21 @@ os-open     ctrl-o
     }
     pub type KeyBindList = Vec<KeyBind>;
 
+    pub fn to_strings(kb: &KeyBind) -> (String, String) {
+        let modifier = match kb.modifiers {
+            KeyModifiers::ALT => "alt",
+            KeyModifiers::CONTROL => "ctrl",
+            KeyModifiers::SHIFT => "shift",
+            KeyModifiers::NONE => "none",
+            _ => "UNKNOWN",
+        };
+        let code_str = match &kb.code {
+            KeyCode::Char(c) => c.to_string(),
+            _ => kb.code.to_string(),
+        };
+        (modifier.to_string(), code_str.to_lowercase())
+    }
+
     // Short string like "ctrl-a"
     pub fn to_string_short(kb: &KeyBind) -> String {
         let modifier = match kb.modifiers {
@@ -2004,7 +2018,7 @@ force_sixel      false
 max_image_width  80
 
 # Responsive breakpoint in characters
-responsive_break 128
+responsive_break 96
 
 # Input polling interval in milliseconds
 # Higher value = lower CPU usage, lower value = more responsive input
@@ -2545,7 +2559,7 @@ impl<'a> App<'a> {
             Style::default().fg(self.cs.command),
         )
     }
-
+    // TODO: This could be cached instead of regenerated every time
     fn welcome_message(&mut self) {
         self.preview_content = Text::default();
         self.preview_content += self.fmtln_sc("Exit the application");
@@ -2559,6 +2573,11 @@ impl<'a> App<'a> {
         }
         let kb_exit = kb::find_by_cmd(&self.keybinds, &cmd_data::CmdName::Exit).unwrap();
         let kb_exit_str = kb::to_string_short(&kb_exit);
+        let kb_sec_up = kb::find_by_cmd(&self.keybinds, &cmd_data::CmdName::SecUp).unwrap();
+        let kb_sec_down = kb::find_by_cmd(&self.keybinds, &cmd_data::CmdName::SecDown).unwrap();
+        let kb_sec_up_str = kb::to_string_short(&kb_sec_up);
+        let kb_sec_down_str = kb::to_string_short(&kb_sec_down);
+        // Tips
         self.preview_content += Line::from("");
         self.preview_content += Line::styled("Tips:", Style::default().fg(self.cs.header));
         self.preview_content += Line::styled(
@@ -2567,6 +2586,13 @@ impl<'a> App<'a> {
         );
         self.preview_content += Line::styled(
             "└ Start typing to fuzzy find files and directories",
+            Style::default().fg(self.cs.tip),
+        );
+        self.preview_content += Line::styled(
+            format!(
+                "└ Scroll preview windows with {} & {}",
+                kb_sec_up_str, kb_sec_down_str
+            ),
             Style::default().fg(self.cs.tip),
         );
         // System Information
@@ -2632,6 +2658,20 @@ impl<'a> App<'a> {
             util::fpath(&shell_cmds::get_path()).as_ref(),
             self.cs.clone(),
         );
+        // List keybinds
+        self.preview_content += Line::from("");
+        self.preview_content += Line::styled("Your keybinds:", Style::default().fg(self.cs.header));
+        for kb in self.keybinds.iter() {
+            let kb_short = kb::to_string_short(&kb);
+            let cmd_name = cmd_data::get_cmd(&self.cmd_list, &kb.command);
+            let kb_span = Span::styled(
+                format!("{:<12}", cmd_name),
+                Style::default().fg(self.cs.command),
+            );
+            let cmd_span = Span::styled(format!(" {}", kb_short), Style::default().fg(self.cs.tip));
+            let line = Line::from(vec![kb_span, cmd_span]);
+            self.preview_content += line;
+        }
         self.preview_content += Line::from("");
     }
 
