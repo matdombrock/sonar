@@ -1833,7 +1833,9 @@ cmd-win     ctrl-w
 cmd-find    ctrl-t 
 cmd-list    ctrl-i
 sec-up      alt-k
+sec-up      ctrl-up
 sec-down    alt-j
+sec-down    ctrl-down
 input-clear ctrl-z
 shell       ctrl-s
 os-open     ctrl-o
