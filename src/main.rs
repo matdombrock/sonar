@@ -2122,7 +2122,7 @@ mod shell_cmds {
 # A simple command
 ls -la
 # Ask for input (open prompt window)
-ls {ASK}
+echo "you said" {ASK}
 # Echo the first selected file/directory
 echo $1
 # Create a zip archive of all selected files/directories
