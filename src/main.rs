@@ -391,7 +391,10 @@ mod cmd {
         // Handle actual selection
         match focused.name.as_str() {
             // Shortcuts
-            sc::EXIT => {}
+            sc::EXIT => {
+                exit(app, vec![]);
+                return;
+            }
             sc::HOME => {
                 home(app, vec![]);
                 return;
