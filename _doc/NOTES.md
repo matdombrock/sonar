@@ -15,4 +15,5 @@
 - multi select edit should offer to do something
 - when exploded there is really no need to check for mimetypes
 - Images need to draw inside preview
+- Hashmap instead of Vec for cmds?
 
