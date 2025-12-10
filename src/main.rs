@@ -2001,6 +2001,10 @@ max_image_width  80
 
 # Responsive breakpoint in characters
 responsive_break 128
+
+# Input polling interval in milliseconds
+# Higher value = lower CPU usage, lower value = more responsive input
+input_poll       10
 "#;
     pub struct Config {
         pub cmd_on_enter: String,
@@ -2010,6 +2014,7 @@ responsive_break 128
         pub force_sixel: bool,
         pub max_image_width: u16,
         pub responsive_break: u16,
+        pub input_poll: u64,
     }
     impl Config {
         pub fn new() -> Self {
@@ -2021,6 +2026,7 @@ responsive_break 128
                 force_sixel: false,
                 max_image_width: 80,
                 responsive_break: 100,
+                input_poll: 10,
             }
         }
         pub fn get_path() -> std::path::PathBuf {
@@ -2088,6 +2094,11 @@ responsive_break 128
                     "responsive_break" => {
                         if let Ok(breakpoint) = value.parse::<u16>() {
                             config.responsive_break = breakpoint;
+                        }
+                    }
+                    "input_poll" => {
+                        if let Ok(poll) = value.parse::<u64>() {
+                            config.input_poll = poll;
                         }
                     }
                     _ => {}
@@ -3415,7 +3426,7 @@ impl<'a> App<'a> {
             self.handle_async().await; // Should not block
             // Render the UI
             terminal.draw(|f| self.render(f))?;
-            if event::poll(std::time::Duration::from_millis(100))? {
+            if event::poll(std::time::Duration::from_millis(self.cfg.input_poll))? {
                 if let Event::Key(KeyEvent {
                     code, modifiers, ..
                 }) = event::read()?
