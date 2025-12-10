@@ -222,6 +222,7 @@ mod aq {
         ListingPreview,
         ImagePreview,
         FilePreview,
+        FsOperation,
         Misc,
     }
     // Holds the data that the async fns can return
@@ -607,7 +608,7 @@ mod cmd {
                 None => continue,
             };
             let dest_path = app.cwd.join(&file_name);
-            app.async_queue.add_task(aq::Kind::Misc, async move {
+            app.async_queue.add_task(aq::Kind::FsOperation, async move {
                 match fs::copy(&path, &dest_path).await {
                     Ok(_) => aq::ResData::as_str(
                         0,
@@ -636,7 +637,7 @@ mod cmd {
         }
         for path in app.multi_selection.iter() {
             let path = path.clone();
-            app.async_queue.add_task(aq::Kind::Misc, async move {
+            app.async_queue.add_task(aq::Kind::FsOperation, async move {
                 match fs::remove_file(&path).await {
                     Ok(_) => aq::ResData::as_str(0, format!("Deleted {}", path.to_string_lossy())),
                     Err(e) => aq::ResData::as_str(
@@ -663,7 +664,7 @@ mod cmd {
                 None => continue,
             };
             let dest_path = app.cwd.join(&file_name);
-            app.async_queue.add_task(aq::Kind::Misc, async move {
+            app.async_queue.add_task(aq::Kind::FsOperation, async move {
                 match fs::rename(&path, &dest_path).await {
                     Ok(_) => aq::ResData::as_str(
                         0,
@@ -919,6 +920,7 @@ mod cmd {
 
         // Run the command
         log!("Running shell command: {}", shell_cmd);
+        let out: String;
         match Command::new(app.user_shell.as_str())
             .arg("-c")
             .arg(shell_cmd)
@@ -927,13 +929,17 @@ mod cmd {
             Ok(output) => {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                let combined_output = format!("{}{}", stdout, stderr);
-                app.set_output("Shell", &combined_output);
+                out = format!("{}{}", stdout, stderr);
             }
             Err(e) => {
-                app.set_output("Shell", &format!("Failed to run command: {}", e));
+                out = format!("Failed to run command: {}", e);
             }
         }
+        if !out.is_empty() {
+            app.set_output("Shell", &out);
+        }
+        app.update_listing();
+        app.update_results();
     }
 
     pub fn shell_full(app: &mut App, _args: Vec<&str>) {
@@ -3397,7 +3403,8 @@ impl<'a> App<'a> {
                 aq::Kind::ListingPreview => self.loading_preview = true,
                 aq::Kind::FilePreview => self.loading_preview = true,
                 aq::Kind::ImagePreview => self.loading_preview = true,
-                aq::Kind::Misc => { /* Handle misc pending tasks if needed */ }
+                aq::Kind::FsOperation => {}
+                aq::Kind::Misc => {}
             }
         }
         let completed = self.async_queue.check_tasks().await;
@@ -3444,7 +3451,7 @@ impl<'a> App<'a> {
                         self.preview_content += Line::from(line.clone());
                     }
                 }
-                aq::Kind::Misc => {
+                aq::Kind::FsOperation => {
                     if item.res.data_str.is_some() {
                         let data = match &item.res.data_str {
                             Some(d) => d.clone(),
@@ -3461,7 +3468,10 @@ impl<'a> App<'a> {
                         );
                     }
                     self.set_output("Async Tasks", &output);
+                    self.update_listing();
+                    self.update_results();
                 }
+                aq::Kind::Misc => {}
             }
         }
     }
