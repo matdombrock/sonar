@@ -13,8 +13,6 @@
 
 ## Todo Bug / Incomplete
 - Vis commands doesnt update selection at fist (same for cmd finder)
-- Use users real shell instead of sh
-- Shell commands dont operate in the correct directory
 - Directories do not refresh after commands change them (mul-copy)
 - multi select edit should offer to do something
 - when exploded there is really no need to check for mimetypes

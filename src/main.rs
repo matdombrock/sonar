@@ -914,6 +914,9 @@ mod cmd {
         // Replace variables
         shell_cmd = app.replace_shell_vars(shell_cmd);
 
+        // Add the cwd prefix
+        shell_cmd = format!("cd '{}' && {}", app.cwd.to_str().unwrap(), shell_cmd);
+
         // Run the command
         log!("Running shell command: {}", shell_cmd);
         match Command::new(app.user_shell.as_str())
