@@ -1833,6 +1833,7 @@ sec-up      alt-k
 sec-down    alt-j
 input-clear ctrl-z
 shell       ctrl-s
+os-open     ctrl-o
 "#;
     #[derive(Clone)]
     pub struct KeyBind {
