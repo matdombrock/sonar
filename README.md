@@ -109,12 +109,14 @@ enter            : Open/Edit/Run the item under the cursor
 exit             : Exit the application
 explode          : Find all files in subdirectories under the current directory
 goto             : Go to a specified directory
+hidden-toggle    : Toggle showing hidden files and directories
 home             : Go to your home directory
 input-clear      : Clear the current input/search
 keybinds-show    : Show the currently loaded keybindings
 log              : Show the application log
 log-clear        : Clear the application log
 menu-back        : Go back to previous menu
+os-open          : Open the focused file or directory with the default OS application
 output-hide      : Hide the output window
 output-show      : Show the output window
 output-toggle    : Toggle the output window
@@ -144,28 +146,32 @@ The default keybinds are as follows:
 # Default keybinds
 #
 
-exit        esc
-exit        ctrl-q
-home        alt-h
-cur-up      up
-cur-up      ctrl-k
-cur-down    down
-cur-down    ctrl-j
-sel         tab
-dir-up      ctrl-h
-dir-back    ctrl-u
-explode     ctrl-x
-edit        ctrl-e
-goto        ctrl-g
-enter       enter
-enter       ctrl-l
-cmd-win     ctrl-w
-cmd-find    ctrl-t 
-cmd-list    ctrl-i
-sec-up      alt-k
-sec-down    alt-j
-input-clear ctrl-z
-shell       ctrl-s
+exit           esc
+exit           ctrl-q
+home           alt-g
+cur-up         up
+cur-up         ctrl-k
+cur-down       down
+cur-down       ctrl-j
+sel            tab
+dir-up         ctrl-h
+dir-back       ctrl-u
+explode        ctrl-x
+edit           ctrl-e
+goto           ctrl-g
+enter          enter
+enter          ctrl-l
+cmd-win        ctrl-w
+cmd-find       ctrl-t 
+cmd-list       ctrl-i
+sec-up         alt-k
+sec-up         ctrl-up
+sec-down       alt-j
+sec-down       ctrl-down
+input-clear    ctrl-z
+shell          ctrl-s
+os-open        ctrl-o
+hidden-toggle  alt-h
 ```
 
 ### Colors
@@ -226,7 +232,14 @@ force_sixel      false
 max_image_width  80
 
 # Responsive breakpoint in characters
-responsive_break 100
+responsive_break 96
+
+# Input polling interval in milliseconds
+# Higher value = lower CPU usage, lower value = more responsive input
+input_poll       10
+
+# Whether to show hidden files by default
+# show_hidden    true
 ```
 
 ### Custom Shell Commands
