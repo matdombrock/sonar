@@ -82,7 +82,7 @@ There are a lot of great terminal file browsers out there. The goal here is not 
 If Sonar doesn't float your boat, check out these other awesome TUI file managers:
 
 - [XPLR (Rust)](https://github.com/sayanarijit/xplr)
-- [Yazy (Rust)](https://github.com/sxyazi/yazi)
+- [Yazi (Rust)](https://github.com/sxyazi/yazi)
 - [Broot (Rust)](https://github.com/Canop/broot)
 - [Ranger (Python)](https://github.com/Canop/broot)
 - [FishFinder (fish)](https://github.com/matdombrock/angler.fish)
