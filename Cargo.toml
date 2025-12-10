@@ -1,5 +1,5 @@
 [package]
-name = "sona"
+name = "sonar"
 version = "0.1.0"
 description = ""
 authors = ["matdombrock <dombrock.mathieu@gmail.com>"]
