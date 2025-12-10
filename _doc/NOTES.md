@@ -18,6 +18,7 @@
 - Directories do not refresh after commands change them (mul-copy)
 - multi select edit should offer to do something
 - when exploded there is really no need to check for mimetypes
+- Images need to draw inside preview
 
 
 ## Notes
