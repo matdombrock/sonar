@@ -225,7 +225,6 @@ mod aq {
         ImagePreview,
         FilePreview,
         FsOperation,
-        Misc,
     }
     // Holds the data that the async fns can return
     // TODO: This is a little messy
@@ -3453,7 +3452,6 @@ impl<'a> App<'a> {
                 aq::Kind::FilePreview => self.loading_preview = true,
                 aq::Kind::ImagePreview => self.loading_preview = true,
                 aq::Kind::FsOperation => {}
-                aq::Kind::Misc => {}
             }
         }
         let completed = self.async_queue.check_tasks().await;
@@ -3520,7 +3518,6 @@ impl<'a> App<'a> {
                     self.update_listing();
                     self.update_results();
                 }
-                aq::Kind::Misc => {}
             }
         }
     }
