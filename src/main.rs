@@ -916,7 +916,11 @@ mod cmd {
 
         // Run the command
         log!("Running shell command: {}", shell_cmd);
-        match Command::new("sh").arg("-c").arg(shell_cmd).output() {
+        match Command::new(app.user_shell.as_str())
+            .arg("-c")
+            .arg(shell_cmd)
+            .output()
+        {
             Ok(output) => {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 let stderr = String::from_utf8_lossy(&output.stderr);
@@ -2345,6 +2349,7 @@ struct App<'a> {
     loading_listing: bool,
     //
     whoami: String,
+    user_shell: String,
 }
 
 impl<'a> App<'a> {
@@ -2365,6 +2370,8 @@ impl<'a> App<'a> {
             .unwrap_or_else(|_| "unknown".to_string());
 
         let whoami = format!("{}@{}", username, hostname);
+
+        let user_shell = env::var("SHELL").unwrap_or("/bin/sh".to_string());
 
         Self {
             async_queue: aq::Queue::new(),
@@ -2403,6 +2410,7 @@ impl<'a> App<'a> {
             loading_preview: false,
             loading_listing: false,
             whoami,
+            user_shell,
         }
     }
 
@@ -2599,10 +2607,14 @@ impl<'a> App<'a> {
         self.preview_content += Line::from("");
         self.preview_content +=
             Line::styled("System Information:", Style::default().fg(self.cs.header));
+        self.preview_content += Line::styled(
+            format!("{} shell - {}", nf::CHECK, self.user_shell),
+            Style::default().fg(self.cs.ok),
+        );
         if self.has_bat {
             self.preview_content += Line::styled(
                 format!(
-                    "{} 'bat' - file previews will use 'bat' for syntax highlighting",
+                    "{} bat - file previews will use bat for syntax highlighting",
                     nf::CHECK
                 ),
                 Style::default().fg(self.cs.ok),
