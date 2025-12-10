@@ -29,6 +29,11 @@ A friendly, fuzzy find first, file manager for your terminal.
     - All configuration files use a plain text format
     - No need to learn a new syntax
 
+## Beta
+
+> [!WARNING]
+> Sonar is currently in active development. Its ready to use right now but things might change before the 1.0 release.
+
 ## Check it out
 
 The best way to check out Sonar right now is to build it yourself with `cargo`. 
