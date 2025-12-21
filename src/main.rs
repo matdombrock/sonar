@@ -598,6 +598,27 @@ mod cmd {
     // Copy multi selection to the cwd
     pub fn sel_copy(app: &mut App, _args: Vec<&str>) {
         use tokio::fs;
+        fn copy_dir_recursive<'a>(
+            src: &'a std::path::Path,
+            dst: &'a std::path::Path,
+        ) -> std::pin::Pin<Box<dyn Future<Output = tokio::io::Result<()>> + Send + 'a>> {
+            Box::pin(async move {
+                fs::create_dir_all(dst).await?;
+                let mut dir = fs::read_dir(src).await?;
+                while let Some(entry) = dir.next_entry().await? {
+                    let file_type = entry.file_type().await?;
+                    let src_path = entry.path();
+                    let dst_path = dst.join(entry.file_name());
+                    if file_type.is_dir() {
+                        copy_dir_recursive(&src_path, &dst_path).await?;
+                    } else if file_type.is_file() {
+                        fs::copy(&src_path, &dst_path).await?;
+                    }
+                    // Symlinks and other types can be handled here if needed
+                }
+                Ok(())
+            })
+        }
         if app.multi_selection.is_empty() {
             app.set_output("Multi-select", "No items in multi selection to copy.");
             return;
@@ -610,18 +631,56 @@ mod cmd {
             };
             let dest_path = app.cwd.join(&file_name);
             app.async_queue.add_task(aq::Kind::FsOperation, async move {
-                match fs::copy(&path, &dest_path).await {
-                    Ok(_) => aq::ResData::as_str(
-                        0,
-                        format!(
-                            "Copied {} to {}",
-                            path.to_string_lossy(),
-                            dest_path.to_string_lossy()
-                        ),
-                    ),
+                match fs::metadata(&path).await {
+                    Ok(meta) => {
+                        if meta.is_file() {
+                            match fs::copy(&path, &dest_path).await {
+                                Ok(_) => aq::ResData::as_str(
+                                    0,
+                                    format!(
+                                        "Copied file {} to {}",
+                                        path.to_string_lossy(),
+                                        dest_path.to_string_lossy()
+                                    ),
+                                ),
+                                Err(e) => aq::ResData::as_str(
+                                    1,
+                                    format!(
+                                        "Failed to copy file {}: {}",
+                                        path.to_string_lossy(),
+                                        e
+                                    ),
+                                ),
+                            }
+                        } else if meta.is_dir() {
+                            match copy_dir_recursive(&path, &dest_path).await {
+                                Ok(_) => aq::ResData::as_str(
+                                    0,
+                                    format!(
+                                        "Copied directory {} to {}",
+                                        path.to_string_lossy(),
+                                        dest_path.to_string_lossy()
+                                    ),
+                                ),
+                                Err(e) => aq::ResData::as_str(
+                                    1,
+                                    format!(
+                                        "Failed to copy directory {}: {}",
+                                        path.to_string_lossy(),
+                                        e
+                                    ),
+                                ),
+                            }
+                        } else {
+                            aq::ResData::as_str(
+                                1,
+                                format!("Unsupported file type: {}", path.to_string_lossy()),
+                            )
+                        }
+                    }
                     Err(e) => aq::ResData::as_str(
                         1,
-                        format!("Failed to copy {}: {}", path.to_string_lossy(), e),
+                        format!("Failed to stat {}: {}", path.to_string_lossy(), e),
                     ),
                 }
             });
