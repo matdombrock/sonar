@@ -757,6 +757,9 @@ mod cmd {
 
     pub fn cmd_finder_toggle(app: &mut App, _args: Vec<&str>) {
         app.mode_cmd_finder = !app.mode_cmd_finder;
+        if app.mode_cmd_finder {
+            app.input = String::new();
+        }
         app.update_listing();
         app.update_results();
         app.focus_index = 0;
