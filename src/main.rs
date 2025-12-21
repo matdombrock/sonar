@@ -639,11 +639,52 @@ mod cmd {
         for path in app.multi_selection.iter() {
             let path = path.clone();
             app.async_queue.add_task(aq::Kind::FsOperation, async move {
-                match fs::remove_file(&path).await {
-                    Ok(_) => aq::ResData::as_str(0, format!("Deleted {}", path.to_string_lossy())),
+                match fs::metadata(&path).await {
+                    Ok(meta) => {
+                        if meta.is_file() {
+                            match fs::remove_file(&path).await {
+                                Ok(_) => aq::ResData::as_str(
+                                    0,
+                                    format!("Deleted file {}", path.to_string_lossy()),
+                                ),
+                                Err(e) => aq::ResData::as_str(
+                                    1,
+                                    format!(
+                                        "Failed to delete file {}: {}",
+                                        path.to_string_lossy(),
+                                        e
+                                    ),
+                                ),
+                            }
+                        } else if meta.is_dir() {
+                            match fs::remove_dir_all(&path).await {
+                                Ok(_) => aq::ResData::as_str(
+                                    0,
+                                    format!("Deleted directory {}", path.to_string_lossy()),
+                                ),
+                                Err(e) => aq::ResData::as_str(
+                                    1,
+                                    format!(
+                                        "Failed to delete directory {}: {}",
+                                        path.to_string_lossy(),
+                                        e
+                                    ),
+                                ),
+                            }
+                        } else {
+                            aq::ResData::as_str(
+                                1,
+                                format!("{} is neither file nor directory", path.to_string_lossy()),
+                            )
+                        }
+                    }
                     Err(e) => aq::ResData::as_str(
                         1,
-                        format!("Failed to delete {}: {}", path.to_string_lossy(), e),
+                        format!(
+                            "Failed to get metadata for {}: {}",
+                            path.to_string_lossy(),
+                            e
+                        ),
                     ),
                 }
             });
