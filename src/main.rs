@@ -3247,14 +3247,13 @@ impl<'a> App<'a> {
                     self.preview_dir(&focused_path);
                 } else if self.focused.is_file() {
                     self.preview_file(&focused_path);
+                } else if self.focused.is_executable() {
+                    self.preview_file(&focused_path);
                 } else if self.focused.is_image() {
                     let _ = self.preview_image(&focused_path);
-                } else if self.focused.is_executable() {
-                    self.preview_content = Text::styled(
-                        "Executable file preview not yet supported.",
-                        Style::default().fg(self.cs.error),
-                    );
                 } else if self.focused.is_shortcut() {
+                    // Internal shortcut
+                    // Populated elsewhere
                     self.preview_content = Text::styled(
                         "Shortcut preview not supported.",
                         Style::default().fg(self.cs.error),
