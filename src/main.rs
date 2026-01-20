@@ -542,7 +542,7 @@ mod cmd {
     }
 
     pub fn sel(app: &mut App, _args: Vec<&str>) {
-        if !app.focused.is_file() && !app.focused.is_dir() {
+        if !app.focused.is_file_like() {
             return;
         }
         let mut focused_path = app.cwd.clone();
@@ -2421,6 +2421,13 @@ mod node_info {
         // pub fn is(&self, _is: NodeType) -> bool {
         //     return self.node_type == _is;
         // }
+        pub fn is_file_like(&self) -> bool {
+            return self.node_type == NodeType::File
+                || self.node_type == NodeType::Directory
+                || self.node_type == NodeType::Image
+                || self.node_type == NodeType::Executable
+                || self.node_type == NodeType::Symlink;
+        }
         pub fn is_file(&self) -> bool {
             return self.node_type == NodeType::File;
         }
@@ -2444,6 +2451,9 @@ mod node_info {
         }
         pub fn is_unknown(&self) -> bool {
             return self.node_type == NodeType::Unknown;
+        }
+        pub fn is_symlink(&self) -> bool {
+            return self.node_type == NodeType::Symlink;
         }
     }
 }
