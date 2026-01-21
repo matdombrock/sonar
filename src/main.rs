@@ -1196,6 +1196,13 @@ mod cmd {
         app.set_output("Config Clear", &output_text);
     }
 
+    pub fn config_goto(app: &mut App, _args: Vec<&str>) {
+        let config_path = cfg::Config::get_path();
+        app.append_cwd(&config_path.parent().unwrap().to_path_buf());
+        app.update_listing();
+        app.update_results();
+    }
+
     pub fn dbg_clear_preview(app: &mut App, _args: Vec<&str>) {
         app.term_clear = true;
     }
@@ -1249,6 +1256,7 @@ mod cmd_data {
         ShellFull,
         ConfigInit,
         ConfigClear,
+        ConfigGoto,
     }
 
     #[derive(Debug, Clone)]
@@ -1727,6 +1735,17 @@ mod cmd_data {
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::config_clear,
+            },
+        );
+        map.insert(
+            CmdName::ConfigGoto,
+            CmdData {
+                fname: "Config Goto",
+                description: "Go to the configuration directory",
+                cmd: "config-goto",
+                vis_hidden: false,
+                params: vec![],
+                op: cmd::config_goto,
             },
         );
 
