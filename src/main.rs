@@ -527,6 +527,7 @@ mod cmd {
 
     pub fn cmd_window_toggle(app: &mut App, _args: Vec<&str>) {
         app.show_command_window = !app.show_command_window;
+        app.cursor = app.command_input.len();
     }
 
     pub fn output_window_toggle(app: &mut App, _args: Vec<&str>) {
@@ -2515,9 +2516,10 @@ mod node_info {
         pub fn is_unknown(&self) -> bool {
             return self.node_type == NodeType::Unknown;
         }
-        pub fn is_symlink(&self) -> bool {
-            return self.node_type == NodeType::Symlink;
-        }
+        // Unused
+        // pub fn is_symlink(&self) -> bool {
+        //     return self.node_type == NodeType::Symlink;
+        // }
     }
 }
 
@@ -2531,6 +2533,7 @@ enum LoopReturn {
 struct App<'a> {
     async_queue: aq::Queue,
     should_quit: bool,
+    cursor: usize,
     search_buf: String,
     listing: Vec<NodeInfo>, // Full listing data
     results: Vec<NodeInfo>, // Filtered listing data
@@ -2597,6 +2600,7 @@ impl<'a> App<'a> {
         Self {
             async_queue: aq::Queue::new(),
             should_quit: false,
+            cursor: 0,
             search_buf: String::new(),
             listing: Vec::new(),
             results: Vec::new(),
@@ -3563,10 +3567,22 @@ impl<'a> App<'a> {
     fn input_cmd_window(&mut self, modifiers: KeyModifiers, code: KeyCode) -> LoopReturn {
         match (modifiers, code) {
             (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => {
-                self.command_input.push(c);
+                self.command_input.insert(self.cursor, c);
+                self.cursor = self.cursor.saturating_add(1);
             }
             (KeyModifiers::NONE, KeyCode::Backspace) => {
-                self.command_input.pop();
+                if self.cursor > 0 && !self.command_input.is_empty() {
+                    self.command_input.remove(self.cursor - 1);
+                    self.cursor = self.cursor.saturating_sub(1);
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Left) => {
+                self.cursor = self.cursor.saturating_sub(1);
+            }
+            (KeyModifiers::NONE, KeyCode::Right) => {
+                if self.cursor < self.command_input.len() {
+                    self.cursor = self.cursor.saturating_add(1);
+                }
             }
             (KeyModifiers::NONE, KeyCode::Enter) => {
                 // Handle commands
@@ -4049,9 +4065,14 @@ impl<'a> App<'a> {
 
         // --- Popups ---
         let popup_width = if area.width < threshold { 90 } else { 50 };
+        // --- Command Window ---
         if self.show_command_window {
             let popup_area = centered_rect(popup_width, lines_to_percent(3), area);
-            let command_str = format!("> {}|", self.command_input);
+            let cmd_input_split_a =
+                &self.command_input[..self.cursor.min(self.command_input.len())];
+            let cmd_input_split_b =
+                &self.command_input[self.cursor.min(self.command_input.len())..];
+            let command_str = format!("> {}|{}", cmd_input_split_a, &cmd_input_split_b);
             frame.render_widget(Clear, popup_area);
             let command_paragraph = Paragraph::new(command_str)
                 .style(Style::default().bg(Color::Black))
@@ -4064,6 +4085,7 @@ impl<'a> App<'a> {
                 );
             frame.render_widget(command_paragraph, popup_area);
         }
+        // --- Output Window ---
         if self.show_output_window {
             let popup_area = centered_rect(popup_width, 90, area);
             frame.render_widget(Clear, popup_area);
