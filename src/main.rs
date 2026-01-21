@@ -1266,6 +1266,7 @@ mod cmd_data {
         pub cmd: &'static str,
         pub vis_hidden: bool, // Hidden from visual cmd selection
         pub params: Vec<&'static str>,
+        pub on_sel: bool, // Operates on multi selection
         pub op: fn(&mut App, Vec<&str>) -> (),
     }
     pub type CmdList = HashMap<CmdName, CmdData>;
@@ -1305,6 +1306,7 @@ mod cmd_data {
                 cmd: "exit",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::exit,
             },
         );
@@ -1316,6 +1318,7 @@ mod cmd_data {
                 cmd: "home",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::home,
             },
         );
@@ -1327,6 +1330,7 @@ mod cmd_data {
                 cmd: "cur-up",
                 vis_hidden: true,
                 params: vec![],
+                on_sel: false,
                 op: cmd::cur_up,
             },
         );
@@ -1338,6 +1342,7 @@ mod cmd_data {
                 cmd: "cur-down",
                 vis_hidden: true,
                 params: vec![],
+                on_sel: false,
                 op: cmd::cur_down,
             },
         );
@@ -1349,6 +1354,7 @@ mod cmd_data {
                 cmd: "dir-up",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::dir_up,
             },
         );
@@ -1360,6 +1366,7 @@ mod cmd_data {
                 cmd: "dir-back",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::dir_back,
             },
         );
@@ -1371,6 +1378,7 @@ mod cmd_data {
                 cmd: "dir-reload",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::dir_reload,
             },
         );
@@ -1382,6 +1390,7 @@ mod cmd_data {
                 cmd: "explode",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::explode,
             },
         );
@@ -1393,6 +1402,7 @@ mod cmd_data {
                 cmd: "enter",
                 vis_hidden: true,
                 params: vec![],
+                on_sel: false,
                 op: cmd::enter,
             },
         );
@@ -1404,6 +1414,7 @@ mod cmd_data {
                 cmd: "cmd-win",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::cmd_window_toggle,
             },
         );
@@ -1415,6 +1426,7 @@ mod cmd_data {
                 cmd: "cmd-find",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::cmd_finder_toggle,
             },
         );
@@ -1426,6 +1438,7 @@ mod cmd_data {
                 cmd: "cmd-list",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::cmd_list,
             },
         );
@@ -1437,6 +1450,7 @@ mod cmd_data {
                 cmd: "cmd-list-dump",
                 vis_hidden: false,
                 params: vec!["<file_path>"],
+                on_sel: false,
                 op: cmd::cmd_list_dump,
             },
         );
@@ -1448,6 +1462,7 @@ mod cmd_data {
                 cmd: "output-toggle",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::output_window_toggle,
             },
         );
@@ -1459,6 +1474,7 @@ mod cmd_data {
                 cmd: "output-show",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::output_window_show,
             },
         );
@@ -1470,6 +1486,7 @@ mod cmd_data {
                 cmd: "output-hide",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::output_window_hide,
             },
         );
@@ -1481,6 +1498,7 @@ mod cmd_data {
                 cmd: "sel",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: true,
                 op: cmd::sel,
             },
         );
@@ -1492,6 +1510,7 @@ mod cmd_data {
                 cmd: "sel-clear",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: true,
                 op: cmd::sel_clear,
             },
         );
@@ -1503,6 +1522,7 @@ mod cmd_data {
                 cmd: "sel-show",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: true,
                 op: cmd::sel_show,
             },
         );
@@ -1514,6 +1534,7 @@ mod cmd_data {
                 cmd: "sel-save",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: true,
                 op: cmd::sel_save,
             },
         );
@@ -1525,6 +1546,7 @@ mod cmd_data {
                 cmd: "copy",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: true,
                 op: cmd::sel_copy,
             },
         );
@@ -1536,6 +1558,7 @@ mod cmd_data {
                 cmd: "delete",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: true,
                 op: cmd::sel_delete,
             },
         );
@@ -1547,6 +1570,7 @@ mod cmd_data {
                 cmd: "move",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: true,
                 op: cmd::sel_move,
             },
         );
@@ -1558,6 +1582,7 @@ mod cmd_data {
                 cmd: "clip",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: true,
                 op: cmd::sel_clip_path,
             },
         );
@@ -1569,6 +1594,7 @@ mod cmd_data {
                 cmd: "menu-back",
                 vis_hidden: true,
                 params: vec![],
+                on_sel: false,
                 op: cmd::menu_back,
             },
         );
@@ -1580,6 +1606,7 @@ mod cmd_data {
                 cmd: "log",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::log_show,
             },
         );
@@ -1591,6 +1618,7 @@ mod cmd_data {
                 cmd: "log-clear",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::log_clear,
             },
         );
@@ -1602,6 +1630,7 @@ mod cmd_data {
                 cmd: "sec-up",
                 vis_hidden: true,
                 params: vec![],
+                on_sel: false,
                 op: cmd::sec_up,
             },
         );
@@ -1613,6 +1642,7 @@ mod cmd_data {
                 cmd: "sec-down",
                 vis_hidden: true,
                 params: vec![],
+                on_sel: false,
                 op: cmd::sec_down,
             },
         );
@@ -1624,6 +1654,7 @@ mod cmd_data {
                 cmd: "keybinds-show",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::keybinds_show,
             },
         );
@@ -1635,6 +1666,7 @@ mod cmd_data {
                 cmd: "dbg-prev-clear",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::dbg_clear_preview,
             },
         );
@@ -1646,6 +1678,7 @@ mod cmd_data {
                 cmd: "edit",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::edit,
             },
         );
@@ -1657,6 +1690,7 @@ mod cmd_data {
                 cmd: "os-open",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::os_open,
             },
         );
@@ -1668,6 +1702,7 @@ mod cmd_data {
                 cmd: "goto",
                 vis_hidden: false,
                 params: vec!["path"],
+                on_sel: false,
                 op: cmd::goto,
             },
         );
@@ -1679,6 +1714,7 @@ mod cmd_data {
                 cmd: "hidden-toggle",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::hidden_toggle,
             },
         );
@@ -1690,6 +1726,7 @@ mod cmd_data {
                 cmd: "input-clear",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::input_clear,
             },
         );
@@ -1701,6 +1738,7 @@ mod cmd_data {
                 cmd: "shell",
                 vis_hidden: false,
                 params: vec!["command"],
+                on_sel: true,
                 op: cmd::shell_quick,
             },
         );
@@ -1712,6 +1750,7 @@ mod cmd_data {
                 cmd: "shell-full",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::shell_full,
             },
         );
@@ -1723,6 +1762,7 @@ mod cmd_data {
                 cmd: "config-init",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::config_init,
             },
         );
@@ -1734,6 +1774,7 @@ mod cmd_data {
                 cmd: "config-clear",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::config_clear,
             },
         );
@@ -1745,6 +1786,7 @@ mod cmd_data {
                 cmd: "config-goto",
                 vis_hidden: false,
                 params: vec![],
+                on_sel: false,
                 op: cmd::config_goto,
             },
         );
@@ -3245,6 +3287,28 @@ impl<'a> App<'a> {
                         format!("info   : {}", data.description),
                         Style::default().fg(self.cs.info),
                     );
+                    // Multi selection info
+                    if data.on_sel {
+                        self.preview_content +=
+                            Line::styled("---------------------", Style::default().fg(self.cs.dim));
+                        self.preview_content += Line::styled(
+                            "Operates on multi selection:",
+                            Style::default().fg(self.cs.tip),
+                        );
+                        if self.multi_selection.is_empty() {
+                            self.preview_content += Line::styled(
+                                "  (none selected)",
+                                Style::default().fg(self.cs.warning),
+                            );
+                        } else {
+                            for (i, path) in self.multi_selection.iter().enumerate() {
+                                self.preview_content += Line::styled(
+                                    format!("  {}. {}", i + 1, path.to_str().unwrap()),
+                                    Style::default().fg(self.cs.hi),
+                                );
+                            }
+                        }
+                    }
                     return;
                 }
                 // Check if we have a shell command
