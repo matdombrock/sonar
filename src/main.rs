@@ -383,7 +383,7 @@ mod cmd {
 
     pub fn enter(app: &mut App, _args: Vec<&str>) {
         // Update input to empty to reset search
-        app.input = String::new();
+        app.search_buf = String::new();
         app.update_results();
         // Get focused
         let focused = app.focused.clone();
@@ -817,7 +817,7 @@ mod cmd {
     pub fn cmd_finder_toggle(app: &mut App, _args: Vec<&str>) {
         app.mode_cmd_finder = !app.mode_cmd_finder;
         if app.mode_cmd_finder {
-            app.input = String::new();
+            app.search_buf = String::new();
         }
         app.update_listing();
         app.update_results();
@@ -1013,7 +1013,7 @@ mod cmd {
     }
 
     pub fn input_clear(app: &mut App, _args: Vec<&str>) {
-        app.input.clear();
+        app.search_buf.clear();
         app.command_input.clear();
         app.update_results();
         app.focus_index = 0;
@@ -2480,8 +2480,6 @@ mod node_info {
 }
 
 // Return type for loop control
-// TODO: Im still suspicious of this design
-// I think all we need is a way to break
 enum LoopReturn {
     Continue,
     Ok,
@@ -2491,7 +2489,7 @@ enum LoopReturn {
 struct App<'a> {
     async_queue: aq::Queue,
     should_quit: bool,
-    input: String,
+    search_buf: String,
     listing: Vec<NodeInfo>, // Full listing data
     results: Vec<NodeInfo>, // Filtered listing data
     focused: NodeInfo,
@@ -2557,7 +2555,7 @@ impl<'a> App<'a> {
         Self {
             async_queue: aq::Queue::new(),
             should_quit: false,
-            input: String::new(),
+            search_buf: String::new(),
             listing: Vec::new(),
             results: Vec::new(),
             focused: NodeInfo::new(),
@@ -3227,15 +3225,24 @@ impl<'a> App<'a> {
                         Style::default().fg(self.cs.command),
                     );
                     self.preview_content += Line::styled(
-                        format!("name: {}", data.fname),
+                        format!("name   : {}", data.fname),
                         Style::default().fg(self.cs.tip),
                     );
                     self.preview_content += Line::styled(
-                        format!("cmd : {}", data.cmd),
+                        format!("cmd    : {}", data.cmd),
+                        Style::default().fg(self.cs.command),
+                    );
+                    let kb_data = kb::find_by_cmd(&self.keybinds, &cmd_name);
+                    let mut kb_str = "unbound".to_string();
+                    if let Some(kb) = kb_data {
+                        kb_str = kb::to_string_short(&kb);
+                    }
+                    self.preview_content += Line::styled(
+                        format!("keybind: {}", kb_str),
                         Style::default().fg(self.cs.command),
                     );
                     self.preview_content += Line::styled(
-                        format!("info: {}", data.description),
+                        format!("info   : {}", data.description),
                         Style::default().fg(self.cs.info),
                     );
                     return;
@@ -3415,7 +3422,7 @@ impl<'a> App<'a> {
     // Fuzzy finding
     fn update_results(&mut self) {
         let limit = self.cfg.find_limit;
-        let input = self.input.clone();
+        let input = self.search_buf.clone();
         let listing = self.listing.clone();
         self.async_queue
             .add_task_unique(aq::Kind::ListingResult, async move {
@@ -3513,14 +3520,14 @@ impl<'a> App<'a> {
     }
 
     // Returns true if input changed
-    fn input_main(&mut self, modifiers: KeyModifiers, code: KeyCode) -> bool {
+    fn input_search(&mut self, modifiers: KeyModifiers, code: KeyCode) -> bool {
         match (modifiers, code) {
             (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => {
-                self.input.push(c);
+                self.search_buf.push(c);
                 return true;
             }
             (KeyModifiers::NONE, KeyCode::Backspace) => {
-                self.input.pop();
+                self.search_buf.pop();
                 return true;
             }
             _ => {}
@@ -3703,7 +3710,7 @@ impl<'a> App<'a> {
                         continue;
                     }
                     // Before key press handling
-                    let input_changed = self.input_main(modifiers, code);
+                    let input_changed = self.input_search(modifiers, code);
                     // Some things are not bindable
                     if input_changed {
                         self.update_results();
@@ -3788,11 +3795,11 @@ impl<'a> App<'a> {
         // Input box
         let mut input_color;
         let input_str: String;
-        if self.input.is_empty() {
+        if self.search_buf.is_empty() {
             input_str = "Type to search...".to_string();
             input_color = self.cs.dim;
         } else {
-            input_str = self.input.clone();
+            input_str = self.search_buf.clone();
             input_color = self.cs.misc;
         };
         if self.results.is_empty() {
