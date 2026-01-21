@@ -1957,11 +1957,13 @@ cur-down       down
 cur-down       ctrl-j
 sel            tab
 dir-up         ctrl-h
+dir-up         left
 dir-back       ctrl-u
 explode        ctrl-x
 edit           ctrl-e
 goto           ctrl-g
 enter          enter
+enter          right
 enter          ctrl-l
 cmd-win        ctrl-w
 cmd-find       ctrl-t 
