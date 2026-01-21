@@ -125,11 +125,11 @@ sec-up           : Scroll the secondary window up
 sel              : Toggle selection of the item under the cursor
 sel-clear        : Clear the current selection of files and directories
 sel-clip         : Copy the current selection of file and diretory paths to clipboard
-sel-copy         : Copy the current selection of files and directories to the current directory
-sel-delete       : Delete all currently selected files and directories
-sel-move         : Move (not copy) the currently selected files and directories to the current directory
-sel-save         : Save the current selection of files and directories to file
-sel-show         : Show the current selection of files and directories in the output window
+copy             : Copy the current selection of files and directories to the current directory
+delete           : Delete all currently selected files and directories
+move             : Move (not copy) the currently selected files and directories to the current directory
+save             : Save the current selection of files and directories to file
+show             : Show the current selection of files and directories in the output window
 shell            : Run a quick shell command in the current directory
 shell-full       : Run a full shell in the current directory
 ```
