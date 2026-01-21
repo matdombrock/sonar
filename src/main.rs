@@ -1450,7 +1450,7 @@ mod cmd_data {
                 description: "Dump all commands to a file",
                 cmd: "cmd-list-dump",
                 vis_hidden: false,
-                params: vec!["<file_path>"],
+                params: vec!["file_path"],
                 on_sel: false,
                 op: cmd::cmd_list_dump,
             },
@@ -3274,8 +3274,13 @@ impl<'a> App<'a> {
                         format!("name   : {}", data.fname),
                         Style::default().fg(self.cs.tip),
                     );
+                    // Params
+                    let mut param_str = String::new();
+                    for param in data.params.iter() {
+                        param_str += &format!("<{}> ", param);
+                    }
                     self.preview_content += Line::styled(
-                        format!("cmd    : {}", data.cmd),
+                        format!("cmd    : {} {}", data.cmd, param_str),
                         Style::default().fg(self.cs.command),
                     );
                     let kb_data = kb::find_by_cmd(&self.keybinds, &cmd_name);
