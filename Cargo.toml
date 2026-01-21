@@ -12,7 +12,7 @@ color-eyre = "0.6.3"
 # Cross-platform terminal handling (ratatui dependency)
 crossterm = "0.29.0"
 # Terminal UI library
-ratatui = "0.29.0"
+ratatui = "0.30.0"
 # Fuzzy matching library
 fuzzy-matcher = "0.3"
 # System directory handling
