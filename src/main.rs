@@ -1236,10 +1236,10 @@ mod cmd_data {
         SelClear,
         SelShow,
         SelSave,
-        SelCopy,
-        SelDelete,
-        SelMove,
-        SelClipPath,
+        Copy,
+        Delete,
+        Move,
+        ClipPath,
         MenuBack,
         Log,
         LogClear,
@@ -1518,44 +1518,44 @@ mod cmd_data {
             },
         );
         map.insert(
-            CmdName::SelCopy,
+            CmdName::Copy,
             CmdData {
-                fname: "Selection Copy",
+                fname: "Copy Selection",
                 description: "Copy the current selection of files and directories to the current directory",
-                cmd: "sel-copy",
+                cmd: "copy",
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::sel_copy,
             },
         );
         map.insert(
-            CmdName::SelDelete,
+            CmdName::Delete,
             CmdData {
-                fname: "Selection Delete",
+                fname: "Delete Selection",
                 description: "Delete all currently selected files and directories",
-                cmd: "sel-delete",
+                cmd: "delete",
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::sel_delete,
             },
         );
         map.insert(
-            CmdName::SelMove,
+            CmdName::Move,
             CmdData {
-                fname: "Selection Move",
+                fname: "Move Selection",
                 description: "Move (not copy) the currently selected files and directories to the current directory",
-                cmd: "sel-move",
+                cmd: "move",
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::sel_move,
             },
         );
         map.insert(
-            CmdName::SelClipPath,
+            CmdName::ClipPath,
             CmdData {
-                fname: "Selection Copy Paths to Clipboard",
+                fname: "Copy Selection Paths to Clipboard",
                 description: "Copy the current selection of file and diretory paths to clipboard",
-                cmd: "sel-clip",
+                cmd: "clip",
                 vis_hidden: false,
                 params: vec![],
                 op: cmd::sel_clip_path,
