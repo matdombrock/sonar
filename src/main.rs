@@ -3577,6 +3577,7 @@ impl<'a> App<'a> {
     fn input_cmd_window(&mut self, modifiers: KeyModifiers, code: KeyCode) -> LoopReturn {
         match (modifiers, code) {
             (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => {
+                // TODO: Bug
                 self.command_input.insert(self.cursor, c);
                 self.cursor = self.cursor.saturating_add(1);
             }
