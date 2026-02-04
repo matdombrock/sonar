@@ -1001,6 +1001,36 @@ mod cmd {
         }
     }
 
+    pub fn mk_dir(app: &mut App, args: Vec<&str>) {
+        if args.is_empty() {
+            app.set_output("Mkdir", "Error: No directory name provided.");
+            return;
+        }
+        let dir_name = args[0];
+        let mut new_dir_path = app.cwd.clone();
+        new_dir_path.push(dir_name);
+        match fs::create_dir(&new_dir_path) {
+            Ok(_) => {
+                app.set_output(
+                    "Mkdir",
+                    &format!("Directory '{}' created.", new_dir_path.to_str().unwrap()),
+                );
+                app.update_listing();
+                app.update_results();
+            }
+            Err(e) => {
+                app.set_output(
+                    "Mkdir",
+                    &format!(
+                        "Error: Failed to create directory '{}': {}",
+                        new_dir_path.to_str().unwrap(),
+                        e
+                    ),
+                );
+            }
+        }
+    }
+
     pub fn goto(app: &mut App, args: Vec<&str>) {
         if args.is_empty() {
             app.set_output("Goto", "Error: No path provided.");
@@ -1250,6 +1280,7 @@ mod cmd_data {
         DbgClear,
         Edit,
         OsOpen,
+        MkDir,
         GoTo,
         HiddenToggle,
         InputClear,
@@ -1693,6 +1724,18 @@ mod cmd_data {
                 params: vec![],
                 on_sel: false,
                 op: cmd::os_open,
+            },
+        );
+        map.insert(
+            CmdName::MkDir,
+            CmdData {
+                fname: "Make Directory",
+                description: "Create a new directory in the current working directory",
+                cmd: "mkdir",
+                vis_hidden: false,
+                params: vec!["dir_name"],
+                on_sel: false,
+                op: cmd::mk_dir,
             },
         );
         map.insert(
